@@ -20,10 +20,41 @@ use crate::model::{AgentState, BoardSnapshot, SlotView};
 type WrkpadTerminal = Terminal<CrosstermBackend<Stdout>>;
 
 pub async fn run(client: HaspClient) -> Result<()> {
-    let mut terminal = start_terminal()?;
-    let result = run_loop(&mut terminal, client).await;
-    stop_terminal(&mut terminal)?;
-    result
+    let mut session = TerminalSession::start()?;
+    run_loop(&mut session.terminal, client).await
+}
+
+struct TerminalSession {
+    terminal: WrkpadTerminal,
+}
+
+impl TerminalSession {
+    fn start() -> Result<Self> {
+        enable_raw_mode()?;
+        let mut stdout = io::stdout();
+        if let Err(error) = execute!(stdout, EnterAlternateScreen) {
+            let _ = disable_raw_mode();
+            return Err(error.into());
+        }
+        let backend = CrosstermBackend::new(stdout);
+        match Terminal::new(backend) {
+            Ok(terminal) => Ok(Self { terminal }),
+            Err(error) => {
+                let mut recovery = io::stdout();
+                let _ = execute!(recovery, LeaveAlternateScreen);
+                let _ = disable_raw_mode();
+                Err(error.into())
+            }
+        }
+    }
+}
+
+impl Drop for TerminalSession {
+    fn drop(&mut self) {
+        let _ = disable_raw_mode();
+        let _ = execute!(self.terminal.backend_mut(), LeaveAlternateScreen);
+        let _ = self.terminal.show_cursor();
+    }
 }
 
 async fn run_loop(terminal: &mut WrkpadTerminal, client: HaspClient) -> Result<()> {
@@ -82,22 +113,10 @@ fn draw(frame: &mut ratatui::Frame<'_>, snapshot: &BoardSnapshot, connection: &s
         header,
     );
 
-    let rows =
-        Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]).split(content);
-    for row in 0..2 {
-        let columns = Layout::horizontal([
-            Constraint::Percentage(33),
-            Constraint::Percentage(34),
-            Constraint::Percentage(33),
-        ])
-        .split(rows[row]);
-        for column in 0..3 {
-            let index = row * 3 + column;
-            if let Some(slot) = snapshot.slots.get(index) {
-                render_slot(frame, columns[column], slot);
-            }
-        }
-    }
+    let [board, inspector] =
+        Layout::horizontal([Constraint::Percentage(62), Constraint::Percentage(38)]).areas(content);
+    render_physical_board(frame, board, snapshot);
+    render_inspector(frame, inspector, snapshot);
 
     frame.render_widget(
         Paragraph::new(format!(
@@ -109,7 +128,99 @@ fn draw(frame: &mut ratatui::Frame<'_>, snapshot: &BoardSnapshot, connection: &s
     );
 }
 
-fn render_slot(frame: &mut ratatui::Frame<'_>, area: Rect, slot: &SlotView) {
+fn render_physical_board(frame: &mut ratatui::Frame<'_>, area: Rect, snapshot: &BoardSnapshot) {
+    let shell = Block::default()
+        .title(" Creator Micro 2 · physical twin ")
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::DarkGray));
+    let inner = shell.inner(area);
+    frame.render_widget(shell, area);
+    let rows = Layout::vertical([
+        Constraint::Percentage(25),
+        Constraint::Percentage(25),
+        Constraint::Percentage(25),
+        Constraint::Percentage(25),
+    ])
+    .split(inner);
+
+    let top = four_columns(rows[0]);
+    render_control(
+        frame,
+        top[0],
+        "DIAL",
+        "encoder\nInput-owned",
+        Color::DarkGray,
+    );
+    if let Some(slot) = snapshot.slots.first() {
+        render_agent_key(frame, top[1], slot);
+    }
+    if let Some(slot) = snapshot.slots.get(1) {
+        render_agent_key(frame, top[2], slot);
+    }
+    render_control(
+        frame,
+        top[3],
+        "JOYSTICK",
+        "planar + press\nInput-owned",
+        Color::DarkGray,
+    );
+
+    let agents = four_columns(rows[1]);
+    for (column, slot) in agents.iter().zip(snapshot.slots.iter().skip(2)) {
+        render_agent_key(frame, *column, slot);
+    }
+
+    let actions = four_columns(rows[2]);
+    for (offset, column) in actions.iter().enumerate() {
+        render_control(
+            frame,
+            *column,
+            &format!("ACT{:02}", offset + 6),
+            "workflow signal\nInput layer",
+            Color::Rgb(72, 82, 98),
+        );
+    }
+
+    let bottom = Layout::horizontal([
+        Constraint::Percentage(25),
+        Constraint::Percentage(50),
+        Constraint::Percentage(25),
+    ])
+    .split(rows[3]);
+    render_control(
+        frame,
+        bottom[0],
+        "TOUCH",
+        "host selector\nfirmware-owned",
+        Color::Rgb(72, 82, 98),
+    );
+    render_control(
+        frame,
+        bottom[1],
+        "MIC · ACT10 + ACT11",
+        "wide cap · ACT11 silent daily",
+        Color::Rgb(109, 93, 252),
+    );
+    render_control(
+        frame,
+        bottom[2],
+        "ACT12",
+        "workflow signal\nInput layer",
+        Color::Rgb(72, 82, 98),
+    );
+}
+
+fn four_columns(area: Rect) -> std::rc::Rc<[Rect]> {
+    Layout::horizontal([
+        Constraint::Percentage(25),
+        Constraint::Percentage(25),
+        Constraint::Percentage(25),
+        Constraint::Percentage(25),
+    ])
+    .split(area)
+}
+
+fn render_agent_key(frame: &mut ratatui::Frame<'_>, area: Rect, slot: &SlotView) {
     let (state, provider, title, binding) = slot.session.as_ref().map_or(
         (
             AgentState::Off,
@@ -139,19 +250,87 @@ fn render_slot(frame: &mut ratatui::Frame<'_>, area: Rect, slot: &SlotView) {
     );
     let color = state_color(state);
     let block = Block::default()
-        .title(format!(" AG{:02} · {:?} ", slot.slot - 1, state))
+        .title(format!(" AG{:02} ", slot.slot - 1))
         .title_style(Style::default().fg(color).add_modifier(Modifier::BOLD))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(color));
     let body = vec![
         Line::from(Span::styled(
+            format!("{state:?}"),
+            Style::default().fg(color).add_modifier(Modifier::BOLD),
+        )),
+        Line::from(Span::styled(
             title,
             Style::default().add_modifier(Modifier::BOLD),
         )),
-        Line::from(provider),
-        Line::from(Span::styled(binding, Style::default().fg(Color::DarkGray))),
+        Line::from(format!("{provider} · {binding}")),
     ];
     frame.render_widget(Paragraph::new(body).block(block), area);
+}
+
+fn render_control(
+    frame: &mut ratatui::Frame<'_>,
+    area: Rect,
+    label: &str,
+    description: &str,
+    color: Color,
+) {
+    frame.render_widget(
+        Paragraph::new(description)
+            .style(Style::default().fg(Color::DarkGray))
+            .block(
+                Block::default()
+                    .title(format!(" {label} "))
+                    .title_style(Style::default().fg(color).add_modifier(Modifier::BOLD))
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(color)),
+            ),
+        area,
+    );
+}
+
+fn render_inspector(frame: &mut ratatui::Frame<'_>, area: Rect, snapshot: &BoardSnapshot) {
+    let mut lines = vec![
+        Line::from(Span::styled(
+            "LIVE AGENT SLOTS",
+            Style::default().add_modifier(Modifier::BOLD),
+        )),
+        Line::from(""),
+    ];
+    for slot in &snapshot.slots {
+        let line = slot.session.as_ref().map_or_else(
+            || format!("AG{:02}  Off", slot.slot - 1),
+            |session| {
+                format!(
+                    "AG{:02}  {:?} · {:?} · {}",
+                    slot.slot - 1,
+                    session.state,
+                    session.provider,
+                    session.title.as_deref().unwrap_or("Agent session")
+                )
+            },
+        );
+        lines.push(Line::from(line));
+    }
+    lines.extend([
+        Line::from(""),
+        Line::from(Span::styled(
+            "PRIORITY",
+            Style::default().add_modifier(Modifier::BOLD),
+        )),
+        Line::from("Error > NeedsInput > Working"),
+        Line::from("Unread > Idle > Off"),
+        Line::from(""),
+        Line::from("Observe mode · zero HID writes"),
+    ]);
+    frame.render_widget(
+        Paragraph::new(lines).block(
+            Block::default()
+                .title(" Operator view ")
+                .borders(Borders::ALL),
+        ),
+        area,
+    );
 }
 
 const fn state_color(state: AgentState) -> Color {
@@ -165,17 +344,51 @@ const fn state_color(state: AgentState) -> Color {
     }
 }
 
-fn start_terminal() -> Result<WrkpadTerminal> {
-    enable_raw_mode()?;
-    let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen)?;
-    let backend = CrosstermBackend::new(stdout);
-    Ok(Terminal::new(backend)?)
-}
+#[cfg(test)]
+mod tests {
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
 
-fn stop_terminal(terminal: &mut WrkpadTerminal) -> Result<()> {
-    disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
-    terminal.show_cursor()?;
-    Ok(())
+    use super::draw;
+    use crate::model::BoardSnapshot;
+
+    #[test]
+    fn physical_twin_renders_exact_control_geometry() -> anyhow::Result<()> {
+        let backend = TestBackend::new(140, 42);
+        let mut terminal = Terminal::new(backend)?;
+        terminal.draw(|frame| draw(frame, &BoardSnapshot::empty(), "HASP linked"))?;
+        let buffer = terminal.backend().buffer();
+        let mut rendered = String::new();
+        for y in 0..buffer.area.height {
+            for x in 0..buffer.area.width {
+                if let Some(cell) = buffer.cell((x, y)) {
+                    rendered.push_str(cell.symbol());
+                }
+            }
+            rendered.push('\n');
+        }
+
+        for label in [
+            "DIAL",
+            "AG00",
+            "AG01",
+            "JOYSTICK",
+            "AG02",
+            "AG03",
+            "AG04",
+            "AG05",
+            "ACT06",
+            "ACT07",
+            "ACT08",
+            "ACT09",
+            "TOUCH",
+            "MIC · ACT10 + ACT11",
+            "ACT12",
+        ] {
+            assert!(rendered.contains(label), "missing physical control {label}");
+        }
+        assert!(rendered.contains("ACT11 silent daily"));
+        assert!(rendered.contains("zero HID writes"));
+        Ok(())
+    }
 }

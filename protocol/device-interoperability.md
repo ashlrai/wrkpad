@@ -56,7 +56,7 @@ No firmware range such as `>=0.4.0` authorizes writes. Capability lookup uses th
 
 ## Safe empirical sequence
 
-1. Run `wrkpad doctor --dump-hid` with the device wired. This is read-only and outputs redacted identity evidence.
+1. Run `wrkpad doctor --dump-hid` with the device wired. This is read-only and outputs redacted identity evidence plus an explicit descriptor-capture status. The current v0.1 backend does not open the HID device or claim a descriptor hash.
 2. Quit likely writers manually. wrkpad never terminates them.
 3. Capture descriptor and firmware evidence through a reviewed shadow adapter.
 4. Register an exact compatibility tuple with independent capability flags.
@@ -79,4 +79,3 @@ Read and attribute ideas; do not paste implementations blindly.
 - [QMK Work Louder Micro](https://github.com/qmk/qmk_firmware/tree/master/keyboards/work_louder/micro) — GPL-2.0; legacy hardware only.
 
 MegaMicro and micro-manager were found without a clear license during the August 30, 2026 audit. They are reference-only and are not code sources for wrkpad.
-

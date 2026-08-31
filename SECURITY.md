@@ -20,6 +20,8 @@ Version 0.1 is pre-release software. Security fixes target the current `main` br
 - HID writes are absent from current source.
 - Process absence is not proof of exclusive device ownership.
 - Hook configuration is executable user configuration; installation and vendor trust are human-reviewed steps.
+- Hook mutation is scoped by an exact ownership marker, a content-bound confirmation plan, private backup, symlink refusal, and atomic replacement. It never claims or changes provider trust.
+- The macOS service is per-user, fixed to loopback, direct argv, and a recognized plist. It contains no token or environment and refuses foreign files, disabled labels, custom state roots, and unmanaged authenticated listeners.
 
 ## Security invariants
 
@@ -33,3 +35,4 @@ Pull requests must not:
 - blur observe, shadow, takeover, and release;
 - silently kill competing applications or alter OS permissions.
 - follow symlinked token or persisted-state files.
+- delete unmarked or unrelated vendor hook handlers during repair or uninstall.

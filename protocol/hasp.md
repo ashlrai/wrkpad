@@ -26,8 +26,11 @@ This prevents ordinary cross-origin localhost forgery and casual access from a d
 | `GET` | `/v1/health` | None | Protocol and process liveness only |
 | `POST` | `/v1/events` | Bearer | Apply one event idempotently |
 | `GET` | `/v1/state` | Bearer | Six ordered slots and revision |
+| `DELETE` | `/v1/slots/{agent_key}` | Bearer | Forget one local slot and return the new snapshot |
 
-Batch ingestion, long polling, acknowledgement, and forget operations are planned additions and are not claimed by 0.1.0 source.
+`agent_key` is `0..5`, corresponding to `AG00..AG05`. Invalid indices return `422`. A persistence failure returns `500` and rolls the in-memory reducer back to its prior state. Forget removes only the local status binding; it does not stop, cancel, interrupt, approve, deny, or otherwise control the underlying agent. A later provider event may bind that agent again.
+
+Batch ingestion, long polling, and acknowledgement are planned additions and are not claimed by 0.1.0 source.
 
 ## Event
 
@@ -102,4 +105,3 @@ Never send or persist:
 - approval allow/deny decisions.
 
 Provider adapters must exit successfully and emit no stdout if HASP is unavailable. Board observability must not block the parent agent.
-

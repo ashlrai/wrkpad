@@ -5,12 +5,14 @@ pub mod config;
 pub mod device;
 pub mod doctor;
 pub mod engine;
+pub mod hook_config;
 pub mod hooks;
 pub mod lighting;
 pub mod model;
 pub mod occupancy;
 pub mod protocol;
 pub mod server;
+pub mod service;
 pub mod storage;
 pub mod tui;
 

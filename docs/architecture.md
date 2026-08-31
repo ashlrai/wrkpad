@@ -30,6 +30,8 @@ wrkpad hook ── bearer token ──> HASP on 127.0.0.1:43187
 | `model` | Versioned events, session status, snapshots | Vendor hook JSON or HID bytes |
 | `engine` | Idempotency, priority, sticky assignment, overflow | Network, terminal, process inspection |
 | `hooks` | Provider-shape normalization and redaction | Approval decisions or transcript reads |
+| `hook_config` | Read-only inventory, content-bound plans, scoped merge/repair/uninstall, private backup | Provider trust or unrelated handlers |
+| `service` | Opt-in per-user macOS LaunchAgent planning, fixed-argv lifecycle, authenticated health and rollback | Root daemons, shells, secrets, or provider configuration |
 | `server` | Loopback authentication, Host/Origin policy, persistence | HID or shell execution |
 | `protocol` | Report framing, bounded reassembly, correlation helpers | Device opening or unreviewed RPC methods |
 | `device` | Read-only HID enumeration and identity evidence | Write enablement from VID/PID |
@@ -37,6 +39,8 @@ wrkpad hook ── bearer token ──> HASP on 127.0.0.1:43187
 | `occupancy` | Legal state transitions and evidence requirements | Pretending process absence proves exclusivity |
 | `lighting` | Complete desired semantic frames | Claiming hardware application |
 | `tui` | Accessible terminal rendering | State authority |
+
+Operator recovery follows `CLI forget → authenticated HASP DELETE → reducer → atomic persistence`. It is a local display-state operation, never an agent-control operation.
 
 ## Durable invariants
 
@@ -53,11 +57,10 @@ wrkpad hook ── bearer token ──> HASP on 127.0.0.1:43187
 
 ## Persistence
 
-The server atomically writes JSON through a private temporary file and rename. Raw provider session IDs and working directories are converted to token-keyed HMAC-SHA-256 bindings before persistence. The token and state directory are user-private on Unix.
+The server bounds persisted JSON to 4 MiB, refuses symlinked state files, atomically writes through a private temporary file and rename, synchronizes the file and parent directory on Unix, and rolls live state back when persistence fails. Raw provider session IDs and working directories are converted to token-keyed HMAC-SHA-256 bindings before persistence. The token and state directory are user-private on Unix.
 
-The first public release should add parent-directory `fsync`, symlink refusal, and crash-injection tests before describing persistence as crash durable across every supported filesystem.
+Crash-injection and cross-platform filesystem acceptance are still required before describing persistence as crash durable across every supported filesystem.
 
 ## Extension policy
 
 New providers implement normalization into HASP; they do not add provider semantics to the reducer. New hardware implements the private adapter behind the same occupancy and lighting planner. Remote networking, agent control, and approvals require separate protocols and threat models and are not backwards-compatible HASP additions.
-

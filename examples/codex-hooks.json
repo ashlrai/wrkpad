@@ -1,23 +1,13 @@
 {
-  "description": "Observe Codex session state for local wrkpad status.",
+  "description": "Reference shape only. Use wrkpad hooks plan/install for a safe local merge.",
   "hooks": {
-    "SessionStart": [{
-      "matcher": "startup|resume|clear|compact",
-      "hooks": [{"type": "command", "command": "/absolute/path/to/wrkpad hook --provider codex", "timeout": 2}]
-    }],
-    "UserPromptSubmit": [{
-      "hooks": [{"type": "command", "command": "/absolute/path/to/wrkpad hook --provider codex", "timeout": 2}]
-    }],
-    "PermissionRequest": [{
-      "matcher": "*",
-      "hooks": [{"type": "command", "command": "/absolute/path/to/wrkpad hook --provider codex", "timeout": 2}]
-    }],
-    "PostToolUse": [{
-      "hooks": [{"type": "command", "command": "/absolute/path/to/wrkpad hook --provider codex", "timeout": 2}]
-    }],
-    "Stop": [{
-      "hooks": [{"type": "command", "command": "/absolute/path/to/wrkpad hook --provider codex", "timeout": 2}]
-    }]
+    "SessionStart": [{"matcher": "startup|resume|clear|compact", "hooks": [{"type": "command", "command": "/absolute/path/to/wrkpad hook --provider codex --managed-by dev.wrkpad.hook-v1", "timeout": 2}]}],
+    "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "/absolute/path/to/wrkpad hook --provider codex --managed-by dev.wrkpad.hook-v1", "timeout": 2}]}],
+    "PermissionRequest": [{"matcher": "*", "hooks": [{"type": "command", "command": "/absolute/path/to/wrkpad hook --provider codex --managed-by dev.wrkpad.hook-v1", "timeout": 2}]}],
+    "PostToolUse": [{"hooks": [{"type": "command", "command": "/absolute/path/to/wrkpad hook --provider codex --managed-by dev.wrkpad.hook-v1", "timeout": 2}]}],
+    "Stop": [{"hooks": [{"type": "command", "command": "/absolute/path/to/wrkpad hook --provider codex --managed-by dev.wrkpad.hook-v1", "timeout": 2}]}],
+    "SubagentStart": [{"matcher": "*", "hooks": [{"type": "command", "command": "/absolute/path/to/wrkpad hook --provider codex --managed-by dev.wrkpad.hook-v1", "timeout": 2}]}],
+    "SubagentStop": [{"matcher": "*", "hooks": [{"type": "command", "command": "/absolute/path/to/wrkpad hook --provider codex --managed-by dev.wrkpad.hook-v1", "timeout": 2}]}],
+    "SessionEnd": [{"hooks": [{"type": "command", "command": "/absolute/path/to/wrkpad hook --provider codex --managed-by dev.wrkpad.hook-v1", "timeout": 2}]}]
   }
 }
-

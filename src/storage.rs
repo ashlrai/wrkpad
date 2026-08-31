@@ -8,6 +8,8 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use uuid::Uuid;
 
+const MAX_PERSISTED_JSON_BYTES: u64 = 4 * 1024 * 1024;
+
 #[derive(Debug, Clone)]
 pub struct JsonStore<T> {
     path: PathBuf,
@@ -31,6 +33,12 @@ where
             return Ok(T::default());
         }
         refuse_symlink(&self.path)?;
+        let length = fs::metadata(&self.path)?.len();
+        anyhow::ensure!(
+            length <= MAX_PERSISTED_JSON_BYTES,
+            "refusing to load oversized JSON state from {}",
+            self.path.display()
+        );
         let bytes = fs::read(&self.path)
             .with_context(|| format!("failed to read {}", self.path.display()))?;
         serde_json::from_slice(&bytes)
@@ -134,6 +142,18 @@ mod tests {
         let store = JsonStore::<Example>::new(path);
         assert!(store.load().is_err());
         assert!(store.save(&Example { value: 9 }).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn refuses_oversized_state_files() -> anyhow::Result<()> {
+        let directory = tempdir()?;
+        let path = directory.path().join("state.json");
+        let file = std::fs::File::create(&path)?;
+        file.set_len(super::MAX_PERSISTED_JSON_BYTES + 1)?;
+        drop(file);
+        let store = JsonStore::<Example>::new(path);
+        assert!(store.load().is_err());
         Ok(())
     }
 }

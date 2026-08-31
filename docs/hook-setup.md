@@ -1,54 +1,67 @@
 # Claude Code and Codex hook setup
 
-Hooks are optional local observers. They do not approve, deny, block, continue, or modify an agent turn.
+Hooks are optional local observers. They never approve, deny, block, continue, or modify an agent turn. Configuration, provider trust, provider invocation, HASP ingestion, and physical board painting are separate facts; none proves the next.
 
 ## Prerequisites
 
-1. Build `wrkpad` and run `wrkpad init`.
-2. Start `wrkpad serve`.
-3. Resolve the absolute binary path with `realpath target/release/wrkpad`.
-4. Back up the settings file you intend to edit.
-5. Review existing hooks and preserve unrelated definitions.
+1. Install or copy a stable `wrkpad` release binary. Do not configure hooks from `target/release`, because `cargo clean` can invalidate that path.
+2. Run `wrkpad init` and keep HASP available with the guarded macOS [background service](macos-service.md) or a foreground `wrkpad serve`. Hooks fail open and drop the status event within the 200 ms network deadline when HASP is unavailable.
+3. Review the target reported by `wrkpad hooks status`. Project scope resolves to the enclosing Git root and contains a machine-specific absolute executable path; never commit it.
 
-Examples are in [`examples/claude-hooks.json`](../examples/claude-hooks.json) and [`examples/codex-hooks.json`](../examples/codex-hooks.json). Replace `/absolute/path/to/wrkpad` before merging.
+The files in [`examples/`](../examples/) show the canonical shape only. Do not paste them over an existing settings file.
 
-## Claude Code
+## Guarded lifecycle
 
-Claude hooks belong inside a `hooks` object in a settings file, not `.claude/hooks.json`. Recommended v0.1 signals:
+Run the stable binary for every step:
 
-- `SessionStart`
-- `UserPromptSubmit`
-- `Notification` with `permission_prompt`
-- `PostToolUse`
-- `PostToolUseFailure`
-- `Stop`
+```bash
+wrkpad hooks status --provider codex --scope user
+wrkpad hooks plan --provider codex --scope user --action install --json
+wrkpad hooks install --provider codex --scope user --confirm <exact-plan-id>
+```
 
-Use a two-second vendor hook timeout. The wrkpad network attempt itself is limited to 200 ms. The adapter emits no stdout and exits successfully when HASP is unavailable.
+Repeat with `--provider claude`. Use project scope only when the repository-specific behavior is intentional.
 
-After merging, inspect `/hooks`. In an untrusted repository, start Claude with hooks disabled or `--bare` until repository settings are reviewed.
+The confirmation ID binds the source hash and exact proposed document. Apply takes a private per-target lock, rechecks the file immediately before an atomic replacement, refuses target and parent symlinks, preserves unrelated handlers and file mode, and backs up an existing target beneath the private wrkpad `hook-backups` directory. A concurrent non-wrkpad writer cannot honor the advisory lock, so re-inspect the resulting settings after any simultaneous vendor edit.
 
-## Codex CLI
+- `install` adds missing managed handlers and refuses stale or duplicate wrkpad handlers.
+- `repair` replaces only ownership-marked wrkpad handlers; it will not bootstrap an unconfigured target.
+- `uninstall` removes only ownership-marked wrkpad handlers and leaves other settings intact.
 
-Current Codex uses lifecycle hooks such as `PermissionRequest` and `Stop` in `.codex/hooks.json`. These names are distinct:
+The manager uses an exact `--managed-by dev.wrkpad.hook-v1` command marker. Similar unmarked commands are treated as unrelated and are never deleted.
 
-- `PermissionRequest` — modern lifecycle hook for an imminent approval prompt;
-- `approval-requested` — TUI notification selector, not a lifecycle hook;
-- `agent-turn-complete` — legacy external `notify` payload;
-- `approval-required` — not a documented Codex event.
+## Claude Code signals
 
-After merging, open `/hooks`, inspect the full command and source, and explicitly trust it. A hook definition change should require trust review again. Do not normalize `--dangerously-bypass-hook-trust` into setup instructions.
+The managed Claude set contains nine synchronous, two-second handlers:
+
+- `SessionStart`, `UserPromptSubmit`, `PostToolUse`, `Stop`, and `SessionEnd` map ordinary lifecycle progress.
+- `PermissionRequest` maps immediately to `needs_input`.
+- `Notification(permission_prompt|elicitation_dialog|elicitation_url_dialog|agent_needs_input)` maps to `needs_input`.
+- `Notification(idle_prompt|agent_completed)` maps to unread.
+- `PostToolUseFailure` and `StopFailure` map to error.
+
+The wrkpad HTTP deadline is 200 ms. Synchronous ordering is intentional; do not add `async: true` if ordered state transitions are required.
+
+## Codex CLI signals and trust
+
+The managed Codex set contains eight handlers: `SessionStart`, `UserPromptSubmit`, `PermissionRequest`, `PostToolUse`, `Stop`, `SubagentStart`, `SubagentStop`, and `SessionEnd`.
+
+Subagents use `parent session + agent_id` as distinct private identities. Start maps to working and stop maps to unread, so parallel subagents can occupy distinct sticky slots and reach the normal six-slot overflow policy.
+
+After any install or repair, open Codex `/hooks`, inspect the full command and source, and explicitly trust the exact definition. `wrkpad hooks status` reports trust as `untrusted_or_unknown`; it cannot inspect or change Codex trust. Do not normalize `--dangerously-bypass-hook-trust` into setup instructions.
+
+`PermissionRequest` is the lifecycle hook for an imminent approval prompt. `approval-requested` is a TUI notification selector, `agent-turn-complete` is the legacy external `notify` payload, and `approval-required` is not the managed lifecycle event.
 
 ## Existing local timeout warning
 
-The August 30 audit found an unrelated shared `SessionStart` hook configured with `"timeout": 15000` on this Mac. Both vendors interpret timeout as seconds, so that means about 4.2 hours rather than 15 seconds. wrkpad did not modify it. Review it independently before relying on hook shutdown behavior.
+The August 31 audit found an unrelated shared `SessionStart` hook configured with `"timeout": 15000` on this Mac. Both providers interpret timeout as seconds, so that is about 4.2 hours rather than 15 seconds. wrkpad preserves it. Review it independently.
 
-## Verification
+## Runtime verification
 
-With `wrkpad serve` running, start a disposable agent session and inspect:
+With HASP available, start a disposable agent session and inspect:
 
 ```bash
 wrkpad status --json
 ```
 
-Verify that slot state changes while prompt text, assistant content, commands, and transcripts are absent from the output and state file. Hook installation does not prove a board was painted.
-
+Verify a slot changes and that prompt text, assistant content, tool commands and arguments, transcripts, credentials, and approval decisions are absent from stdout and the state file. A configured and trusted hook still does not prove the provider invoked it; an ingested event still does not prove the board was painted.

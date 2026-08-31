@@ -8,10 +8,12 @@ Keep these facts independent:
 2. A release binary built.
 3. The binary was signed and notarized where required.
 4. A public immutable artifact was published.
-5. Hooks were installed and trusted in a specific provider/version.
-6. A physical device tuple was shadow-qualified.
-7. Lighting takeover/release passed.
-8. An operator accepted the daily workflow.
+5. A hook configuration was installed from that stable binary.
+6. The provider trusted and invoked the exact hook definition.
+7. HASP was available and ingested a disposable runtime event without private content.
+8. A physical USB/HID device tuple was present and shadow-qualified.
+9. Lighting takeover/release passed visibly on the named caps.
+10. An operator accepted the daily workflow.
 
 One layer never proves the next.
 
@@ -25,6 +27,7 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-targets
 cargo build --release
 wrkpad doctor --json
+wrkpad doctor --dump-hid
 wrkpad demo --json
 ```
 
@@ -42,9 +45,12 @@ Before publishing, record:
 - known device tuples and whether each is discovery-only, shadow-qualified, or lighting-accepted;
 - rollback artifact.
 
+For each intended provider and scope, also record the read-only hook status, content-bound plan, applied target and private backup, preservation of unrelated hooks, provider trust result, and one disposable fired-event receipt. Inspect both stdout and persisted state to confirm prompts, assistant content, tool data, transcript paths, credentials, and approval decisions are absent.
+
+A foreground `wrkpad serve` test proves only that process lifetime. Separately record the content-bound service plan, stable executable SHA-256, owned plist, loaded status, and authenticated health after the originating terminal closes. Hook installation alone does not keep HASP running.
+
 ## Hardware claim rule
 
 A release may say “discovers Creator Micro 2/Codex Micro candidates” when doctor fixtures and live enumeration support it. It may say “hardware lighting supported” only for exact tuples with visible calibration, release, reconnect, and soak evidence in the release ledger.
 
 Unknown devices remain observe-only.
-

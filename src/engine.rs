@@ -25,6 +25,8 @@ pub enum EngineError {
     CwdTooLong,
     #[error("all six sticky slots are protected; acknowledge or forget an inactive session")]
     SlotsFull,
+    #[error("agent slot must be between AG00 and AG05")]
+    InvalidSlot,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -147,6 +149,16 @@ impl StateEngine {
                 })
                 .count(),
         }
+    }
+
+    pub fn forget_slot(&mut self, agent_key: u8) -> Result<BoardSnapshot, EngineError> {
+        let index = usize::from(agent_key);
+        let slot = self.slots.get_mut(index).ok_or(EngineError::InvalidSlot)?;
+        if let Some(session_id) = slot.take() {
+            self.sessions.remove(&session_id);
+            self.revision = self.revision.saturating_add(1);
+        }
+        Ok(self.snapshot())
     }
 
     fn validate(event: &HaspEvent) -> Result<(), EngineError> {
@@ -363,6 +375,25 @@ mod tests {
             ))?;
         }
         assert!(off_only.sessions.len() <= super::SLOT_COUNT);
+        Ok(())
+    }
+
+    #[test]
+    fn forget_releases_only_the_requested_agent_key() -> anyhow::Result<()> {
+        let mut engine = StateEngine::default();
+        engine.apply(HaspEvent::new(Provider::Codex, "first", EventKind::Error))?;
+        engine.apply(HaspEvent::new(
+            Provider::Claude,
+            "second",
+            EventKind::NeedsInput,
+        ))?;
+        let snapshot = engine.forget_slot(0)?;
+        assert!(snapshot.slots[0].session.is_none());
+        assert!(snapshot.slots[1].session.is_some());
+        assert!(matches!(
+            engine.forget_slot(6),
+            Err(super::EngineError::InvalidSlot)
+        ));
         Ok(())
     }
 }

@@ -3,15 +3,18 @@ use std::net::SocketAddr;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
+use directories::BaseDirs;
 use tracing_subscriber::EnvFilter;
 use wrkpad::client::HaspClient;
 use wrkpad::config::Paths;
 use wrkpad::doctor::DoctorReport;
 use wrkpad::engine::StateEngine;
+use wrkpad::hook_config::{HookAction, HookPlan, HookProvider, HookScope};
 use wrkpad::hooks::normalize;
 use wrkpad::lighting::BlackOpaqueProfile;
 use wrkpad::model::{EventKind, HaspEvent, Provider};
 use wrkpad::occupancy::{OccupancyMode, OccupancyState, TransitionEvidence};
+use wrkpad::service::{ServiceAction, ServicePlan};
 use wrkpad::storage::JsonStore;
 
 #[derive(Debug, Parser)]
@@ -49,7 +52,14 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Forget one local status slot without controlling the underlying agent.
+    Forget {
+        /// Agent-key index from 0 through 5 (AG00 through AG05).
+        #[arg(value_parser = clap::value_parser!(u8).range(0..=5))]
+        agent_key: u8,
+    },
     /// Run the terminal dashboard. Press q or Escape to exit.
+    #[command(visible_alias = "dashboard")]
     Tui,
     /// Ingest one Claude or Codex hook from standard input.
     Hook {
@@ -57,6 +67,19 @@ enum Command {
         provider: ProviderArg,
         #[arg(long)]
         event: Option<String>,
+        /// Ownership marker used by the managed hook lifecycle.
+        #[arg(long, hide = true, value_parser = ["dev.wrkpad.hook-v1"])]
+        managed_by: Option<String>,
+    },
+    /// Inspect or transactionally manage Claude and Codex lifecycle observers.
+    Hooks {
+        #[command(subcommand)]
+        command: HooksCommand,
+    },
+    /// Manage the fixed per-user macOS HASP `LaunchAgent`.
+    Service {
+        #[command(subcommand)]
+        command: ServiceCommand,
     },
     /// Render all six semantic states without touching hardware.
     Demo {
@@ -77,6 +100,173 @@ enum ProviderArg {
     Claude,
     Codex,
     CodexNotify,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum HookProviderArg {
+    Codex,
+    Claude,
+}
+
+impl From<HookProviderArg> for HookProvider {
+    fn from(value: HookProviderArg) -> Self {
+        match value {
+            HookProviderArg::Codex => Self::Codex,
+            HookProviderArg::Claude => Self::Claude,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum HookScopeArg {
+    User,
+    Project,
+}
+
+impl From<HookScopeArg> for HookScope {
+    fn from(value: HookScopeArg) -> Self {
+        match value {
+            HookScopeArg::User => Self::User,
+            HookScopeArg::Project => Self::Project,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum HookActionArg {
+    Install,
+    Repair,
+    Uninstall,
+}
+
+impl From<HookActionArg> for HookAction {
+    fn from(value: HookActionArg) -> Self {
+        match value {
+            HookActionArg::Install => Self::Install,
+            HookActionArg::Repair => Self::Repair,
+            HookActionArg::Uninstall => Self::Uninstall,
+        }
+    }
+}
+
+#[derive(Debug, Subcommand)]
+enum HooksCommand {
+    /// Read current configuration without changing it.
+    Status {
+        #[arg(long, value_enum)]
+        provider: HookProviderArg,
+        #[arg(long, value_enum, default_value = "project")]
+        scope: HookScopeArg,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Produce a content-bound confirmation plan without writing.
+    Plan {
+        #[arg(long, value_enum)]
+        provider: HookProviderArg,
+        #[arg(long, value_enum, default_value = "project")]
+        scope: HookScopeArg,
+        #[arg(long, value_enum, default_value = "install")]
+        action: HookActionArg,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Add missing wrkpad handlers, preserving unrelated hooks.
+    Install {
+        #[arg(long, value_enum)]
+        provider: HookProviderArg,
+        #[arg(long, value_enum, default_value = "project")]
+        scope: HookScopeArg,
+        #[arg(long)]
+        confirm: String,
+    },
+    /// Replace only stale or duplicate wrkpad handlers.
+    Repair {
+        #[arg(long, value_enum)]
+        provider: HookProviderArg,
+        #[arg(long, value_enum, default_value = "project")]
+        scope: HookScopeArg,
+        #[arg(long)]
+        confirm: String,
+    },
+    /// Remove only wrkpad-owned handlers.
+    Uninstall {
+        #[arg(long, value_enum)]
+        provider: HookProviderArg,
+        #[arg(long, value_enum, default_value = "project")]
+        scope: HookScopeArg,
+        #[arg(long)]
+        confirm: String,
+    },
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum ServiceActionArg {
+    Install,
+    Repair,
+    Uninstall,
+    Start,
+    Stop,
+    Restart,
+}
+
+impl From<ServiceActionArg> for ServiceAction {
+    fn from(value: ServiceActionArg) -> Self {
+        match value {
+            ServiceActionArg::Install => Self::Install,
+            ServiceActionArg::Repair => Self::Repair,
+            ServiceActionArg::Uninstall => Self::Uninstall,
+            ServiceActionArg::Start => Self::Start,
+            ServiceActionArg::Stop => Self::Stop,
+            ServiceActionArg::Restart => Self::Restart,
+        }
+    }
+}
+
+#[derive(Debug, Subcommand)]
+enum ServiceCommand {
+    /// Inspect the plist, launchd state, and authenticated HASP health.
+    Status {
+        #[arg(long)]
+        json: bool,
+    },
+    /// Produce a content-bound confirmation plan without changing service state.
+    Plan {
+        #[arg(long, value_enum, default_value = "install")]
+        action: ServiceActionArg,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Install and start the exact wrkpad per-user `LaunchAgent`.
+    Install {
+        #[arg(long)]
+        confirm: String,
+    },
+    /// Replace only a recognized wrkpad `LaunchAgent`, then verify health.
+    Repair {
+        #[arg(long)]
+        confirm: String,
+    },
+    /// Unload and remove only the owned plist, preserving data and hooks.
+    Uninstall {
+        #[arg(long)]
+        confirm: String,
+    },
+    /// Load the installed `LaunchAgent` and verify authenticated health.
+    Start {
+        #[arg(long)]
+        confirm: String,
+    },
+    /// Unload the `LaunchAgent` without deleting its plist or data.
+    Stop {
+        #[arg(long)]
+        confirm: String,
+    },
+    /// Unload, reload, and verify authenticated health.
+    Restart {
+        #[arg(long)]
+        confirm: String,
+    },
 }
 
 impl ProviderArg {
@@ -130,12 +320,29 @@ async fn main() -> Result<()> {
                 print_snapshot(&snapshot);
             }
         }
+        Command::Forget { agent_key } => {
+            let snapshot = client(&paths, &cli.endpoint)?
+                .forget_slot(agent_key)
+                .await?;
+            println!(
+                "forgot AG{agent_key:02}; HASP revision {}",
+                snapshot.revision
+            );
+        }
         Command::Tui => wrkpad::tui::run(client(&paths, &cli.endpoint)?).await?,
-        Command::Hook { provider, event } => {
+        Command::Hook {
+            provider,
+            event,
+            managed_by: _,
+        } => {
             if let Err(error) = ingest_hook(&paths, &cli.endpoint, provider, event.as_deref()).await
             {
                 tracing::warn!(%error, "wrkpad hook observer failed open");
             }
+        }
+        Command::Hooks { command } => manage_hooks(&paths, command)?,
+        Command::Service { command } => {
+            manage_service(&paths, &cli.endpoint, command).await?;
         }
         Command::Demo { json } => demo(json)?,
         Command::Occupancy { command } => occupancy(&paths, command)?,
@@ -155,6 +362,167 @@ async fn main() -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn manage_hooks(paths: &Paths, command: HooksCommand) -> Result<()> {
+    let workspace = wrkpad::hook_config::project_root(&std::env::current_dir()?);
+    let home = BaseDirs::new()
+        .context("could not determine the current user's home directory")?
+        .home_dir()
+        .to_path_buf();
+    let executable = std::env::current_exe()?.canonicalize()?;
+    let (provider_arg, scope_arg, action, confirm, json) = match command {
+        HooksCommand::Status {
+            provider,
+            scope,
+            json,
+        } => (provider, scope, HookAction::Install, None, json),
+        HooksCommand::Plan {
+            provider,
+            scope,
+            action,
+            json,
+        } => (provider, scope, action.into(), None, json),
+        HooksCommand::Install {
+            provider,
+            scope,
+            confirm,
+        } => (provider, scope, HookAction::Install, Some(confirm), true),
+        HooksCommand::Repair {
+            provider,
+            scope,
+            confirm,
+        } => (provider, scope, HookAction::Repair, Some(confirm), true),
+        HooksCommand::Uninstall {
+            provider,
+            scope,
+            confirm,
+        } => (provider, scope, HookAction::Uninstall, Some(confirm), true),
+    };
+    let provider = HookProvider::from(provider_arg);
+    let scope = HookScope::from(scope_arg);
+    let target = wrkpad::hook_config::target_path(provider, scope, &workspace, &home);
+    let result = if let Some(plan_id) = confirm {
+        wrkpad::hook_config::apply(
+            provider,
+            scope,
+            action,
+            target,
+            &executable,
+            &paths.root.join("hook-backups"),
+            &plan_id,
+        )?
+    } else {
+        wrkpad::hook_config::plan(provider, scope, action, target, &executable)?
+    };
+    print_hook_plan(&result, json)?;
+    Ok(())
+}
+
+fn print_hook_plan(plan: &HookPlan, json: bool) -> Result<()> {
+    if json {
+        println!("{}", serde_json::to_string_pretty(plan)?);
+        return Ok(());
+    }
+    println!("wrkpad hooks · {:?} {:?}", plan.provider, plan.scope);
+    println!("  target: {}", plan.target.display());
+    println!("  outcome: {}", plan.outcome);
+    println!(
+        "  handlers: {}/{} exact · {} stale/duplicate · {} unrelated",
+        plan.exact_handlers,
+        plan.expected_handlers,
+        plan.stale_or_duplicate_handlers,
+        plan.unrelated_handlers
+    );
+    println!("  trust: {}", plan.trust);
+    println!("  plan id: {}", plan.plan_id);
+    for warning in &plan.warnings {
+        println!("  warning: {warning}");
+    }
+    Ok(())
+}
+
+async fn manage_service(paths: &Paths, endpoint: &str, command: ServiceCommand) -> Result<()> {
+    anyhow::ensure!(
+        endpoint == wrkpad::DEFAULT_ENDPOINT,
+        "managed service requires the fixed endpoint {}",
+        wrkpad::DEFAULT_ENDPOINT
+    );
+    anyhow::ensure!(
+        std::env::var_os("WRKPAD_HOME").is_none(),
+        "managed service refuses WRKPAD_HOME; use the standard per-user data directory"
+    );
+    let base = BaseDirs::new().context("could not determine the current user's home directory")?;
+    let home = base.home_dir();
+    let target = wrkpad::service::target_path(home);
+    let executable = std::env::current_exe()?.canonicalize()?;
+    let uid = manager_uid(home)?;
+    if let ServiceCommand::Status { json } = command {
+        let status = wrkpad::service::status(target, &executable, paths, uid).await?;
+        if json {
+            println!("{}", serde_json::to_string_pretty(&status)?);
+        } else {
+            println!("wrkpad service · {}", status.detail);
+            println!("  target: {}", status.target.display());
+            println!(
+                "  installed={} owned={} loaded={} healthy={}",
+                status.installed, status.owned, status.loaded, status.healthy
+            );
+        }
+        return Ok(());
+    }
+    let (action, confirm, json) = match command {
+        ServiceCommand::Status { .. } => unreachable!(),
+        ServiceCommand::Plan { action, json } => (action.into(), None, json),
+        ServiceCommand::Install { confirm } => (ServiceAction::Install, Some(confirm), true),
+        ServiceCommand::Repair { confirm } => (ServiceAction::Repair, Some(confirm), true),
+        ServiceCommand::Uninstall { confirm } => (ServiceAction::Uninstall, Some(confirm), true),
+        ServiceCommand::Start { confirm } => (ServiceAction::Start, Some(confirm), true),
+        ServiceCommand::Stop { confirm } => (ServiceAction::Stop, Some(confirm), true),
+        ServiceCommand::Restart { confirm } => (ServiceAction::Restart, Some(confirm), true),
+    };
+    let result = if let Some(plan_id) = confirm {
+        wrkpad::service::apply(action, target, &executable, paths, uid, &plan_id).await?
+    } else {
+        wrkpad::service::plan(
+            action,
+            target,
+            &executable,
+            &paths.root.join("service.stderr.log"),
+        )?
+    };
+    print_service_plan(&result, json)?;
+    Ok(())
+}
+
+fn print_service_plan(plan: &ServicePlan, json: bool) -> Result<()> {
+    if json {
+        println!("{}", serde_json::to_string_pretty(plan)?);
+        return Ok(());
+    }
+    println!("wrkpad service · {:?}", plan.action);
+    println!("  target: {}", plan.target.display());
+    println!("  outcome: {}", plan.outcome);
+    println!(
+        "  present={} owned={}",
+        plan.target_exists, plan.target_owned
+    );
+    println!("  plan id: {}", plan.plan_id);
+    for warning in &plan.warnings {
+        println!("  warning: {warning}");
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn manager_uid(home: &std::path::Path) -> Result<u32> {
+    use std::os::unix::fs::MetadataExt;
+    Ok(std::fs::metadata(home)?.uid())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn manager_uid(_home: &std::path::Path) -> Result<u32> {
+    anyhow::bail!("wrkpad service management is currently supported only on macOS")
 }
 
 fn client(paths: &Paths, endpoint: &str) -> Result<HaspClient> {
@@ -185,11 +553,39 @@ async fn ingest_hook(
 }
 
 fn print_doctor(report: DoctorReport, json: bool, dump_hid: bool) -> Result<()> {
-    if json || dump_hid {
+    if dump_hid {
+        let status = if report.devices.is_empty() {
+            "unavailable_no_relevant_hid"
+        } else {
+            "descriptor_capture_not_implemented"
+        };
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "schema": "dev.wrkpad.hid-evidence/v1",
+                "doctor": report,
+                "descriptor_capture": {
+                    "status": status,
+                    "device_open_attempted": false,
+                    "reports_read": 0,
+                    "reports_written": 0,
+                    "descriptor_sha256": null,
+                    "note": "identity evidence only; a descriptor hash requires a separately reviewed read-only backend"
+                }
+            }))?
+        );
+        return Ok(());
+    }
+    if json {
         println!("{}", serde_json::to_string_pretty(&report)?);
         return Ok(());
     }
-    println!("wrkpad doctor · observe ready");
+    println!("wrkpad doctor · software observer ready");
+    println!("  physical: {:?}", report.physical_conclusion);
+    println!(
+        "  probes: USB={:?} HID={:?} device_observer_ready={}",
+        report.usb.status, report.hid_probe_status, report.device_observer_ready
+    );
     println!("  devices: {}", report.devices.len());
     for device in &report.devices {
         println!(

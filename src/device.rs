@@ -34,7 +34,8 @@ pub struct DeviceObservation {
     pub usage_page: u16,
     pub usage: u16,
     pub interface_number: i32,
-    pub path_sha256: String,
+    #[serde(alias = "path_sha256")]
+    pub device_path_sha256: String,
     pub serial_redacted: bool,
     pub generation: DeviceGeneration,
     pub identity_evidence: EvidenceLevel,
@@ -118,7 +119,7 @@ fn observation(info: &DeviceInfo) -> DeviceObservation {
         usage_page: info.usage_page(),
         usage: info.usage(),
         interface_number: info.interface_number(),
-        path_sha256: hash_path(info.path()),
+        device_path_sha256: hash_path(info.path()),
         serial_redacted: info.serial_number().is_some(),
         generation,
         identity_evidence: known.map_or(EvidenceLevel::Unknown, |value| value.evidence),

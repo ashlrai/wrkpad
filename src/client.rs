@@ -1,3 +1,4 @@
+use std::fmt;
 use std::net::IpAddr;
 use std::time::Duration;
 
@@ -7,11 +8,21 @@ use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
 
 use crate::model::{ApplyOutcome, BoardSnapshot, HaspEvent};
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct HaspClient {
     endpoint: String,
     token: String,
     http: reqwest::Client,
+}
+
+impl fmt::Debug for HaspClient {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("HaspClient")
+            .field("endpoint", &self.endpoint)
+            .field("token", &"[redacted]")
+            .finish_non_exhaustive()
+    }
 }
 
 impl HaspClient {
@@ -46,6 +57,19 @@ impl HaspClient {
         let response = self
             .http
             .get(format!("{}/v1/state", self.endpoint))
+            .header(AUTHORIZATION, format!("Bearer {}", self.token))
+            .send()
+            .await
+            .context("HASP listener unavailable")?
+            .error_for_status()?;
+        Ok(response.json().await?)
+    }
+
+    pub async fn forget_slot(&self, agent_key: u8) -> Result<BoardSnapshot> {
+        anyhow::ensure!(agent_key < 6, "agent key must be between AG00 and AG05");
+        let response = self
+            .http
+            .delete(format!("{}/v1/slots/{agent_key}", self.endpoint))
             .header(AUTHORIZATION, format!("Bearer {}", self.token))
             .send()
             .await
@@ -90,6 +114,15 @@ mod tests {
         assert!(HaspClient::new("https://example.com", "token").is_err());
         assert!(HaspClient::new("http://10.0.0.2:43187", "token").is_err());
         assert!(HaspClient::new("http://127.0.0.1:43187/proxy", "token").is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn debug_output_never_contains_the_token() -> anyhow::Result<()> {
+        let client = HaspClient::new("http://127.0.0.1:43187", "secret-token-value")?;
+        let debug = format!("{client:?}");
+        assert!(debug.contains("[redacted]"));
+        assert!(!debug.contains("secret-token-value"));
         Ok(())
     }
 }

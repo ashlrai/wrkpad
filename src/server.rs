@@ -3,10 +3,10 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
 use axum::body::Body;
-use axum::extract::{DefaultBodyLimit, State};
+use axum::extract::{DefaultBodyLimit, Path, State};
 use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use hmac::{Hmac, Mac};
 use serde::Serialize;
@@ -15,7 +15,7 @@ use tokio::net::TcpListener;
 use tokio::sync::RwLock;
 
 use crate::engine::{EngineError, StateEngine};
-use crate::model::HaspEvent;
+use crate::model::{ApplyOutcome, HaspEvent};
 use crate::storage::JsonStore;
 
 type HmacSha256 = Hmac<Sha256>;
@@ -52,6 +52,7 @@ pub async fn serve(bind: SocketAddr, token: String, store: JsonStore<StateEngine
         .route("/v1/health", get(health))
         .route("/v1/state", get(snapshot))
         .route("/v1/events", post(ingest))
+        .route("/v1/slots/{agent_key}", delete(forget_slot))
         .layer(DefaultBodyLimit::max(32 * 1024))
         .with_state(state);
     let listener = TcpListener::bind(bind)
@@ -93,15 +94,8 @@ async fn ingest(
         return json_error(StatusCode::UNPROCESSABLE_ENTITY, &message);
     }
     let mut engine = state.engine.write().await;
-    match engine.apply(event) {
+    match apply_persisted(&mut engine, event, &state.store) {
         Ok(outcome) => {
-            if let Err(error) = state.store.save(&engine) {
-                tracing::error!(%error, "failed to persist HASP state");
-                return json_error(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "state persistence failed",
-                );
-            }
             let status = if outcome.duplicate {
                 StatusCode::OK
             } else {
@@ -109,8 +103,61 @@ async fn ingest(
             };
             protect_response((status, Json(outcome)).into_response())
         }
+        Err(ApplyPersistError::Engine(error)) => engine_error(&error),
+        Err(ApplyPersistError::Persistence(error)) => {
+            tracing::error!(%error, "failed to persist HASP state");
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "state persistence failed",
+            )
+        }
+    }
+}
+
+async fn forget_slot(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(agent_key): Path<u8>,
+) -> Response {
+    if let Err(response) = authorize(&state, &headers, false) {
+        return response;
+    }
+    let mut engine = state.engine.write().await;
+    let previous = engine.clone();
+    match engine.forget_slot(agent_key) {
+        Ok(snapshot) => {
+            if let Err(error) = state.store.save(&engine) {
+                *engine = previous;
+                tracing::error!(%error, "failed to persist HASP slot recovery");
+                return json_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "state persistence failed",
+                );
+            }
+            protect_response(Json(snapshot).into_response())
+        }
         Err(error) => engine_error(&error),
     }
+}
+
+#[derive(Debug)]
+enum ApplyPersistError {
+    Engine(EngineError),
+    Persistence(anyhow::Error),
+}
+
+fn apply_persisted(
+    engine: &mut StateEngine,
+    event: HaspEvent,
+    store: &JsonStore<StateEngine>,
+) -> Result<ApplyOutcome, ApplyPersistError> {
+    let previous = engine.clone();
+    let outcome = engine.apply(event).map_err(ApplyPersistError::Engine)?;
+    if let Err(error) = store.save(engine) {
+        *engine = previous;
+        return Err(ApplyPersistError::Persistence(error));
+    }
+    Ok(outcome)
 }
 
 fn authorize(state: &AppState, headers: &HeaderMap, require_json: bool) -> Result<(), Response> {
@@ -178,7 +225,7 @@ fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
 
 fn allowed_hosts(bind: SocketAddr) -> Vec<String> {
     let port = bind.port();
-    let mut hosts = vec![format!("{}:{port}", bind.ip()), format!("localhost:{port}")];
+    let mut hosts = vec![bind.to_string(), format!("localhost:{port}")];
     if bind.ip() == IpAddr::from([0, 0, 0, 0]) {
         hosts.clear();
     }
@@ -221,12 +268,38 @@ fn protect_response(mut response: Response) -> Response {
 
 #[cfg(test)]
 mod tests {
-    use super::constant_time_eq;
+    use tempfile::tempdir;
+
+    use super::{allowed_hosts, apply_persisted, constant_time_eq};
+    use crate::engine::StateEngine;
+    use crate::model::{EventKind, HaspEvent, Provider};
+    use crate::storage::JsonStore;
 
     #[test]
     fn token_comparison_handles_length_and_content() {
         assert!(constant_time_eq(b"same", b"same"));
         assert!(!constant_time_eq(b"same", b"diff"));
         assert!(!constant_time_eq(b"short", b"longer"));
+    }
+
+    #[test]
+    fn ipv6_loopback_host_uses_brackets() -> anyhow::Result<()> {
+        let hosts = allowed_hosts("[::1]:43187".parse()?);
+        assert!(hosts.iter().any(|host| host == "[::1]:43187"));
+        Ok(())
+    }
+
+    #[test]
+    fn persistence_failure_rolls_back_memory() -> anyhow::Result<()> {
+        let directory = tempdir()?;
+        let blocked_parent = directory.path().join("not-a-directory");
+        std::fs::write(&blocked_parent, b"file")?;
+        let store = JsonStore::new(blocked_parent.join("state.json"));
+        let mut engine = StateEngine::default();
+        let event = HaspEvent::new(Provider::Manual, "session", EventKind::Working);
+
+        assert!(apply_persisted(&mut engine, event, &store).is_err());
+        assert_eq!(engine.snapshot().revision, 0);
+        Ok(())
     }
 }

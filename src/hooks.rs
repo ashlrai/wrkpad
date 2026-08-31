@@ -23,37 +23,48 @@ pub fn normalize(
         .or_else(|| object.get("type").and_then(Value::as_str))
         .context("hook input does not identify its event")?;
 
-    let session_id = first_string(
+    let parent_session_id = first_string(
         object,
         &["session_id", "thread_id", "thread-id", "conversation_id"],
     )
     .context("hook input does not contain a session/thread identifier")?;
-    if session_id.len() > 256 {
+    if parent_session_id.len() > 256 {
         bail!("hook session identifier exceeds 256 bytes");
     }
+    let session_id = if matches!(source_event, "SubagentStart" | "SubagentStop") {
+        let agent_id = first_string(object, &["agent_id", "agent-id"])
+            .context("subagent hook input does not contain an agent identifier")?;
+        if agent_id.len() > 256 {
+            bail!("hook agent identifier exceeds 256 bytes");
+        }
+        format!("{parent_session_id}\0subagent\0{agent_id}")
+    } else {
+        parent_session_id.to_owned()
+    };
 
     let kind = match source_event {
         "SessionStart" => EventKind::SessionStart,
-        "UserPromptSubmit" | "PreToolUse" | "PostToolUse" => EventKind::Working,
+        "SubagentStart" | "UserPromptSubmit" | "PreToolUse" | "PostToolUse" => EventKind::Working,
+        "SubagentStop" => EventKind::Notification,
         "PermissionRequest" => EventKind::NeedsInput,
         "Notification" => {
             let notification_type = object
                 .get("notification_type")
                 .and_then(Value::as_str)
                 .unwrap_or_default();
-            if matches!(
-                notification_type,
-                "permission_prompt" | "elicitation_dialog" | "idle_prompt"
-            ) {
-                EventKind::NeedsInput
-            } else {
-                return Ok(None);
+            match notification_type {
+                "permission_prompt"
+                | "elicitation_dialog"
+                | "elicitation_url_dialog"
+                | "agent_needs_input" => EventKind::NeedsInput,
+                "idle_prompt" | "agent_completed" => EventKind::Notification,
+                _ => return Ok(None),
             }
         }
         "PostToolUseFailure" | "StopFailure" => EventKind::Error,
         "Stop" | "agent-turn-complete" => EventKind::TurnComplete,
         "SessionEnd" => EventKind::SessionEnd,
-        other => bail!("unsupported hook event: {other}"),
+        _ => bail!("unsupported hook event"),
     };
 
     let cwd = object
@@ -92,7 +103,7 @@ pub fn normalize(
         schema: crate::HASP_SCHEMA.to_owned(),
         event_id,
         provider,
-        session_id: session_id.to_owned(),
+        session_id,
         kind,
         at: Utc::now(),
         title,
@@ -176,6 +187,44 @@ mod tests {
     }
 
     #[test]
+    fn claude_notification_states_distinguish_input_from_unread() -> anyhow::Result<()> {
+        for notification_type in [
+            "permission_prompt",
+            "elicitation_dialog",
+            "elicitation_url_dialog",
+            "agent_needs_input",
+        ] {
+            let event = normalize(
+                Provider::Claude,
+                None,
+                &json!({
+                    "session_id": "claude-1",
+                    "hook_event_name": "Notification",
+                    "notification_type": notification_type,
+                    "message": "discarded"
+                }),
+            )?
+            .ok_or_else(|| anyhow::anyhow!("event ignored"))?;
+            assert_eq!(event.kind, EventKind::NeedsInput);
+        }
+        for notification_type in ["idle_prompt", "agent_completed"] {
+            let event = normalize(
+                Provider::Claude,
+                None,
+                &json!({
+                    "session_id": "claude-1",
+                    "hook_event_name": "Notification",
+                    "notification_type": notification_type,
+                    "message": "discarded"
+                }),
+            )?
+            .ok_or_else(|| anyhow::anyhow!("event ignored"))?;
+            assert_eq!(event.kind, EventKind::Notification);
+        }
+        Ok(())
+    }
+
+    #[test]
     fn provider_titles_and_terminal_controls_are_discarded() -> anyhow::Result<()> {
         let payload = json!({
             "session_id": "claude-1",
@@ -189,6 +238,40 @@ mod tests {
         let encoded = serde_json::to_string(&event)?;
         assert!(!encoded.contains("private customer"));
         assert!(!encoded.contains("\\u001b"));
+        Ok(())
+    }
+
+    #[test]
+    fn codex_subagents_receive_distinct_status_identities() -> anyhow::Result<()> {
+        let first = normalize(
+            Provider::Codex,
+            None,
+            &json!({
+                "session_id": "parent",
+                "turn_id": "turn-1",
+                "agent_id": "agent-a",
+                "agent_type": "explore",
+                "hook_event_name": "SubagentStart",
+                "cwd": "/work/repo"
+            }),
+        )?
+        .ok_or_else(|| anyhow::anyhow!("event ignored"))?;
+        let second = normalize(
+            Provider::Codex,
+            None,
+            &json!({
+                "session_id": "parent",
+                "turn_id": "turn-1",
+                "agent_id": "agent-b",
+                "agent_type": "review",
+                "hook_event_name": "SubagentStart",
+                "cwd": "/work/repo"
+            }),
+        )?
+        .ok_or_else(|| anyhow::anyhow!("event ignored"))?;
+        assert_ne!(first.session_id, second.session_id);
+        assert_eq!(first.kind, EventKind::Working);
+        assert!(!serde_json::to_string(&first)?.contains("agent_type"));
         Ok(())
     }
 }
