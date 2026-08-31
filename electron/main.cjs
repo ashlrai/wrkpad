@@ -1,7 +1,7 @@
 const { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain } = require('electron')
 const { spawn } = require('node:child_process')
 const { createHash, randomUUID } = require('node:crypto')
-const { existsSync, readFileSync, renameSync, writeFileSync } = require('node:fs')
+const { existsSync, renameSync, writeFileSync } = require('node:fs')
 const path = require('node:path')
 const { ACTION_SPECS, executeSpec } = require('./action-registry.cjs')
 const { holdSatisfied } = require('./approval-guard.cjs')
@@ -9,6 +9,9 @@ const { evaluateFlightSignals } = require('./flight-receipt.cjs')
 const { createFlightSession } = require('./flight-session.cjs')
 const { inspectWorkspace } = require('./workspace-inspector.cjs')
 const { appForProvider, collectMissionControl } = require('./mission-control.cjs')
+const { configuredRendererUrl, trustedRendererUrl } = require('./renderer-trust.cjs')
+const { readWorkspaceSettings, saveWorkspaceSettings } = require('./settings.cjs')
+const { resolveTool } = require('./tool-resolver.cjs')
 
 const PROFILE_IDS = new Set(['codex', 'claude', 'fleet', 'ship', 'emergency'])
 const HOTKEYS = {
@@ -17,30 +20,44 @@ const HOTKEYS = {
   joyUp:'Control+Alt+Command+Up',joyRight:'Control+Alt+Command+Right',joyDown:'Control+Alt+Command+Down',joyLeft:'Control+Alt+Command+Left',
   dialLeft:'Control+Alt+Command+Q',dialRight:'Control+Alt+Command+W',dialPress:'Control+Alt+Command+R',
 }
-let mainWindow; let currentProfile = 'codex'; let signalSequence = 0; let shortcutRegistrations = []
+let mainWindow; let rendererUrl; let currentProfile = 'codex'; let signalSequence = 0; let shortcutRegistrations = []
 let missionCache = null; let missionCacheAt = 0; let missionInFlight = null
 const approvals = new Map()
 const flightSession = createFlightSession()
 
 function settingsPath() { return path.join(app.getPath('userData'), 'settings.json') }
-function readSettings() {
-  try { return JSON.parse(readFileSync(settingsPath(), 'utf8')) } catch { return { workspace: process.env.HOME } }
-}
-function saveWorkspace(workspace) { writeFileSync(settingsPath(), JSON.stringify({ workspace }, null, 2)) }
+function readSettings() { return readWorkspaceSettings(settingsPath(), app.getPath('home')) }
+function saveWorkspace(workspace) { saveWorkspaceSettings(settingsPath(), workspace) }
 
 function createWindow() {
+  rendererUrl = configuredRendererUrl(app.isPackaged ? undefined : process.env.VITE_DEV_SERVER_URL, path.join(__dirname, '..', 'dist-renderer', 'index.html'))
   mainWindow = new BrowserWindow({
     width: 1440, height: 920, minWidth: 1100, minHeight: 760,
     title: 'Ashlr Agent Board', titleBarStyle: 'hiddenInset', backgroundColor: '#d8d7d1',
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true },
   })
-  if (process.env.VITE_DEV_SERVER_URL) mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
-  else mainWindow.loadFile(path.join(__dirname, '..', 'dist-renderer', 'index.html'))
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  mainWindow.webContents.on('will-navigate', (event, targetUrl) => {
+    if (!trustedRendererUrl(targetUrl, rendererUrl)) event.preventDefault()
+  })
+  mainWindow.webContents.on('will-attach-webview', (event) => event.preventDefault())
+  mainWindow.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false))
+  mainWindow.loadURL(rendererUrl)
   mainWindow.on('closed', () => {
     flightSession.reset()
     approvals.clear()
     mainWindow = null
   })
+}
+
+function trustedIpc(handler) {
+  return (event, ...args) => {
+    const frame = event.senderFrame
+    if (!mainWindow || event.sender !== mainWindow.webContents || !frame || frame !== event.sender.mainFrame || !trustedRendererUrl(frame.url, rendererUrl)) {
+      throw new Error('Rejected IPC from an untrusted renderer')
+    }
+    return handler(event, ...args)
+  }
 }
 
 function registerShortcuts() {
@@ -81,7 +98,7 @@ async function boardConnected() {
 async function missionControl(force = false) {
   if (!force && missionCache && Date.now() - missionCacheAt < 8_000) return missionCache
   if (missionInFlight) return missionInFlight
-  missionInFlight = collectMissionControl(process.env.HOME).then((snapshot) => {
+  missionInFlight = collectMissionControl(app.getPath('home')).then((snapshot) => {
     missionCache = snapshot
     missionCacheAt = Date.now()
     return snapshot
@@ -100,12 +117,16 @@ function openFixedApp(name) {
   })
 }
 
-ipcMain.handle('board:getStatus', async () => {
+ipcMain.handle('board:getStatus', trustedIpc(async () => {
   const settings = readSettings()
+  const home = app.getPath('home')
+  const codexExecutable = resolveTool('codex', { home })
+  const claudeExecutable = resolveTool('claude', { home })
+  const ashlrExecutable = resolveTool('ashlr', { home })
   const [board, codex, claude, ashlr, workspaceSnapshot] = await Promise.all([
-    boardConnected(), commandExists('/opt/homebrew/bin/codex'),
-    commandExists(path.join(process.env.HOME, '.local/bin/claude')),
-    commandExists(path.join(process.env.HOME, '.local/bin/ashlr')),
+    boardConnected(), codexExecutable ? commandExists(codexExecutable) : false,
+    claudeExecutable ? commandExists(claudeExecutable) : false,
+    ashlrExecutable ? commandExists(ashlrExecutable) : false,
     inspectWorkspace(settings.workspace),
   ])
   return {
@@ -120,9 +141,9 @@ ipcMain.handle('board:getStatus', async () => {
     shortcutRegistrations,
     workspaceSnapshot,
   }
-})
-ipcMain.handle('board:getMissionControl', () => missionControl())
-ipcMain.handle('board:focusAgentSlot', async (_event, slot) => {
+}))
+ipcMain.handle('board:getMissionControl', trustedIpc(() => missionControl()))
+ipcMain.handle('board:focusAgentSlot', trustedIpc(async (_event, slot) => {
   if (flightSession.isActive()) return { ok:false,title:'Flight Check interlock',message:'Agent focus is disabled until hardware acceptance ends.',timestamp:new Date().toISOString() }
   if (!Number.isInteger(slot) || slot < 1 || slot > 6) return { ok:false,title:'Slot unavailable',message:'Choose one of the six physical agent slots.',timestamp:new Date().toISOString() }
   const snapshot = await missionControl(true)
@@ -136,19 +157,19 @@ ipcMain.handle('board:focusAgentSlot', async (_event, slot) => {
     ? 'cmux is foregrounded. Exact pane correlation is not available in the installed cmux build, so no terminal input was sent.'
     : 'Codex Desktop is foregrounded. No prompt, approval, or task was submitted.'
   return { ok:true,title:`Opened ${appName} for ${agent.title}`,message,timestamp:new Date().toISOString() }
-})
-ipcMain.handle('board:setProfile', (_event, profile) => { if (PROFILE_IDS.has(profile)) currentProfile = profile; return currentProfile })
-ipcMain.handle('board:setFlightCheck', (_event, active) => {
+}))
+ipcMain.handle('board:setProfile', trustedIpc((_event, profile) => { if (PROFILE_IDS.has(profile)) currentProfile = profile; return currentProfile }))
+ipcMain.handle('board:setFlightCheck', trustedIpc((_event, active) => {
   const state = active === true ? flightSession.start() : flightSession.stop()
   if (state.active) approvals.clear()
   return { acknowledged: true, active: state.active, startedAt: state.startedAt }
-})
-ipcMain.handle('board:chooseWorkspace', async () => {
+}))
+ipcMain.handle('board:chooseWorkspace', trustedIpc(async () => {
   const result = await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory', 'createDirectory'], title: 'Choose the Agent Board working directory' })
   if (result.canceled || !result.filePaths[0]) return null
   saveWorkspace(result.filePaths[0]); return result.filePaths[0]
-})
-ipcMain.handle('board:saveFlightReceipt', async (_event, receipt) => {
+}))
+ipcMain.handle('board:saveFlightReceipt', trustedIpc(async (_event, receipt) => {
   const flight = flightSession.snapshot()
   if (!flight.active || !flight.startedAt) return null
   if (!receipt || typeof receipt !== 'object' || Array.isArray(receipt)) return null
@@ -186,8 +207,8 @@ ipcMain.handle('board:saveFlightReceipt', async (_event, receipt) => {
   writeFileSync(temporaryPath, `${JSON.stringify(document, null, 2)}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
   renameSync(temporaryPath, result.filePath)
   return result.filePath
-})
-ipcMain.handle('board:requestAction', async (_event, actionId) => {
+}))
+ipcMain.handle('board:requestAction', trustedIpc(async (_event, actionId) => {
   if (flightSession.isActive()) return { ok:false,title:'Flight Check interlock',message:'Mapped actions are disabled until hardware acceptance ends.',timestamp:new Date().toISOString() }
   const spec = ACTION_SPECS[actionId]
   if (!spec) return { ok:false,title:'Action unavailable',message:'This action is not allowlisted.',timestamp:new Date().toISOString() }
@@ -205,21 +226,21 @@ ipcMain.handle('board:requestAction', async (_event, actionId) => {
     })
     return { ok:true,title:'Confirmation required',message:'Review the consequence before continuing.',needsConfirmation:true,token,timestamp:new Date().toISOString() }
   }
-  return executeSpec(actionId, readSettings().workspace, { clipboard })
-})
-ipcMain.handle('board:beginHold', (_event, actionId, token) => {
+  return executeSpec(actionId, readSettings().workspace, { clipboard, home: app.getPath('home') })
+}))
+ipcMain.handle('board:beginHold', trustedIpc((_event, actionId, token) => {
   const approval = approvals.get(token)
   if (!approval || approval.actionId !== actionId || approval.safety !== 'hold' || approval.webContentsId !== _event.sender.id || approval.expires < Date.now() || flightSession.isActive()) return false
   approval.holdStartedAt = Date.now()
   return true
-})
-ipcMain.handle('board:cancelHold', (_event, actionId, token) => {
+}))
+ipcMain.handle('board:cancelHold', trustedIpc((_event, actionId, token) => {
   const approval = approvals.get(token)
   if (!approval || approval.actionId !== actionId || approval.webContentsId !== _event.sender.id) return false
   approval.holdStartedAt = null
   return true
-})
-ipcMain.handle('board:confirmAction', async (_event, actionId, token) => {
+}))
+ipcMain.handle('board:confirmAction', trustedIpc(async (_event, actionId, token) => {
   if (flightSession.isActive()) { approvals.delete(token); return { ok:false,title:'Flight Check interlock',message:'The pending approval was canceled when hardware acceptance began.',timestamp:new Date().toISOString() } }
   const approval = approvals.get(token); approvals.delete(token)
   const settings = readSettings()
@@ -227,8 +248,8 @@ ipcMain.handle('board:confirmAction', async (_event, actionId, token) => {
   if (approval.webContentsId !== _event.sender.id) return { ok:false,title:'Approval rejected',message:'The confirmation came from a different window.',timestamp:new Date().toISOString() }
   if (approval.workspace !== settings.workspace) return { ok:false,title:'Workspace changed',message:'Review the action again for the newly selected working directory.',timestamp:new Date().toISOString() }
   if (approval.safety === 'hold' && !holdSatisfied(approval)) return { ok:false,title:'Hold incomplete',message:'Keep holding continuously until the authorization indicator completes.',timestamp:new Date().toISOString() }
-  return executeSpec(actionId, approval.workspace, { clipboard })
-})
+  return executeSpec(actionId, approval.workspace, { clipboard, home: app.getPath('home') })
+}))
 
 app.whenReady().then(() => { app.setName('Ashlr Agent Board'); createWindow(); registerShortcuts() })
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })

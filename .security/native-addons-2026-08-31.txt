@@ -1,0 +1,13 @@
+node_modules/@electron-internal/extract-zip/index.darwin-universal.node
+node_modules/@electron-internal/extract-zip/index.linux-arm-gnueabihf.node
+node_modules/@electron-internal/extract-zip/index.linux-arm64-gnu.node
+node_modules/@electron-internal/extract-zip/index.linux-arm64-musl.node
+node_modules/@electron-internal/extract-zip/index.linux-ia32-gnu.node
+node_modules/@electron-internal/extract-zip/index.linux-x64-gnu.node
+node_modules/@electron-internal/extract-zip/index.linux-x64-musl.node
+node_modules/@electron-internal/extract-zip/index.win32-arm64-msvc.node
+node_modules/@electron-internal/extract-zip/index.win32-x64-msvc.node
+node_modules/@oxlint/binding-darwin-arm64/oxlint.darwin-arm64.node
+node_modules/@rolldown/binding-darwin-arm64/rolldown-binding.darwin-arm64.node
+node_modules/fsevents/fsevents.node
+node_modules/lightningcss-darwin-arm64/lightningcss.darwin-arm64.node

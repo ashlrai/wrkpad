@@ -1,6 +1,7 @@
 const { spawn } = require('node:child_process')
 const { existsSync } = require('node:fs')
 const path = require('node:path')
+const { resolveTool } = require('./tool-resolver.cjs')
 
 const BRIEFS = {
   copy_plan_brief: 'Investigate the current state first. Surface assumptions, risks, and unknowns. Propose a detailed plan with explicit acceptance criteria, safety boundaries, and rollback. Do not implement or perform consequential actions until the architecture is confirmed.',
@@ -61,6 +62,7 @@ function runProcess(executable, args, options = {}) {
 
 async function executeSpec(id, workspace, electron) {
   const spec = ACTION_SPECS[id]
+  const home = electron.home
   if (!spec) return outcome(false, 'Action unavailable', 'The requested action is not in the allowlisted desktop registry.')
   if (spec.kind === 'copy') { electron.clipboard.writeText(spec.text); return outcome(true, 'Brief copied', 'The guarded prompt is ready on your clipboard.') }
   if (spec.kind === 'openApp') {
@@ -68,18 +70,23 @@ async function executeSpec(id, workspace, electron) {
     return result.ok ? outcome(true, `${spec.app} opened`, 'No message or task was submitted.') : outcome(false, `Could not open ${spec.app}`, result.error)
   }
   if (spec.kind === 'openCodex') {
-    const result = await runProcess('/opt/homebrew/bin/codex', ['app', workspace])
+    const codex = resolveTool('codex', { home })
+    if (!codex) return outcome(false, 'Could not open Codex', 'Codex was not found in a supported user-local, Homebrew, or system tool directory.')
+    const result = await runProcess(codex, ['app', workspace])
     return result.ok ? outcome(true, 'Codex opened', 'The selected workspace is now available in Codex.') : outcome(false, 'Could not open Codex', result.error)
   }
   if (spec.kind === 'inspect') {
-    const result = await runProcess(spec.executable, spec.args, { cwd: spec.workspace ? workspace : undefined })
+    const executable = resolveTool(spec.executable, { home })
+    if (!executable) return outcome(false, 'Action unavailable', `${spec.executable} was not found in a supported local tool directory.`)
+    const result = await runProcess(executable, spec.args, { cwd: spec.workspace ? workspace : undefined })
     return result.ok ? outcome(true, 'Action complete', 'The command completed with no hidden follow-up action.', result.output) : outcome(false, 'Action failed', result.error, result.output)
   }
   if (spec.kind === 'toolHealth') {
+    const tools = ['codex', 'claude', 'ashlr'].map((name) => resolveTool(name, { home }))
     const checks = await Promise.all([
-      runProcess('/opt/homebrew/bin/codex', ['--version']),
-      runProcess(path.join(process.env.HOME, '.local/bin/claude'), ['--version']),
-      runProcess(path.join(process.env.HOME, '.local/bin/ashlr'), ['--version']),
+      tools[0] ? runProcess(tools[0], ['--version']) : Promise.resolve({ ok: false, error: 'not found' }),
+      tools[1] ? runProcess(tools[1], ['--version']) : Promise.resolve({ ok: false, error: 'not found' }),
+      tools[2] ? runProcess(tools[2], ['--version']) : Promise.resolve({ ok: false, error: 'not found' }),
     ])
     const labels = ['Codex', 'Claude Code', 'Ashlr Hub']
     const output = checks.map((check, index) => `${labels[index]}: ${check.ok ? check.output : check.error}`).join('\n')

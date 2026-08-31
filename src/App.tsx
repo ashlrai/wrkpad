@@ -56,6 +56,8 @@ function App() {
   const [flightExport, setFlightExport] = useState<string | null>(null)
   const [flightVariant, setFlightVariant] = useState<FlightVariant>('daily')
   const holdTimer = useRef<number | null>(null)
+  const holdAttempt = useRef(0)
+  const holdPending = useRef(false)
   const lastMicSignal = useRef(0)
   const lastSignal = useRef<Partial<Record<ControlId, number>>>({})
   const flightExpected = useRef<ControlId[]>([])
@@ -208,8 +210,22 @@ function App() {
   }
 
   const beginHold = async () => {
-    if (!approval || holdTimer.current) return
-    if (bridge && !await bridge.beginHold(approval.action.id, approval.token)) {
+    if (!approval || holdTimer.current || holdPending.current) return
+    const requestedApproval = approval
+    const attempt = ++holdAttempt.current
+    holdPending.current = true
+    let accepted = true
+    try {
+      if (bridge) accepted = await bridge.beginHold(requestedApproval.action.id, requestedApproval.token)
+    } catch {
+      accepted = false
+    }
+    holdPending.current = false
+    if (attempt !== holdAttempt.current) {
+      if (bridge && accepted) bridge.cancelHold(requestedApproval.action.id, requestedApproval.token)
+      return
+    }
+    if (!accepted) {
       setResult({ ok: false, title: 'Hold unavailable', message: 'Create a fresh authorization and try again.', timestamp: new Date().toISOString() })
       return
     }
@@ -220,11 +236,12 @@ function App() {
       if (progress >= 1) {
         if (holdTimer.current) window.clearInterval(holdTimer.current)
         holdTimer.current = null; setHoldProgress(0)
-        executeAction(approval.action, approval.token)
+        executeAction(requestedApproval.action, requestedApproval.token)
       }
     }, 30)
   }
   const cancelHold = useCallback(() => {
+    holdAttempt.current += 1
     if (holdTimer.current) window.clearInterval(holdTimer.current)
     if (approval?.action.safety === 'hold') bridge?.cancelHold(approval.action.id, approval.token)
     holdTimer.current = null; setHoldProgress(0)
@@ -324,6 +341,10 @@ function App() {
   }
 
   useEffect(() => cancelHold, [activeControl, cancelHold, profileId, view])
+  useEffect(() => {
+    window.addEventListener('blur', cancelHold)
+    return () => window.removeEventListener('blur', cancelHold)
+  }, [cancelHold])
   useEffect(() => () => cancelHold(), [cancelHold])
 
   return (
@@ -528,7 +549,28 @@ function ActionConsole({ activeControl, action, result, approval, isRunning, hol
     {approval ? <div className="approval-panel">
       <ShieldCheck size={22} /><div><strong>{approval.action.safety === 'hold' ? 'Hold to authorize' : 'Confirm this action'}</strong><p>{approval.action.consequence}</p></div>
       {approval.action.safety === 'hold'
-        ? <button type="button" className="hold-button" onPointerDown={onBeginHold} onPointerUp={onCancelHold} onPointerCancel={onCancelHold} onPointerLeave={onCancelHold} onBlur={onCancelHold} style={{ '--hold-progress': `${holdProgress * 100}%` } as React.CSSProperties}>Hold 1.6 seconds</button>
+        ? <button
+            type="button"
+            className="hold-button"
+            onPointerDown={onBeginHold}
+            onPointerUp={onCancelHold}
+            onPointerCancel={onCancelHold}
+            onPointerLeave={onCancelHold}
+            onKeyDown={(event) => {
+              if ((event.key === ' ' || event.key === 'Enter') && !event.repeat) {
+                event.preventDefault()
+                onBeginHold()
+              }
+            }}
+            onKeyUp={(event) => {
+              if (event.key === ' ' || event.key === 'Enter') {
+                event.preventDefault()
+                onCancelHold()
+              }
+            }}
+            onBlur={onCancelHold}
+            style={{ '--hold-progress': `${holdProgress * 100}%` } as React.CSSProperties}
+          >Hold 1.6 seconds</button>
         : <button type="button" className="confirm-button" onClick={() => onConfirm(approval.token)}>Confirm</button>}
       <button type="button" className="cancel-button" onClick={onCancelApproval}><X size={14} /> Cancel</button>
     </div> : <button type="button" className="run-button" onClick={onRun} disabled={isRunning || action.nativeOwned}>

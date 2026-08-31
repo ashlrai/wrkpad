@@ -3,7 +3,29 @@
   "private": true,
   "version": "0.1.0",
   "author": "Ashlr AI",
-  "description": "A local-first physical control plane for the Work Louder Codex Micro.",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/ashlrai/wrkpad/tree/main/app#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ashlrai/wrkpad.git",
+    "directory": "app"
+  },
+  "bugs": {
+    "url": "https://github.com/ashlrai/wrkpad/issues"
+  },
+  "keywords": [
+    "agentic-engineering",
+    "claude-code",
+    "codex",
+    "creator-micro-2",
+    "developer-tools",
+    "electron",
+    "work-louder"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "description": "A local-first agent mission control for the Work Louder Creator Micro 2.",
   "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
@@ -20,8 +42,9 @@
   "build": {
     "appId": "ai.ashlr.agent-board",
     "productName": "Ashlr Agent Board",
+    "afterPack": "scripts/after-pack.cjs",
     "directories": { "output": "release" },
-    "files": ["dist-renderer/**/*", "electron/**/*", "package.json"],
+    "files": ["dist-renderer/**/*", "electron/**/*", "!electron/*.test.cjs", "package.json", "LICENSE", "NOTICE"],
     "mac": { "category": "public.app-category.developer-tools", "target": "dir", "icon": "build/icon.png" }
   },
   "dependencies": {
@@ -30,7 +53,6 @@
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
-    "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.17",

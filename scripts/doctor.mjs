@@ -1,5 +1,10 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { homedir } from 'node:os'
+
+const require = createRequire(import.meta.url)
+const { resolveTool } = require('../electron/tool-resolver.cjs')
 
 const checks = []
 const check = (name, ok, detail, blocking = true) => checks.push({ name, ok, detail, severity: ok ? 'pass' : blocking ? 'error' : 'warning', blocking })
@@ -13,12 +18,13 @@ check('Creator Micro 2 USB', Boolean(usb?.includes('Work Louder') && usb.include
 check('ChatGPT desktop', existsSync('/Applications/ChatGPT.app'), existsSync('/Applications/ChatGPT.app') ? 'installed' : 'missing')
 check('Work Louder Input', existsSync('/Applications/Input.app'), existsSync('/Applications/Input.app') ? 'installed' : 'missing')
 
-for (const [name, executable] of [
-  ['Codex CLI', '/opt/homebrew/bin/codex'],
-  ['Claude Code', `${process.env.HOME}/.local/bin/claude`],
-  ['Ashlr Hub', `${process.env.HOME}/.local/bin/ashlr`],
+for (const [name, tool] of [
+  ['Codex CLI', 'codex'],
+  ['Claude Code', 'claude'],
+  ['Ashlr Hub', 'ashlr'],
 ]) {
-  const version = run(executable, ['--version'])
+  const executable = resolveTool(tool, { home: homedir() })
+  const version = executable ? run(executable, ['--version']) : null
   check(name, Boolean(version), version || 'unavailable')
 }
 

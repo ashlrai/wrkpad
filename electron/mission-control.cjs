@@ -1,6 +1,7 @@
 const { spawn } = require('node:child_process')
 const { readFileSync } = require('node:fs')
 const path = require('node:path')
+const { resolveTool } = require('./tool-resolver.cjs')
 
 const MAX_JSON_BYTES = 2 * 1024 * 1024
 const PROVIDERS = new Set(['codex', 'claude', 'manual', 'unknown'])
@@ -128,11 +129,11 @@ function captureJson(executable, args, timeoutMs = 6500) {
 }
 
 async function collectMissionControl(home) {
-  const wrkpad = path.join(home, '.local', 'bin', 'wrkpad')
-  const ashlr = path.join(home, '.local', 'bin', 'ashlr')
+  const wrkpad = resolveTool('wrkpad', { home })
+  const ashlr = resolveTool('ashlr', { home })
   const [agentsResult, fleetResult] = await Promise.allSettled([
-    captureJson(wrkpad, ['status', '--json'], 1200),
-    captureJson(ashlr, ['fleet', 'status', '--json']),
+    wrkpad ? captureJson(wrkpad, ['status', '--json'], 1200) : Promise.reject(new Error('wrkpad is unavailable')),
+    ashlr ? captureJson(ashlr, ['fleet', 'status', '--json']) : Promise.reject(new Error('ashlr is unavailable')),
   ])
   const agentPayload = agentsResult.status === 'fulfilled' ? agentsResult.value : null
   const fleetPayload = fleetResult.status === 'fulfilled' ? fleetResult.value : null
