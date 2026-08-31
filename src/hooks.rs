@@ -42,11 +42,19 @@ pub fn normalize(
         parent_session_id.to_owned()
     };
 
+    let has_background_work = source_event == "Stop"
+        && ["background_tasks", "session_crons"].iter().any(|key| {
+            object
+                .get(*key)
+                .and_then(Value::as_array)
+                .is_some_and(|items| !items.is_empty())
+        });
     let kind = match source_event {
         "SessionStart" => EventKind::SessionStart,
-        "SubagentStart" | "UserPromptSubmit" | "PreToolUse" | "PostToolUse" => EventKind::Working,
-        "SubagentStop" => EventKind::Notification,
-        "PermissionRequest" => EventKind::NeedsInput,
+        "SubagentStart" | "UserPromptSubmit" | "PreToolUse" | "PostToolUse"
+        | "ElicitationResult" => EventKind::Working,
+        "SubagentStop" | "PermissionDenied" => EventKind::Notification,
+        "PermissionRequest" | "Elicitation" => EventKind::NeedsInput,
         "Notification" => {
             let notification_type = object
                 .get("notification_type")
@@ -62,6 +70,7 @@ pub fn normalize(
             }
         }
         "PostToolUseFailure" | "StopFailure" => EventKind::Error,
+        "Stop" if has_background_work => EventKind::Working,
         "Stop" | "agent-turn-complete" => EventKind::TurnComplete,
         "SessionEnd" => EventKind::SessionEnd,
         _ => bail!("unsupported hook event"),
@@ -90,12 +99,7 @@ pub fn normalize(
     if let Some(turn) = turn_id {
         labels.insert("turn_id".to_owned(), turn.to_owned());
     }
-    if source_event == "Stop"
-        && object
-            .get("background_tasks")
-            .and_then(Value::as_array)
-            .is_some_and(|tasks| !tasks.is_empty())
-    {
+    if has_background_work {
         labels.insert("background_work".to_owned(), "true".to_owned());
     }
 
@@ -272,6 +276,175 @@ mod tests {
         assert_ne!(first.session_id, second.session_id);
         assert_eq!(first.kind, EventKind::Working);
         assert!(!serde_json::to_string(&first)?.contains("agent_type"));
+        Ok(())
+    }
+
+    #[test]
+    fn claude_subagent_events_discard_content_and_terminal_routing() -> anyhow::Result<()> {
+        let start = normalize(
+            Provider::Claude,
+            None,
+            &json!({
+                "session_id": "parent",
+                "hook_event_name": "SubagentStart",
+                "agent_id": "agent-a",
+                "agent_type": "private-reviewer",
+                "cwd": "/work/repo",
+                "prompt": "private subagent prompt",
+                "CMUX_WORKSPACE_ID": "raw-workspace-id",
+                "CMUX_SURFACE_ID": "raw-surface-id"
+            }),
+        )?
+        .ok_or_else(|| anyhow::anyhow!("event ignored"))?;
+        let stop = normalize(
+            Provider::Claude,
+            None,
+            &json!({
+                "session_id": "parent",
+                "hook_event_name": "SubagentStop",
+                "agent_id": "agent-a",
+                "agent_type": "private-reviewer",
+                "agent_transcript_path": "/private/subagent.jsonl",
+                "last_assistant_message": "private subagent result"
+            }),
+        )?
+        .ok_or_else(|| anyhow::anyhow!("event ignored"))?;
+
+        assert_eq!(start.kind, EventKind::Working);
+        assert_eq!(stop.kind, EventKind::Notification);
+        assert_eq!(start.session_id, stop.session_id);
+        let encoded = serde_json::to_string(&(start, stop))?;
+        for private_value in [
+            "private-reviewer",
+            "private subagent prompt",
+            "private subagent result",
+            "subagent.jsonl",
+            "raw-workspace-id",
+            "raw-surface-id",
+        ] {
+            assert!(!encoded.contains(private_value));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn claude_elicitation_lifecycle_retains_no_request_or_response_content() -> anyhow::Result<()> {
+        let requested = normalize(
+            Provider::Claude,
+            None,
+            &json!({
+                "session_id": "claude-1",
+                "hook_event_name": "Elicitation",
+                "mcp_server_name": "private-server",
+                "message": "enter a credential",
+                "url": "https://secret.example/auth",
+                "requested_schema": {"properties": {"password": {"type": "string"}}}
+            }),
+        )?
+        .ok_or_else(|| anyhow::anyhow!("event ignored"))?;
+        let resolved = normalize(
+            Provider::Claude,
+            None,
+            &json!({
+                "session_id": "claude-1",
+                "hook_event_name": "ElicitationResult",
+                "mcp_server_name": "private-server",
+                "elicitation_id": "private-elicitation-id",
+                "action": "accept",
+                "content": {"password": "credential-value"}
+            }),
+        )?
+        .ok_or_else(|| anyhow::anyhow!("event ignored"))?;
+
+        assert_eq!(requested.kind, EventKind::NeedsInput);
+        assert_eq!(resolved.kind, EventKind::Working);
+        let encoded = serde_json::to_string(&(requested, resolved))?;
+        for private_value in [
+            "private-server",
+            "enter a credential",
+            "secret.example",
+            "password",
+            "private-elicitation-id",
+            "credential-value",
+            "accept",
+        ] {
+            assert!(!encoded.contains(private_value));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn claude_permission_denial_discards_tool_and_error_content() -> anyhow::Result<()> {
+        let event = normalize(
+            Provider::Claude,
+            None,
+            &json!({
+                "session_id": "claude-1",
+                "hook_event_name": "PermissionDenied",
+                "tool_name": "Bash",
+                "tool_input": {"command": "private command"},
+                "tool_use_id": "private-tool-id",
+                "reason": "private classifier explanation"
+            }),
+        )?
+        .ok_or_else(|| anyhow::anyhow!("event ignored"))?;
+
+        assert_eq!(event.kind, EventKind::Notification);
+        let encoded = serde_json::to_string(&event)?;
+        for private_value in [
+            "Bash",
+            "private command",
+            "private-tool-id",
+            "private classifier explanation",
+        ] {
+            assert!(!encoded.contains(private_value));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn claude_stop_with_background_work_stays_working_without_retaining_details()
+    -> anyhow::Result<()> {
+        for (field, private_value) in [
+            (
+                "background_tasks",
+                json!([{"command": "private background command"}]),
+            ),
+            (
+                "session_crons",
+                json!([{"prompt": "private scheduled prompt"}]),
+            ),
+        ] {
+            let mut payload = json!({
+                "session_id": "claude-1",
+                "hook_event_name": "Stop",
+                "last_assistant_message": "private final response"
+            });
+            payload[field] = private_value;
+            let event = normalize(Provider::Claude, None, &payload)?
+                .ok_or_else(|| anyhow::anyhow!("event ignored"))?;
+            assert_eq!(event.kind, EventKind::Working);
+            assert_eq!(
+                event.labels.get("background_work").map(String::as_str),
+                Some("true")
+            );
+            let encoded = serde_json::to_string(&event)?;
+            assert!(!encoded.contains("private"));
+        }
+
+        let complete = normalize(
+            Provider::Claude,
+            None,
+            &json!({
+                "session_id": "claude-1",
+                "hook_event_name": "Stop",
+                "background_tasks": [],
+                "session_crons": []
+            }),
+        )?
+        .ok_or_else(|| anyhow::anyhow!("event ignored"))?;
+        assert_eq!(complete.kind, EventKind::TurnComplete);
+        assert!(!complete.labels.contains_key("background_work"));
         Ok(())
     }
 }

@@ -32,10 +32,12 @@ The manager uses an exact `--managed-by dev.wrkpad.hook-v1` command marker. Simi
 
 ## Claude Code signals
 
-The managed Claude set contains nine synchronous, two-second handlers:
+The managed Claude set contains fourteen synchronous, two-second handlers:
 
-- `SessionStart`, `UserPromptSubmit`, `PostToolUse`, `Stop`, and `SessionEnd` map ordinary lifecycle progress.
-- `PermissionRequest` maps immediately to `needs_input`.
+- `SessionStart`, `UserPromptSubmit`, `PostToolUse`, `Stop`, and `SessionEnd` map ordinary lifecycle progress. A `Stop` with non-empty `background_tasks` or `session_crons` remains working; task commands, descriptions, prompts, and identifiers are discarded.
+- `SubagentStart` maps to working and `SubagentStop` maps to unread using a distinct private subagent identity. Agent type, prompt, response, and transcript fields are discarded.
+- `PermissionRequest` and `Elicitation` map immediately to `needs_input`. Auto-mode `PermissionDenied` maps to unread for review because it does not create a user approval prompt. wrkpad never returns an approval, retry, or elicitation response.
+- `ElicitationResult` maps back to working. MCP server names, URLs, schemas, elicitation identifiers, actions, and response content are discarded.
 - `Notification(permission_prompt|elicitation_dialog|elicitation_url_dialog|agent_needs_input)` maps to `needs_input`.
 - `Notification(idle_prompt|agent_completed)` maps to unread.
 - `PostToolUseFailure` and `StopFailure` map to error.

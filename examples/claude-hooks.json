@@ -4,11 +4,16 @@
     "SessionStart": [{"matcher": "startup|resume|clear|compact|fork", "hooks": [{"type": "command", "command": "/absolute/path/to/wrkpad hook --provider claude --managed-by dev.wrkpad.hook-v1", "timeout": 2}]}],
     "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "/absolute/path/to/wrkpad hook --provider claude --managed-by dev.wrkpad.hook-v1", "timeout": 2}]}],
     "PermissionRequest": [{"matcher": "*", "hooks": [{"type": "command", "command": "/absolute/path/to/wrkpad hook --provider claude --managed-by dev.wrkpad.hook-v1", "timeout": 2}]}],
+    "PermissionDenied": [{"matcher": "*", "hooks": [{"type": "command", "command": "/absolute/path/to/wrkpad hook --provider claude --managed-by dev.wrkpad.hook-v1", "timeout": 2}]}],
     "Notification": [{"matcher": "permission_prompt|elicitation_dialog|elicitation_url_dialog|agent_needs_input|idle_prompt|agent_completed", "hooks": [{"type": "command", "command": "/absolute/path/to/wrkpad hook --provider claude --managed-by dev.wrkpad.hook-v1", "timeout": 2}]}],
     "PostToolUse": [{"hooks": [{"type": "command", "command": "/absolute/path/to/wrkpad hook --provider claude --managed-by dev.wrkpad.hook-v1", "timeout": 2}]}],
     "PostToolUseFailure": [{"hooks": [{"type": "command", "command": "/absolute/path/to/wrkpad hook --provider claude --managed-by dev.wrkpad.hook-v1", "timeout": 2}]}],
     "Stop": [{"hooks": [{"type": "command", "command": "/absolute/path/to/wrkpad hook --provider claude --managed-by dev.wrkpad.hook-v1", "timeout": 2}]}],
     "StopFailure": [{"hooks": [{"type": "command", "command": "/absolute/path/to/wrkpad hook --provider claude --managed-by dev.wrkpad.hook-v1", "timeout": 2}]}],
+    "SubagentStart": [{"matcher": "*", "hooks": [{"type": "command", "command": "/absolute/path/to/wrkpad hook --provider claude --managed-by dev.wrkpad.hook-v1", "timeout": 2}]}],
+    "SubagentStop": [{"matcher": "*", "hooks": [{"type": "command", "command": "/absolute/path/to/wrkpad hook --provider claude --managed-by dev.wrkpad.hook-v1", "timeout": 2}]}],
+    "Elicitation": [{"matcher": "*", "hooks": [{"type": "command", "command": "/absolute/path/to/wrkpad hook --provider claude --managed-by dev.wrkpad.hook-v1", "timeout": 2}]}],
+    "ElicitationResult": [{"matcher": "*", "hooks": [{"type": "command", "command": "/absolute/path/to/wrkpad hook --provider claude --managed-by dev.wrkpad.hook-v1", "timeout": 2}]}],
     "SessionEnd": [{"hooks": [{"type": "command", "command": "/absolute/path/to/wrkpad hook --provider claude --managed-by dev.wrkpad.hook-v1", "timeout": 2}]}]
   }
 }

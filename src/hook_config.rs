@@ -422,6 +422,10 @@ fn specs(provider: HookProvider) -> Vec<HookSpec> {
                 matcher: Some("*"),
             },
             HookSpec {
+                event: "PermissionDenied",
+                matcher: Some("*"),
+            },
+            HookSpec {
                 event: "Notification",
                 matcher: Some(
                     "permission_prompt|elicitation_dialog|elicitation_url_dialog|agent_needs_input|idle_prompt|agent_completed",
@@ -442,6 +446,22 @@ fn specs(provider: HookProvider) -> Vec<HookSpec> {
             HookSpec {
                 event: "StopFailure",
                 matcher: None,
+            },
+            HookSpec {
+                event: "SubagentStart",
+                matcher: Some("*"),
+            },
+            HookSpec {
+                event: "SubagentStop",
+                matcher: Some("*"),
+            },
+            HookSpec {
+                event: "Elicitation",
+                matcher: Some("*"),
+            },
+            HookSpec {
+                event: "ElicitationResult",
+                matcher: Some("*"),
             },
         ],
     };
