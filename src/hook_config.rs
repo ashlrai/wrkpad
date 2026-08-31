@@ -524,9 +524,11 @@ fn read_document(path: &Path) -> Result<(Value, Option<Vec<u8>>)> {
 fn write_atomic_json(path: &Path, document: &Value, expected_sha256: Option<&str>) -> Result<()> {
     validate_target_path(path)?;
     let parent = path.parent().context("hook target has no parent")?;
+    #[cfg(unix)]
     let parent_existed = parent.exists();
     fs::create_dir_all(parent)?;
     validate_directory_path(parent)?;
+    #[cfg(unix)]
     if !parent_existed {
         set_directory_private(parent)?;
     }
@@ -562,6 +564,7 @@ fn write_backup(root: &Path, provider: HookProvider, bytes: &[u8]) -> Result<()>
     validate_directory_path(root)?;
     fs::create_dir_all(root)?;
     validate_directory_path(root)?;
+    #[cfg(unix)]
     set_directory_private(root)?;
     let timestamp = Utc::now().format("%Y%m%dT%H%M%SZ");
     let path = root.join(format!(
@@ -589,12 +592,11 @@ fn write_private_new(path: &Path, bytes: &[u8]) -> Result<()> {
     Ok(())
 }
 
+#[cfg(unix)]
 fn set_directory_private(path: &Path) -> Result<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
-    }
+    use std::os::unix::fs::PermissionsExt;
+
+    fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
     Ok(())
 }
 

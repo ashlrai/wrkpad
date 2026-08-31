@@ -397,8 +397,10 @@ fn read_target(path: &Path) -> Result<Option<Vec<u8>>> {
 fn write_atomic(path: &Path, bytes: &[u8], expected_sha256: Option<&str>) -> Result<()> {
     validate_target(path)?;
     let parent = path.parent().context("service target has no parent")?;
+    #[cfg(unix)]
     let parent_existed = parent.exists();
     fs::create_dir_all(parent)?;
+    #[cfg(unix)]
     if !parent_existed {
         set_private_directory(parent)?;
     }
@@ -422,8 +424,8 @@ fn remove_owned(path: &Path, expected_sha256: Option<&str>) -> Result<()> {
         bail!("service target changed immediately before removal");
     }
     fs::remove_file(path)?;
+    #[cfg(unix)]
     if let Some(parent) = path.parent() {
-        #[cfg(unix)]
         fs::File::open(parent)?.sync_all()?;
     }
     Ok(())
@@ -432,6 +434,7 @@ fn remove_owned(path: &Path, expected_sha256: Option<&str>) -> Result<()> {
 fn write_backup(paths: &Paths, bytes: &[u8]) -> Result<()> {
     let root = paths.root.join("service-backups");
     fs::create_dir_all(&root)?;
+    #[cfg(unix)]
     set_private_directory(&root)?;
     let timestamp = Utc::now().format("%Y%m%dT%H%M%SZ");
     let path = root.join(format!(
@@ -637,12 +640,11 @@ fn write_private_new(path: &Path, bytes: &[u8]) -> Result<()> {
     Ok(())
 }
 
+#[cfg(unix)]
 fn set_private_directory(path: &Path) -> Result<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
-    }
+    use std::os::unix::fs::PermissionsExt;
+
+    fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
     Ok(())
 }
 

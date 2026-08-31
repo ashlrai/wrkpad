@@ -1,10 +1,14 @@
+#[cfg(target_os = "macos")]
 use std::io::Cursor;
 use std::process::Command;
 
 use chrono::{DateTime, Utc};
+#[cfg(any(target_os = "macos", test))]
 use plist::Value as PlistValue;
 use serde::{Deserialize, Serialize};
+#[cfg(any(target_os = "macos", test))]
 use serde_json::Value;
+#[cfg(any(target_os = "macos", test))]
 use sha2::{Digest, Sha256};
 use sysinfo::System;
 
@@ -308,6 +312,7 @@ fn unavailable_hid_registry_probe(category: &str) -> HidRegistryProbe {
     }
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn collect_hid_registry_identities(value: &PlistValue) -> Vec<HidRegistryIdentity> {
     let Some(entries) = value.as_array() else {
         return Vec::new();
@@ -355,6 +360,7 @@ fn collect_hid_registry_identities(value: &PlistValue) -> Vec<HidRegistryIdentit
         .collect()
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn is_relevant_registry_identity(vendor_id: u16, product_id: u16, _product: Option<&str>) -> bool {
     matches!(
         (vendor_id, product_id),
@@ -362,12 +368,14 @@ fn is_relevant_registry_identity(vendor_id: u16, product_id: u16, _product: Opti
     )
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn hash_bytes(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
     hex::encode(hasher.finalize())
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn collect_usb_identities(value: &Value, identities: &mut Vec<UsbIdentity>) {
     match value {
         Value::Array(values) => {
@@ -396,6 +404,7 @@ fn collect_usb_identities(value: &Value, identities: &mut Vec<UsbIdentity>) {
     }
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn parse_system_profiler_hex(value: &Value) -> Option<u16> {
     let value = value.as_str()?.split_whitespace().next()?;
     u16::from_str_radix(value.trim_start_matches("0x"), 16).ok()

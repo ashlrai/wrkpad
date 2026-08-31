@@ -24,6 +24,11 @@ All notable changes will be documented here. The project follows semantic versio
 - Opt-in per-user macOS LaunchAgent lifecycle with fixed argv, executable/content confirmation, authenticated health, and rollback.
 - Distinct Codex subagent slot identities and explicit `wrkpad forget AG` recovery.
 
+### Fixed
+
+- Keep macOS USB parsers and Unix durability helpers out of unsupported platform
+  builds so strict Linux and Windows lint gates remain portable.
+
 ### Safety boundary
 
 - HID writes, keymap changes, profile changes, firmware operations, and automatic process termination are intentionally unavailable.

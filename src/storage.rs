@@ -64,6 +64,7 @@ where
                 temporary.display()
             )
         })?;
+        #[cfg(unix)]
         sync_directory(parent)?;
         Ok(())
     }
@@ -85,11 +86,9 @@ fn refuse_symlink(path: &Path) -> Result<()> {
     Ok(())
 }
 
+#[cfg(unix)]
 fn sync_directory(path: &Path) -> Result<()> {
-    #[cfg(unix)]
-    {
-        fs::File::open(path)?.sync_all()?;
-    }
+    fs::File::open(path)?.sync_all()?;
     Ok(())
 }
 

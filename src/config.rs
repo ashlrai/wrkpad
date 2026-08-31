@@ -39,6 +39,7 @@ impl Paths {
     pub fn ensure(&self) -> Result<()> {
         fs::create_dir_all(&self.root)
             .with_context(|| format!("failed to create {}", self.root.display()))?;
+        #[cfg(unix)]
         set_private_directory(&self.root)?;
         Ok(())
     }
@@ -90,12 +91,11 @@ fn write_private_new(path: &Path, bytes: &[u8]) -> Result<()> {
     Ok(())
 }
 
+#[cfg(unix)]
 fn set_private_directory(path: &Path) -> Result<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
-    }
+    use std::os::unix::fs::PermissionsExt;
+
+    fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
     Ok(())
 }
 
