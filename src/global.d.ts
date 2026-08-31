@@ -1,0 +1,22 @@
+import type { ExecutionResult, MissionControlSnapshot, PhysicalSignalEnvelope, ProfileId, SystemStatus } from './board'
+
+declare global {
+  interface Window {
+    agentBoard?: {
+      getStatus(): Promise<SystemStatus>
+      getMissionControl(): Promise<MissionControlSnapshot>
+      focusAgentSlot(slot: number): Promise<ExecutionResult>
+      setProfile(profile: ProfileId): Promise<void>
+      setFlightCheck(active: boolean): Promise<{ acknowledged: boolean; active: boolean; startedAt: string | null }>
+      requestAction(actionId: string): Promise<ExecutionResult>
+      confirmAction(actionId: string, token: string): Promise<ExecutionResult>
+      beginHold(actionId: string, token: string): Promise<boolean>
+      cancelHold(actionId: string, token: string): Promise<boolean>
+      chooseWorkspace(): Promise<string | null>
+      saveFlightReceipt(receipt: Record<string, unknown>): Promise<string | null>
+      onControl(callback: (signal: PhysicalSignalEnvelope) => void): () => void
+    }
+  }
+}
+
+export {}

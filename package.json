@@ -1,0 +1,49 @@
+{
+  "name": "ashlr-agent-board",
+  "private": true,
+  "version": "0.1.0",
+  "author": "Ashlr AI",
+  "description": "A local-first physical control plane for the Work Louder Codex Micro.",
+  "main": "electron/main.cjs",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
+    "dev:web": "vite --host 127.0.0.1",
+    "doctor": "node scripts/doctor.mjs",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint src electron scripts vite.config.ts vitest.config.ts",
+    "test": "vitest run && node --test electron/*.test.cjs",
+    "preview": "vite preview",
+    "start": "electron .",
+    "package:mac": "npm run build && electron-builder --mac dir"
+  },
+  "build": {
+    "appId": "ai.ashlr.agent-board",
+    "productName": "Ashlr Agent Board",
+    "directories": { "output": "release" },
+    "files": ["dist-renderer/**/*", "electron/**/*", "package.json"],
+    "mac": { "category": "public.app-category.developer-tools", "target": "dir", "icon": "build/icon.png" }
+  },
+  "dependencies": {
+    "lucide-react": "^1.33.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.4",
+    "concurrently": "^10.0.5",
+    "electron": "^43.4.1",
+    "electron-builder": "^26.15.3",
+    "jsdom": "^30.0.1",
+    "oxlint": "^1.75.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.2.0",
+    "vitest": "^4.1.11",
+    "wait-on": "^9.1.0"
+  }
+}

@@ -1,0 +1,87 @@
+// @vitest-environment jsdom
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import App from './App'
+
+afterEach(() => {
+  cleanup()
+  delete window.agentBoard
+})
+
+describe('operator interface', () => {
+  it('gives digital twin agent keys the live provider, title, and state', async () => {
+    window.agentBoard = {
+      getStatus: vi.fn().mockResolvedValue({
+        boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
+        codex: true, claude: true, ashlr: true, workspace: '/tmp', shortcutCount: 20,
+        shortcutRegistrations: [], workspaceSnapshot: null,
+      }),
+      getMissionControl: vi.fn().mockResolvedValue({
+        schemaVersion: 1, observedAt: new Date().toISOString(), agentSource: 'observer_online', fleetSource: 'unavailable',
+        agents: [
+          { slot: 1, provider: 'codex', state: 'error', title: 'gateway', updatedAt: new Date().toISOString() },
+          ...Array.from({ length: 5 }, (_, index) => ({ slot: index + 2, provider: null, state: 'off' as const, title: 'Available slot', updatedAt: null })),
+        ],
+        fleet: null, unassignedActiveSessions: 0, operatorNotices: [],
+      }),
+      focusAgentSlot: vi.fn(), setProfile: vi.fn(), setFlightCheck: vi.fn(), requestAction: vi.fn(), confirmAction: vi.fn(),
+      beginHold: vi.fn(), cancelHold: vi.fn(), chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(), onControl: vi.fn(() => () => {}),
+    } as unknown as NonNullable<typeof window.agentBoard>
+    render(<App />)
+    expect(await screen.findByRole('button', { name: 'AG00: Agent 1, Codex, gateway, Error. Open agent surface 1.' })).toBeTruthy()
+  })
+
+  it('includes an on-screen state legend for opaque black keycaps', () => {
+    render(<App />)
+    expect(screen.getByLabelText('Agent state legend for opaque keycaps').textContent).toContain('BLACK-CAP LEGEND')
+    expect(screen.getByLabelText('Agent state legend for opaque keycaps').textContent).toContain('Needs you')
+    expect(screen.getByText(/Screen is authoritative now/i)).toBeTruthy()
+  })
+
+  it('selects the paired Mic cap as one logical control', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: /Pair.*CLAUDE \+ CODEX/i }))
+    fireEvent.click(screen.getByRole('button', { name: /ACT10: Voice prompt key/i }))
+    expect(screen.getByRole('heading', { name: 'Voice prompt key' })).toBeTruthy()
+    expect(screen.getByText(/ACT10 and set ACT11 to None/i)).toBeTruthy()
+  })
+
+  it('keeps macOS permission verification visibly unresolved', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
+    expect(screen.getByText('Human verification required')).toBeTruthy()
+    expect(screen.getByText(/Only you can grant this/i)).toBeTruthy()
+  })
+
+  it('shows suppression only after the main process acknowledges the interlock', async () => {
+    let acknowledge: ((value: { acknowledged: boolean; active: boolean; startedAt: string }) => void) | undefined
+    window.agentBoard = {
+      getStatus: vi.fn().mockResolvedValue({
+        boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
+        codex: true, claude: true, ashlr: true, workspace: '/tmp', shortcutCount: 20,
+        shortcutRegistrations: [], workspaceSnapshot: null,
+      }),
+      setProfile: vi.fn().mockResolvedValue('codex'),
+      setFlightCheck: vi.fn((active: boolean) => active
+        ? new Promise((resolve) => { acknowledge = resolve })
+        : Promise.resolve({ acknowledged: true, active: false, startedAt: null })),
+      requestAction: vi.fn(), confirmAction: vi.fn(), beginHold: vi.fn(), cancelHold: vi.fn(),
+      chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(), onControl: vi.fn(() => () => {}),
+    } as unknown as NonNullable<typeof window.agentBoard>
+    render(<App />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Flight Check' }))
+    fireEvent.click(screen.getByRole('button', { name: /Daily profile/i }))
+    expect(screen.getByText('WAIT FOR INTERLOCK')).toBeTruthy()
+    expect(screen.getByText('Arming')).toBeTruthy()
+    expect(screen.queryByText('Suppressed')).toBeNull()
+    acknowledge?.({ acknowledged: true, active: true, startedAt: new Date().toISOString() })
+    await waitFor(() => expect(screen.getByText('NEXT PHYSICAL GESTURE')).toBeTruthy())
+    expect(screen.getByRole('heading', { name: 'Dial left' })).toBeTruthy()
+    expect(screen.getByText(/only after the app confirms Actions Suppressed/i)).toBeTruthy()
+    expect(screen.getByText('Suppressed')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Pause check/i }))
+    await waitFor(() => expect(screen.getByText('READY WHEN YOU ARE')).toBeTruthy())
+    expect(screen.getByText('Not started')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Export receipt/i })).toBeNull()
+  })
+})
