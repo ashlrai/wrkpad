@@ -9,7 +9,7 @@ The occupancy state is wrkpad policy, not firmware state.
 | `takeover` | One wrkpad writer may paint supported lighting only | Exact compatibility tuple, active OAI layer, no likely external writer, local lease, explicit confirmation |
 | `release` | Stop writes, close handle, invalidate lease | Existing takeover |
 
-Current source can persist and test the state machine, but runtime evidence intentionally blocks shadow and takeover because no accepted desk descriptor/firmware tuple or write transport exists.
+Current source can persist and test the state machine. The desk descriptor is now captured read-only, but runtime evidence still blocks shadow and takeover: the live Input connection reports firmware `v0.1.50`, the required status/RGB methods return `Method not found`, potential external HID clients remain open and exclusive ownership is unproven, and no write transport is enabled in wrkpad.
 
 ## Why process checks are insufficient
 
@@ -40,4 +40,3 @@ wrkpad occupancy release
 ```
 
 Blocked transitions exit nonzero and leave the persisted mode unchanged.
-

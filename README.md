@@ -95,7 +95,7 @@ Discovery recognizes these distinct identities and reports the one actually obse
 | VID:PID | Classification | Evidence boundary |
 | --- | --- | --- |
 | `303A:8297` | Creator Micro 2 candidate | Community hardware and user-supplied evidence; never sufficient for writes |
-| `303A:8298` | Creator Micro 2 | Previously observed on the Ashlr desk unit; must be reverified live |
+| `303A:8298` | Creator Micro 2 | Reverified live on the Ashlr desk unit on August 31, 2026 |
 | `303A:8360` | Codex Micro | Repeated community hardware evidence |
 | `574C:E6E3` | Legacy Work Louder Micro v1 | QMK/ATmega32U4 explanation only; current-generation protocol is forbidden |
 
@@ -103,8 +103,8 @@ VID/PID alone never selects a writable adapter. The exact compatibility key also
 
 ## Project status
 
-Source implementation and automated tests are not physical acceptance. During the read-only August 31, 2026 audit, macOS showed four USB host controllers but no attached USB child device and no relevant HID collection. The lit board proved power only, not USB data. Bluetooth keyboard and trackpad traffic used a separate transport and is not a credible cause; ChatGPT Desktop and Work Louder Input were running but cannot explain absence below the USB registry. No device was opened, and no descriptor, firmware, report, lighting write, permission change, or process termination was attempted.
+Source implementation and automated tests are not physical acceptance. The connected August 31, 2026 audit positively enumerated the desk unit as Work Louder Creator Micro 2 `303A:8298` over USB with six HID collections. `wrkpad doctor --dump-hid` captured the 275-byte operating-system registry descriptor without opening the device; its SHA-256 is `9257d7361f9c784e0fc0b260bbac0feadd49bf79cbb6202d6c41560cbae96fb6`. Serial data is discarded. macOS `system_profiler` still returns no matching USB child on this machine, so doctor preserves that scoped false negative and reports the disagreement with positive IOHID/IORegistry evidence.
 
-That evidence does not identify the failed component. A charge-only or damaged cable, connector seating, port or hub, and board-side data fault remain candidates.
+The current Input connection log reports firmware `v0.1.50`. Its live `device.status` and `v.oai.rgbcfg` calls return `Method not found`, so this unit is not lighting-qualified. The Ashlr Agent Board profile is imported with the Ashlr Daily layer; confirm it is selected in Input before beginning the action-suppressed 19-gesture Flight Check. Physical gesture completion and a main-generated passing receipt still require the operator. Bluetooth keyboard and trackpad traffic remains unrelated.
 
 `wrkpad` is MIT licensed. Community protocol work must preserve attribution and may not copy from unlicensed prior art.

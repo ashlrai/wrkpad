@@ -554,23 +554,37 @@ async fn ingest_hook(
 
 fn print_doctor(report: DoctorReport, json: bool, dump_hid: bool) -> Result<()> {
     if dump_hid {
-        let status = if report.devices.is_empty() {
+        let descriptor = report
+            .hid_registry
+            .relevant_matches
+            .iter()
+            .find(|identity| identity.report_descriptor_sha256.is_some());
+        let status = if descriptor.is_some() {
+            "captured_read_only"
+        } else if report.devices.is_empty() {
             "unavailable_no_relevant_hid"
         } else {
-            "descriptor_capture_not_implemented"
+            "unavailable_no_registry_descriptor"
         };
         println!(
             "{}",
             serde_json::to_string_pretty(&serde_json::json!({
-                "schema": "dev.wrkpad.hid-evidence/v1",
+                "schema": "dev.wrkpad.hid-evidence/v2",
                 "doctor": report,
                 "descriptor_capture": {
                     "status": status,
+                    "source": descriptor.map(|_| "ioreg_xml_apple_user_usb_host_hid_device"),
                     "device_open_attempted": false,
                     "reports_read": 0,
                     "reports_written": 0,
-                    "descriptor_sha256": null,
-                    "note": "identity evidence only; a descriptor hash requires a separately reviewed read-only backend"
+                    "vendor_id": descriptor.map(|identity| identity.vendor_id),
+                    "product_id": descriptor.map(|identity| identity.product_id),
+                    "transport": descriptor.and_then(|identity| identity.transport.as_deref()),
+                    "descriptor_sha256": descriptor.and_then(|identity| identity.report_descriptor_sha256.as_deref()),
+                    "descriptor_byte_length": descriptor.and_then(|identity| identity.report_descriptor_byte_length),
+                    "usb_device_version_raw": descriptor.and_then(|identity| identity.usb_device_version_raw),
+                    "firmware_version": null,
+                    "note": "descriptor read from the macOS IORegistry property list; USB bcdDevice is retained as a raw value and is not firmware acceptance"
                 }
             }))?
         );
@@ -586,6 +600,9 @@ fn print_doctor(report: DoctorReport, json: bool, dump_hid: bool) -> Result<()> 
         "  probes: USB={:?} HID={:?} device_observer_ready={}",
         report.usb.status, report.hid_probe_status, report.device_observer_ready
     );
+    if let Some(disagreement) = &report.registry_disagreement {
+        println!("  registry disagreement: {disagreement}");
+    }
     println!("  devices: {}", report.devices.len());
     for device in &report.devices {
         println!(

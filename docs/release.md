@@ -54,3 +54,16 @@ A foreground `wrkpad serve` test proves only that process lifetime. Separately r
 A release may say “discovers Creator Micro 2/Codex Micro candidates” when doctor fixtures and live enumeration support it. It may say “hardware lighting supported” only for exact tuples with visible calibration, release, reconnect, and soak evidence in the release ledger.
 
 Unknown devices remain observe-only.
+
+## Connected desk snapshot
+
+The August 31, 2026 desk snapshot proves discovery, not lighting support:
+
+- Work Louder Creator Micro 2 `303A:8298`, USB, six HID collections;
+- IORegistry descriptor: 275 bytes, SHA-256 `9257d7361f9c784e0fc0b260bbac0feadd49bf79cbb6202d6c41560cbae96fb6`;
+- descriptor source was the macOS registry; no HID handle was opened and no report was sent;
+- raw USB device version `0x39C0` is retained only as a non-semantic value;
+- current Input log firmware response: `v0.1.50`;
+- `device.status` and `v.oai.rgbcfg`: `Method not found`.
+
+Re-capture every item after an official firmware update. Never reuse this descriptor or firmware evidence as acceptance for a different desk, device, or release.

@@ -20,6 +20,20 @@ pub const LABEL: &str = "dev.wrkpad.hasp";
 pub const BIND_ADDRESS: &str = "127.0.0.1:43187";
 const MAX_PLIST_BYTES: u64 = 1024 * 1024;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StartTransition {
+    Bootstrap,
+    Kickstart,
+}
+
+fn start_transition(already_loaded: bool) -> StartTransition {
+    if already_loaded {
+        StartTransition::Kickstart
+    } else {
+        StartTransition::Bootstrap
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ServiceAction {
@@ -262,6 +276,13 @@ pub async fn apply(
         ServiceAction::Stop => bootout_if_loaded(uid)?,
         ServiceAction::Restart => {
             bootout_if_loaded(uid)?;
+            let deadline = Instant::now() + Duration::from_secs(2);
+            while is_loaded(uid)? && Instant::now() < deadline {
+                sleep(Duration::from_millis(25)).await;
+            }
+            if is_loaded(uid)? {
+                bail!("launchd did not finish unloading {LABEL}");
+            }
             start_and_verify(uid, &target, paths, token.as_deref().unwrap_or_default())
                 .await
                 .context("service restart failed")?;
@@ -448,7 +469,14 @@ fn rollback(path: &Path, original: Option<&[u8]>, uid: u32) -> Result<()> {
 }
 
 async fn start_and_verify(uid: u32, target: &Path, paths: &Paths, token: &str) -> Result<()> {
-    if !is_loaded(uid)? {
+    if start_transition(is_loaded(uid)?) == StartTransition::Kickstart {
+        // RunAtLoad starts a newly bootstrapped job. A second immediate kickstart can race
+        // launchd's registration/throttle window and return 118 after a successful bootstrap.
+        let kickstart = launchctl(&["kickstart", "-kp", &service_target(uid)])?;
+        if !kickstart.status.success() {
+            bail!("launchctl kickstart failed: {}", concise_stderr(&kickstart));
+        }
+    } else {
         let bootstrap = launchctl(&[
             "bootstrap",
             &domain_target(uid),
@@ -459,10 +487,6 @@ async fn start_and_verify(uid: u32, target: &Path, paths: &Paths, token: &str) -
         if !bootstrap.status.success() {
             bail!("launchctl bootstrap failed: {}", concise_stderr(&bootstrap));
         }
-    }
-    let kickstart = launchctl(&["kickstart", "-kp", &service_target(uid)])?;
-    if !kickstart.status.success() {
-        bail!("launchctl kickstart failed: {}", concise_stderr(&kickstart));
     }
     let client = HaspClient::new(DEFAULT_ENDPOINT, token)?;
     let deadline = Instant::now() + Duration::from_secs(4);
@@ -673,7 +697,10 @@ mod tests {
 
     use tempfile::tempdir;
 
-    use super::{LABEL, ServiceAction, is_owned_plist, plan, render_plist, target_path};
+    use super::{
+        LABEL, ServiceAction, StartTransition, is_owned_plist, plan, render_plist,
+        start_transition, target_path,
+    };
 
     fn executable(root: &Path) -> anyhow::Result<PathBuf> {
         let path = root.join("wrkpad-bin");
@@ -699,6 +726,12 @@ mod tests {
         fs::write(&different, b"binary")?;
         assert!(!is_owned_plist(&bytes, &different, &stderr));
         Ok(())
+    }
+
+    #[test]
+    fn fresh_start_bootstraps_and_loaded_start_kickstarts() {
+        assert_eq!(start_transition(false), StartTransition::Bootstrap);
+        assert_eq!(start_transition(true), StartTransition::Kickstart);
     }
 
     #[test]
