@@ -1,0 +1,46 @@
+name: Bug report
+description: Report a reproducible Agent Board problem.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: checkboxes
+    attributes:
+      label: Safety check
+      options:
+        - label: I did not include prompts, transcripts, credentials, or private repository data.
+          required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - On-screen agent runway
+        - Creator Micro 2 detection
+        - Flight Check or shortcuts
+        - Codex integration
+        - Claude Code or cmux integration
+        - Ashlr Fleet briefing
+        - Packaging or installation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What happened?
+      description: Include exact steps, expected behavior, and actual behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: macOS version, Mac architecture, app version, and relevant tool versions.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Redacted diagnostics
+      description: Paste only redacted output from `npm run doctor -- --json` or other documented checks.
+

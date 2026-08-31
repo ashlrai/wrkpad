@@ -1,0 +1,111 @@
+# Ashlr Agent Board
+
+**A local-first macOS mission control for the Work Louder Creator Micro 2.**
+
+Ashlr Agent Board gives opaque black keycaps a complete on-screen legend, keeps six Codex and Claude Code sessions on one stable physical map, and puts guarded engineering actions behind explicit safety levels. It observes local tools; it does not replace their permission systems.
+
+> [!IMPORTANT]
+> Physical status lighting is not implemented. The on-screen runway is authoritative. Selecting a slot opens Codex Desktop or cmux at the application level; exact task or pane focus is not available.
+
+## Why this exists
+
+The Creator Micro 2 has six Agent keys but black keycaps cannot communicate state by themselves. Agent Board mirrors their exact `2 + 4` geometry:
+
+```text
+DIAL | AG00 | AG01 | STICK
+      AG02 | AG03 | AG04 | AG05
+```
+
+Every slot combines provider, task title, icon, text state, and color. The experience therefore works without replacement keycaps and remains understandable without color alone.
+
+| State | Meaning | Color |
+| --- | --- | --- |
+| Error | The session failed or needs recovery | Red |
+| Needs you | Human input or a decision is required | Amber |
+| Working | The agent is actively working | Blue |
+| Ready to review | Output is waiting for review | Green |
+| Idle | A known session is inactive | Purple |
+| Available | No session occupies the slot | Black |
+
+## What it does today
+
+- Shows six stable, provider-neutral agent slots sourced from `wrkpad status --json`.
+- Foregrounds ChatGPT for Codex slots and cmux for Claude Code slots without sending input.
+- Summarizes `ashlr fleet status --json` into an exception-first operator brief.
+- Maps 20 desktop shortcuts to the board's dial, joystick, Agent keys, and action switches.
+- Provides Attention, Pair, Fleet, Proof, and Recovery software lenses while keeping Agent keys fixed.
+- Separates immediate, confirm, and press-and-hold actions in the Electron main process.
+- Runs an interlocked Flight Check for all physical routes and exports a hashed local receipt.
+- Keeps session IDs, provider working directories, prompts, transcripts, tool arguments, and raw Fleet payloads out of mission snapshots. Workspace Pulse separately shows the working directory the user selected.
+
+See [controls and state](docs/controls.md) for the complete map and [architecture and trust](docs/architecture.md) for the security model.
+
+## Requirements
+
+- macOS and a Work Louder Creator Micro 2
+- [Work Louder Input](https://worklouder.cc/input/) for board profiles and shortcut mapping
+- Node.js 22 or newer and npm for development
+- Optional local integrations: Codex CLI and ChatGPT Desktop; Claude Code, Claude Desktop, and cmux; `wrkpad`; and Ashlr Hub.
+
+Runtime CLI discovery checks `~/.local/bin`, `~/.npm-global/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, and `/usr/bin` in that order. It intentionally does not trust the inherited `PATH`. Missing optional tools appear as unavailable rather than being installed automatically.
+
+## Get started
+
+```bash
+git clone https://github.com/ashlrai/wrkpad.git
+cd wrkpad/app
+npm install
+npm run doctor
+npm test
+npm run dev
+```
+
+`npm run doctor` performs read-only local probes and reports anything that still needs human verification.
+
+Before pressing physical controls, follow [setup and Flight Check](docs/setup.md). Work Louder Input must emit the exact shortcuts expected by the app, and macOS Input Monitoring must be granted by the user.
+
+## Develop and package
+
+```bash
+npm run dev          # Vite renderer plus Electron
+npm run dev:web      # renderer only; actions are simulated
+npm test             # Vitest plus Electron main-process tests
+npm run lint         # oxlint
+npm run build        # TypeScript and production renderer
+npm run package:mac  # unsigned, unpacked macOS app
+```
+
+`npm run package:mac` writes an architecture-specific app under `release/`. It does not sign, notarize, publish, install, or prove physical acceptance.
+
+## Documentation
+
+- [Setup and Flight Check](docs/setup.md)
+- [Controls and state model](docs/controls.md)
+- [Architecture and trust boundaries](docs/architecture.md)
+- [Troubleshooting](docs/troubleshooting.md)
+- [Release and readiness](docs/release-readiness.md)
+- [Roadmap](docs/roadmap.md)
+- [Contributing](CONTRIBUTING.md)
+- [Support](SUPPORT.md)
+
+## Current boundaries
+
+- macOS only
+- No physical RGB or firmware writes
+- No exact Codex task or cmux pane focus
+- No prompt submission from an Agent slot
+- No one-press push, merge, deploy, publish, delete, spend, credential, or permission approval
+- No signed/notarized release workflow yet
+- Local CLI schemas and paths are currently integration contracts
+
+## Project status
+
+The source implements and tests the local desktop workflow. A local build is not the same as a signed public release, live provider activation, physical board acceptance, or user acceptance. See [release and readiness](docs/release-readiness.md) for the evidence required at each layer.
+
+## Community
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before proposing a change. Support requests belong in GitHub Discussions or Issues; security reports should use GitHub's private vulnerability reporting when it is enabled.
+
+## License
+
+The desktop app is licensed under [Apache-2.0](LICENSE). The parent `wrkpad` project has its own license at the repository root.
