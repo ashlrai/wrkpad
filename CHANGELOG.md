@@ -1,10 +1,15 @@
 # Changelog
 
+Agent Board changes are tracked separately in [app/CHANGELOG.md](app/CHANGELOG.md).
+
 All notable changes will be documented here. The project follows semantic versioning after the first public release.
 
 ## Unreleased
 
 ### Added
+
+- Ashlr Agent Board as the Apache-2.0 `app/` desktop companion, with independent
+  `agent-board-v*` release tags and source/package/security gates.
 
 - Native Rust CLI/TUI and reusable library modules.
 - Read-only device-family doctor and competing-owner diagnostics.

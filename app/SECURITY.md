@@ -1,5 +1,9 @@
 # Security policy
 
+This document supplements the repository-wide [security policy](../SECURITY.md)
+with Agent Board-specific scope. Reporting instructions in the root policy are
+canonical.
+
 Ashlr Agent Board is a local-first Electron application. It can inspect local
 repositories, foreground agent applications, launch explicitly allowlisted
 commands, and write operator-selected Flight Check receipts. Reports that cross
@@ -18,8 +22,8 @@ vulnerability reporting flow:
 
 <https://github.com/ashlrai/wrkpad/security/advisories/new>
 
-If private reporting is temporarily unavailable, contact an Ashlr AI
-organization owner through GitHub and ask for a private reporting channel. Do
+If private reporting is temporarily unavailable, use the fallback contact in
+the [root policy](../SECURITY.md). Do
 not include exploit details, credentials, local file contents, repository names,
 agent transcripts, or Flight Check receipts in a public discussion.
 
@@ -32,10 +36,8 @@ Please include:
 - impact and any known prerequisites; and
 - suggested remediation, if available.
 
-We aim to acknowledge complete reports within three business days and provide
-an initial assessment within ten business days. These are response targets, not
-a service-level agreement. Please allow a reasonable remediation window before
-coordinated disclosure.
+Response targets and safe-research terms are defined by the root policy. Please
+allow a reasonable remediation window before coordinated disclosure.
 
 ## Scope
 

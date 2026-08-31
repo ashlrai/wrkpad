@@ -6,7 +6,7 @@ Thank you for helping make physical agent workflows clearer, safer, and more acc
 
 Open an issue before changing a hardware protocol, trust boundary, state grammar, provider adapter, or consequential action. Describe the user problem, proposed behavior, alternatives, and evidence you can collect. Small bug fixes, tests, and documentation corrections can go directly to a pull request.
 
-By participating, you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+By participating, you agree to follow the repository [Code of Conduct](../CODE_OF_CONDUCT.md).
 
 ## Development setup
 
@@ -65,6 +65,11 @@ If hardware behavior changed, also complete the relevant [Flight Check](docs/set
 - [ ] Source, build, package, activation, and physical acceptance are not conflated.
 
 Include commands run and results in the pull request. If a check was skipped, explain why.
+
+All commits must be signed off under the repository's Developer Certificate of
+Origin policy. Contributions inside `app/` are Apache-2.0; files outside `app/`
+are MIT unless a file says otherwise. The project does not require a contributor
+license agreement.
 
 ## Hardware and provider changes
 

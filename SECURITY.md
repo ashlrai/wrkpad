@@ -1,38 +1,74 @@
 # Security policy
 
-## Reporting a vulnerability
+`wrkpad` combines a native local status service with the optional Ashlr Agent
+Board desktop app. Vulnerabilities that cross hook, localhost, renderer, process,
+filesystem, device, or approval boundaries are especially important.
 
-Before a public repository exists, report vulnerabilities privately to the Ashlr project operator. After publication, use the repository's private security advisory flow. Do not open a public issue for a vulnerability that exposes local tokens, agent data, arbitrary command execution, approval interception, unsafe HID writes, or cross-origin localhost access.
+## Report a vulnerability privately
 
-Include the affected version or commit, operating system, exact reproduction, impact, and whether hardware or agent credentials were exposed. Do not attach real credentials, transcripts, or customer data.
+Do not open a public issue. Use GitHub private vulnerability reporting:
+
+<https://github.com/ashlrai/wrkpad/security/advisories/new>
+
+If that flow is unavailable, email [hello@ashlr.ai](mailto:hello@ashlr.ai) and
+ask for a private reporting channel. Do not send credentials, live tokens,
+prompts, transcripts, customer data, private repository names, full local paths,
+serial numbers, or unredacted Flight Check receipts.
+
+Include the affected component and commit, operating system and architecture, a
+minimal redacted reproduction, expected and observed trust boundary, impact,
+and known prerequisites. We aim to acknowledge complete reports within three
+business days and provide an initial assessment within ten business days. These
+are response targets, not a service-level agreement or bug-bounty promise.
 
 ## Supported scope
 
-Version 0.1 is pre-release software. Security fixes target the current `main` branch until the first signed release policy is established.
+Until component-specific signed release policies exist, security fixes target
+the current `main` branch and latest namespaced prerelease tag. Core releases use
+`wrkpad-v*`; desktop releases use `agent-board-v*`.
 
-## Trust boundaries
+In scope includes:
+
+- provider hook parsing, redaction, configuration, and ownership;
+- HASP authentication, loopback binding, persistence, and session isolation;
+- service lifecycle and local executable identity;
+- USB/HID discovery, occupancy transitions, and any future writable adapter;
+- Electron renderer, preload, IPC, navigation, sandbox, and CSP boundaries;
+- command allowlisting, confirmation/hold controls, workspace isolation, and
+  receipt integrity; and
+- dependency, package, signing, and release supply-chain behavior.
+
+See [the desktop supplement](app/SECURITY.md) and the retained
+[core](.security/audit-2026-08-31.md) and
+[desktop](app/.security/audit-2026-08-31.md) audit reports.
+
+## Trust boundaries and invariants
 
 - Provider hook JSON is untrusted and privacy-sensitive.
-- The bearer token protects session data from browsers and other local accounts, not malware running as the same user.
-- HASP is loopback-only and has no approval or agent-control endpoint.
-- The hook client refuses non-loopback endpoints so it cannot transmit the bearer token to an external host.
-- Device protocol evidence is reverse engineered and exact-version gated.
-- HID writes are absent from current source.
-- Process absence is not proof of exclusive device ownership.
-- Hook configuration is executable user configuration; installation and vendor trust are human-reviewed steps.
-- Hook mutation is scoped by an exact ownership marker, a content-bound confirmation plan, private backup, symlink refusal, and atomic replacement. It never claims or changes provider trust.
-- The macOS service is per-user, fixed to loopback, direct argv, and a recognized plist. It contains no token or environment and refuses foreign files, disabled labels, custom state roots, and unmanaged authenticated listeners.
+- The HASP bearer token protects data from browsers and other local accounts,
+  not malware running as the same user.
+- Normal HASP is authenticated loopback-only and has no approval or agent-control
+  endpoint.
+- The hook client refuses non-loopback endpoints.
+- Hook installation is content-bound, ownership-marked, backup-preserving,
+  symlink-refusing, and distinct from provider trust.
+- The macOS service is per-user, fixed to loopback and direct argv, and refuses
+  foreign or ambiguous configuration.
+- Device evidence is exact-version gated. VID/PID or process absence alone never
+  authorizes writes or proves exclusive ownership.
+- Current source performs no HID, keymap, profile, firmware, or bootloader writes.
+- Agent Board exposes allowlisted action IDs only. Consequential actions require
+  confirmation or a continuous main-process hold.
+- No one-press push, merge, deploy, publish, delete, spend, credential, or
+  permission-approval executor belongs in the project.
+- Status and UI output must not log prompts, assistant content, tool input/output,
+  transcript paths, credentials, authorization headers, or raw private payloads.
 
-## Security invariants
+## Safe research
 
-Pull requests must not:
-
-- log prompts, assistant messages, tool input/output, transcripts, credentials, or Authorization headers;
-- bind normal HASP mode to wildcard or non-loopback addresses;
-- permit browser Origin headers by default;
-- add allow/deny/block responses to hook adapters;
-- enable HID writes from VID/PID or minimum firmware alone;
-- blur observe, shadow, takeover, and release;
-- silently kill competing applications or alter OS permissions.
-- follow symlinked token or persisted-state files.
-- delete unmarked or unrelated vendor hook handlers during repair or uninstall.
+Use synthetic repositories, sessions, and device data. Do not approve permissions,
+send prompts, enable Fleet authority, write to HID hardware, or mutate another
+person's system while testing. Good-faith research that follows this policy,
+avoids privacy violations and disruption, and allows a reasonable remediation
+window will not be pursued by Ashlr AI under applicable anti-circumvention laws.
+This does not authorize testing third-party services.

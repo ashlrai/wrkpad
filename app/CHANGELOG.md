@@ -29,5 +29,5 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 - Signed, notarized, or published macOS artifacts.
 - Provider activation or physical user acceptance.
 
-[Unreleased]: https://github.com/ashlrai/wrkpad/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/ashlrai/wrkpad/releases/tag/v0.1.0
+[Unreleased]: https://github.com/ashlrai/wrkpad/compare/agent-board-v0.1.0...HEAD
+[0.1.0]: https://github.com/ashlrai/wrkpad/releases/tag/agent-board-v0.1.0

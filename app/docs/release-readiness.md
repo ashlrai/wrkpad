@@ -2,6 +2,10 @@
 
 Passing one evidence layer never implies the next.
 
+Desktop release tags use `agent-board-vMAJOR.MINOR.PATCH`. Core `wrkpad` tags use
+`wrkpad-vMAJOR.MINOR.PATCH`; the namespaces prevent two independent component
+versions from colliding.
+
 ## Readiness layers
 
 | Layer | Required evidence | Does not prove |

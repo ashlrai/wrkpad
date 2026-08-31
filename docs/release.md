@@ -1,5 +1,9 @@
 # Release and readiness
 
+Core releases use `wrkpad-vMAJOR.MINOR.PATCH`; Agent Board releases use
+`agent-board-vMAJOR.MINOR.PATCH`. Each tag advances only its named component and
+must record the full monorepo SHA.
+
 ## Release layers
 
 Keep these facts independent:
@@ -44,6 +48,11 @@ Before publishing, record:
 - default feature/capability flags;
 - known device tuples and whether each is discovery-only, shadow-qualified, or lighting-accepted;
 - rollback artifact.
+
+For an Agent Board candidate, also run the checks in
+[app/docs/release-readiness.md](../app/docs/release-readiness.md). A core release
+does not imply a desktop release, and neither tag may be reused for the other
+component.
 
 For each intended provider and scope, also record the read-only hook status, content-bound plan, applied target and private backup, preservation of unrelated hooks, provider trust result, and one disposable fired-event receipt. Inspect both stdout and persisted state to confirm prompts, assistant content, tool data, transcript paths, credentials, and approval decisions are absent.
 

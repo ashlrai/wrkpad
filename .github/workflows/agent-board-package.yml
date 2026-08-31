@@ -1,4 +1,4 @@
-name: Package preview
+name: Agent Board unsigned preview
 
 on:
   workflow_dispatch:
@@ -6,29 +6,31 @@ on:
 permissions:
   contents: read
 
+defaults:
+  run:
+    working-directory: app
+
 jobs:
   package:
     name: Build unsigned macOS preview
-    runs-on: macos-latest
+    runs-on: macos-15
     timeout-minutes: 20
     steps:
-      - name: Check out source
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - name: Use Node.js 22
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: app/package-lock.json
       - run: npm ci
       - run: npm test
       - run: npm run package:mac
       - name: Preserve executable bits
-        run: tar -C release -czf ashlr-agent-board-macos-unsigned.tgz .
-      - name: Upload unsigned preview
+        run: tar -czf ashlr-agent-board-macos-unsigned.tgz -C release .
+      - name: Upload explicitly unsigned preview
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ashlr-agent-board-macos-unsigned
-          path: ashlr-agent-board-macos-unsigned.tgz
+          path: app/ashlr-agent-board-macos-unsigned.tgz
           if-no-files-found: error
           retention-days: 14
-

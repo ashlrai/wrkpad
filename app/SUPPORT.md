@@ -1,5 +1,8 @@
 # Support
 
+For repository-wide routing and core `wrkpad` support, see the root
+[support guide](../SUPPORT.md).
+
 ## Start here
 
 1. Run `npm run doctor` from the repository root.

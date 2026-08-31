@@ -9,6 +9,15 @@ updates:
     groups:
       rust-dependencies:
         patterns: ["*"]
+  - package-ecosystem: npm
+    directory: /app
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      node-dependencies:
+        patterns: ["*"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
