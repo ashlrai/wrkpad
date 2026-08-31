@@ -1,0 +1,25 @@
+{
+  "hooks": {
+    "SessionStart": [{
+      "matcher": "startup|resume|clear|compact|fork",
+      "hooks": [{"type": "command", "command": "/absolute/path/to/wrkpad hook --provider claude", "timeout": 2}]
+    }],
+    "UserPromptSubmit": [{
+      "hooks": [{"type": "command", "command": "/absolute/path/to/wrkpad hook --provider claude", "timeout": 2}]
+    }],
+    "Notification": [{
+      "matcher": "permission_prompt",
+      "hooks": [{"type": "command", "command": "/absolute/path/to/wrkpad hook --provider claude", "timeout": 2}]
+    }],
+    "PostToolUse": [{
+      "hooks": [{"type": "command", "command": "/absolute/path/to/wrkpad hook --provider claude", "timeout": 2}]
+    }],
+    "PostToolUseFailure": [{
+      "hooks": [{"type": "command", "command": "/absolute/path/to/wrkpad hook --provider claude", "timeout": 2}]
+    }],
+    "Stop": [{
+      "hooks": [{"type": "command", "command": "/absolute/path/to/wrkpad hook --provider claude", "timeout": 2}]
+    }]
+  }
+}
+

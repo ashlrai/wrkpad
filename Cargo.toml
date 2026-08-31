@@ -1,0 +1,61 @@
+[package]
+name = "wrkpad"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Local-first agent status and safe lighting control plane for Work Louder Micro hardware"
+license = "MIT"
+keywords = ["agents", "hid", "tui", "codex", "claude"]
+categories = ["command-line-utilities", "hardware-support"]
+
+[dependencies]
+anyhow = "1.0"
+axum = { version = "0.8", features = ["json", "tokio", "http1"] }
+chrono = { version = "0.4", features = ["serde", "clock"] }
+clap = { version = "4.5", features = ["derive", "env"] }
+crossterm = "0.29"
+directories = "6.0"
+hex = "0.4"
+hmac = "0.12"
+ratatui = { version = "0.30", features = ["crossterm_0_29"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls", "http2"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+sysinfo = "0.38"
+thiserror = "2.0"
+tokio = { version = "1.49", features = ["macros", "rt-multi-thread", "net", "signal", "sync", "time"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+uuid = { version = "1.22", features = ["v4", "v5", "serde"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+hidapi = { version = "2.6", default-features = false, features = ["macos-shared-device"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+hidapi = { version = "2.6", default-features = false, features = ["linux-native-basic-udev"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+hidapi = { version = "2.6", default-features = false, features = ["windows-native"] }
+
+[dev-dependencies]
+pretty_assertions = "1.4"
+tempfile = "3.24"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+missing_errors_doc = "allow"
+struct_excessive_bools = "allow"
+result_large_err = "allow"
+needless_pass_by_value = "allow"

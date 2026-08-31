@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "schema": "dev.wrkpad.layout/v1",
+  "id": "creator-micro-2-black-opaque",
+  "name": "Creator Micro 2 — black opaque",
+  "hardware": {
+    "mechanical_switches": 13,
+    "touch_controls": 1,
+    "rotary_encoders": 1,
+    "planar_joysticks": 1,
+    "agent_slots": 6
+  },
+  "candidate_identities": [
+    {"vid": "303A", "pid": "8297", "classification": "creator_micro_2", "evidence": "community_hardware_candidate", "writes": false},
+    {"vid": "303A", "pid": "8298", "classification": "creator_micro_2", "evidence": "prior_live_desk_observation", "writes": false},
+    {"vid": "303A", "pid": "8360", "classification": "codex_micro", "evidence": "community_hardware", "writes": false},
+    {"vid": "574C", "pid": "E6E3", "classification": "legacy_micro_v1", "evidence": "official_qmk", "writes": false}
+  ],
+  "matrix": [
+    ["ENCODER", "AG00", "AG01", "JOYSTICK"],
+    ["AG02", "AG03", "AG04", "AG05"],
+    ["ACT06", "ACT07", "ACT08", "ACT09"],
+    ["TOUCH", "ACT10", "ACT11", "ACT12"]
+  ],
+  "controls": [
+    {"id": "AG00", "kind": "switch", "status_slot": 1, "private_keycode": "KV_OAI_AG00", "cap": "frosted_hero"},
+    {"id": "AG01", "kind": "switch", "status_slot": 2, "private_keycode": "KV_OAI_AG01", "cap": "black_opaque"},
+    {"id": "AG02", "kind": "switch", "status_slot": 3, "private_keycode": "KV_OAI_AG02", "cap": "black_opaque"},
+    {"id": "AG03", "kind": "switch", "status_slot": 4, "private_keycode": "KV_OAI_AG03", "cap": "black_opaque"},
+    {"id": "AG04", "kind": "switch", "status_slot": 5, "private_keycode": "KV_OAI_AG04", "cap": "black_opaque"},
+    {"id": "AG05", "kind": "switch", "status_slot": 6, "private_keycode": "KV_OAI_AG05", "cap": "black_opaque"},
+    {"id": "ACT06", "kind": "switch", "private_keycode": "KV_OAI_AG06", "cap": "black_opaque"},
+    {"id": "ACT07", "kind": "switch", "private_keycode": "KV_OAI_AG07", "cap": "black_opaque"},
+    {"id": "ACT08", "kind": "switch", "private_keycode": "KV_OAI_AG08", "cap": "black_opaque"},
+    {"id": "ACT09", "kind": "switch", "private_keycode": "KV_OAI_AG09", "cap": "black_opaque"},
+    {"id": "ACT10", "kind": "switch", "private_keycode": "KV_OAI_AG10", "cap": "wide_mic_left"},
+    {"id": "ACT11", "kind": "switch", "private_keycode": "KV_OAI_AG11", "cap": "wide_mic_right"},
+    {"id": "ACT12", "kind": "switch", "private_keycode": "KV_OAI_AG12", "cap": "black_opaque"},
+    {"id": "ENCODER", "kind": "rotary_encoder", "signals": ["counter_clockwise", "clockwise", "press"]},
+    {"id": "JOYSTICK", "kind": "planar_joystick", "signals": ["up", "right", "down", "left"]},
+    {"id": "TOUCH", "kind": "firmware_owned_touch_selector", "status_leds": 3}
+  ],
+  "relationships": [
+    {"type": "shared_cap", "visible_control": "MIC", "physical_switches": ["ACT10", "ACT11"], "daily_policy": "ACT10 active; ACT11 disabled"}
+  ],
+  "appearance": {
+    "profile": "black-opaque",
+    "calibration_status": "proposed_not_physically_accepted",
+    "ambient": "#080A12",
+    "states": {
+      "error": {"rgb": "#FF3159", "effect": "pulse_fast", "text": "error"},
+      "needs_input": {"rgb": "#FFB020", "effect": "pulse_slow", "text": "needs input"},
+      "working": {"rgb": "#6D5DFC", "effect": "breathe", "text": "working"},
+      "unread": {"rgb": "#00D4FF", "effect": "solid", "text": "unread"},
+      "idle": {"rgb": "#16334D", "effect": "solid_low", "text": "idle"},
+      "off": {"rgb": "#000000", "effect": "off", "text": "off"}
+    }
+  },
+  "safety": {
+    "keymap_writes": false,
+    "firmware_writes": false,
+    "lighting_writes": false,
+    "vid_pid_alone_authorizes_writes": false
+  }
+}
+

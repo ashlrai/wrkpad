@@ -1,0 +1,6 @@
+/target/
+/.wrkpad/
+*.log
+*.tmp
+.DS_Store
+
