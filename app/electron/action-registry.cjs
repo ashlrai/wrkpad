@@ -1,6 +1,7 @@
 const { spawn } = require('node:child_process')
 const { existsSync } = require('node:fs')
 const path = require('node:path')
+const { runGit } = require('./git-runner.cjs')
 const { resolveTool } = require('./tool-resolver.cjs')
 
 const BRIEFS = {
@@ -18,9 +19,9 @@ const ACTION_SPECS = {
   fleet_status: { safety: 'safe', kind: 'inspect', executable: 'ashlr', args: ['fleet', 'status', '--json'] },
   fleet_direction: { safety: 'safe', kind: 'inspect', executable: 'ashlr', args: ['fleet', 'direction', '--json'] },
   fleet_doctor: { safety: 'safe', kind: 'inspect', executable: 'ashlr', args: ['fleet', 'doctor', '--json'] },
-  git_status: { safety: 'safe', kind: 'inspect', executable: 'git', args: ['status', '--short', '--branch'], workspace: true },
-  git_diff: { safety: 'safe', kind: 'inspect', executable: 'git', args: ['diff', '--stat'], workspace: true },
-  git_log: { safety: 'safe', kind: 'inspect', executable: 'git', args: ['log', '-8', '--oneline', '--decorate'], workspace: true },
+  git_status: { safety: 'safe', kind: 'gitInspect', args: ['status', '--short', '--branch'] },
+  git_diff: { safety: 'safe', kind: 'gitInspect', args: ['diff', '--stat'] },
+  git_log: { safety: 'safe', kind: 'gitInspect', args: ['log', '-8', '--oneline', '--decorate'] },
   tool_health: { safety: 'safe', kind: 'toolHealth' },
   start_codex: { safety: 'confirm', kind: 'terminal', command: (workspace) => `codex -C ${shellQuote(workspace)}` },
   resume_codex: { safety: 'confirm', kind: 'terminal', command: (workspace) => `codex -C ${shellQuote(workspace)} resume --last` },
@@ -74,6 +75,17 @@ async function executeSpec(id, workspace, electron) {
     if (!codex) return outcome(false, 'Could not open Codex', 'Codex was not found in a supported user-local, Homebrew, or system tool directory.')
     const result = await runProcess(codex, ['app', workspace])
     return result.ok ? outcome(true, 'Codex opened', 'The selected workspace is now available in Codex.') : outcome(false, 'Could not open Codex', result.error)
+  }
+  if (spec.kind === 'gitInspect') {
+    const result = await runGit(spec.args, {
+      cwd: workspace,
+      timeoutMs: 20_000,
+      stdoutLimit: 30_000,
+      stderrLimit: 8_000,
+    })
+    return result.ok
+      ? outcome(true, 'Action complete', 'The command completed with no hidden follow-up action.', result.stdout)
+      : outcome(false, 'Action failed', result.error, result.stdout)
   }
   if (spec.kind === 'inspect') {
     const executable = resolveTool(spec.executable, { home })

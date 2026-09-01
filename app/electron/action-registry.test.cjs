@@ -12,6 +12,12 @@ test('no release or permission approval action is registered', () => {
   const ids = Object.keys(ACTION_SPECS).join(' ')
   assert.doesNotMatch(ids, /push|deploy|publish|merge|approve_permission|delete/)
 })
+test('Git inspections cannot fall through the general executable runner', () => {
+  for (const id of ['git_status', 'git_diff', 'git_log']) {
+    assert.equal(ACTION_SPECS[id].kind, 'gitInspect', id)
+    assert.equal(ACTION_SPECS[id].executable, undefined, id)
+  }
+})
 test('shellQuote safely preserves apostrophes', () => {
   assert.equal(shellQuote("/tmp/Mason's repo"), "'/tmp/Mason'\\''s repo'")
 })

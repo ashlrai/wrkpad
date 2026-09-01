@@ -1,0 +1,36 @@
+{
+  "schema": "dev.wrkpad.hasp.state/v1",
+  "revision": 7,
+  "generated_at": "2026-08-31T12:00:00Z",
+  "slots": [
+    {
+      "slot": 1,
+      "session": {
+        "session_id": "hmac-sha256:0000000000000000000000000000000000000000000000000000000000000001",
+        "provider": "codex",
+        "state": "working",
+        "title": "Synthetic verification",
+        "first_seen_at": "2026-08-31T11:55:00Z",
+        "updated_at": "2026-08-31T11:59:00Z",
+        "last_event_id": "00000000-0000-4000-8000-000000000001"
+      }
+    },
+    {
+      "slot": 2,
+      "session": {
+        "session_id": "hmac-sha256:0000000000000000000000000000000000000000000000000000000000000002",
+        "provider": "claude",
+        "state": "needs_input",
+        "title": "Synthetic review",
+        "first_seen_at": "2026-08-31T11:56:00Z",
+        "updated_at": "2026-08-31T11:58:00Z",
+        "last_event_id": "00000000-0000-4000-8000-000000000002"
+      }
+    },
+    { "slot": 3 },
+    { "slot": 4 },
+    { "slot": 5 },
+    { "slot": 6 }
+  ],
+  "unassigned_active_sessions": 0
+}

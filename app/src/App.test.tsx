@@ -73,7 +73,7 @@ describe('operator interface', () => {
 
     render(<App />)
     fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
-    const state = await screen.findByText('20/20 desktop endpoints claimed · physical layer unverified')
+    const state = await screen.findByText('20/20 desktop endpoints registered · physical layer unverified')
     expect(state.closest('article')?.classList.contains('ready')).toBe(false)
     expect(screen.getByText(/only a physical Flight Check verifies the active board layer/i)).toBeTruthy()
   })
@@ -223,7 +223,9 @@ describe('operator interface', () => {
     } as unknown as NonNullable<typeof window.agentBoard>
     render(<App />)
     fireEvent.click(screen.getByRole('tab', { name: 'Flight Check' }))
-    fireEvent.click(screen.getByRole('button', { name: /Daily profile/i }))
+    const daily = screen.getByRole('button', { name: /Daily profile/i })
+    await waitFor(() => expect((daily as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(daily)
     expect(screen.getByText('WAIT FOR INTERLOCK')).toBeTruthy()
     expect(screen.getByText('Arming')).toBeTruthy()
     expect(screen.queryByText('Suppressed')).toBeNull()
@@ -232,9 +234,123 @@ describe('operator interface', () => {
     expect(screen.getByRole('heading', { name: 'Dial left' })).toBeTruthy()
     expect(screen.getByText(/only after the app confirms Actions Suppressed/i)).toBeTruthy()
     expect(screen.getByText('Suppressed')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: /Pause check/i }))
+    fireEvent.click(screen.getByRole('button', { name: /End check/i }))
     await waitFor(() => expect(screen.getByText('READY WHEN YOU ARE')).toBeTruthy())
     expect(screen.getByText('Not started')).toBeTruthy()
     expect(screen.queryByRole('button', { name: /Export receipt/i })).toBeNull()
+  })
+
+  it('labels tool presence, observer evidence, and desktop endpoints precisely', async () => {
+    window.agentBoard = {
+      getStatus: vi.fn().mockResolvedValue({
+        boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
+        codex: true, claude: true, ashlr: false, workspace: '/tmp', shortcutCount: 20,
+        shortcutRegistrations: [], workspaceSnapshot: null,
+      }),
+      getMissionControl: vi.fn().mockResolvedValue({
+        schemaVersion: 1, observedAt: new Date().toISOString(), agentSource: 'observer_online', fleetSource: 'unavailable',
+        agents: Array.from({ length: 6 }, (_, index) => ({ slot: index + 1, provider: null, state: 'off' as const, title: 'Available slot', updatedAt: null })),
+        fleet: null, unassignedActiveSessions: 0, operatorNotices: [],
+      }),
+      focusAgentSlot: vi.fn(), setProfile: vi.fn(), setFlightCheck: vi.fn(), requestAction: vi.fn(), confirmAction: vi.fn(),
+      beginHold: vi.fn(), cancelHold: vi.fn(), chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(), onControl: vi.fn(() => () => {}),
+    } as unknown as NonNullable<typeof window.agentBoard>
+
+    render(<App />)
+    expect(await screen.findByText('Codex CLI found')).toBeTruthy()
+    expect(screen.getByText('Claude CLI found')).toBeTruthy()
+    expect(await screen.findByText('Agent observer online')).toBeTruthy()
+    expect(screen.getByText('20/20 desktop endpoints registered')).toBeTruthy()
+    expect(screen.queryByText('Codex local')).toBeNull()
+  })
+
+  it('blocks Flight Check until USB and every desktop endpoint are ready', async () => {
+    window.agentBoard = {
+      getStatus: vi.fn().mockResolvedValue({
+        boardConnected: false, inputInstalled: true, inputMonitoring: 'unverified',
+        codex: true, claude: true, ashlr: false, workspace: '/tmp', shortcutCount: 19,
+        shortcutRegistrations: [], workspaceSnapshot: null,
+      }),
+      getMissionControl: vi.fn().mockResolvedValue({
+        schemaVersion: 1, observedAt: new Date().toISOString(), agentSource: 'unavailable', fleetSource: 'unavailable',
+        agents: Array.from({ length: 6 }, (_, index) => ({ slot: index + 1, provider: null, state: 'off' as const, title: 'Available slot', updatedAt: null })),
+        fleet: null, unassignedActiveSessions: 0, operatorNotices: [],
+      }),
+      focusAgentSlot: vi.fn(), setProfile: vi.fn(), setFlightCheck: vi.fn(), requestAction: vi.fn(), confirmAction: vi.fn(),
+      beginHold: vi.fn(), cancelHold: vi.fn(), chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(), onControl: vi.fn(() => () => {}),
+    } as unknown as NonNullable<typeof window.agentBoard>
+
+    render(<App />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Flight Check' }))
+    await screen.findByText('Complete preflight first')
+    expect((screen.getByRole('button', { name: /Daily profile/i }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: /20-signal diagnostic/i }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByText(/USB must be linked and all 20 desktop endpoints/i)).toBeTruthy()
+  })
+
+  it('routes Setup to preflight without arming an unavailable Flight Check', async () => {
+    const setFlightCheck = vi.fn()
+    window.agentBoard = {
+      getStatus: vi.fn().mockResolvedValue({
+        boardConnected: false, inputInstalled: true, inputMonitoring: 'unverified',
+        codex: true, claude: true, ashlr: false, workspace: '/tmp', shortcutCount: 19,
+        shortcutRegistrations: [], workspaceSnapshot: null,
+      }),
+      getMissionControl: vi.fn().mockResolvedValue({
+        schemaVersion: 1, observedAt: new Date().toISOString(), agentSource: 'unavailable', fleetSource: 'unavailable',
+        agents: Array.from({ length: 6 }, (_, index) => ({ slot: index + 1, provider: null, state: 'off' as const, title: 'Available slot', updatedAt: null })),
+        fleet: null, unassignedActiveSessions: 0, operatorNotices: [],
+      }),
+      focusAgentSlot: vi.fn(), setProfile: vi.fn(), setFlightCheck, requestAction: vi.fn(), confirmAction: vi.fn(),
+      beginHold: vi.fn(), cancelHold: vi.fn(), chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(), onControl: vi.fn(() => () => {}),
+    } as unknown as NonNullable<typeof window.agentBoard>
+
+    render(<App />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
+    await screen.findByText('19/20 desktop endpoints registered · physical layer unverified')
+    fireEvent.click(screen.getByRole('button', { name: /Run Flight Check/i }))
+
+    expect(await screen.findByText('Complete preflight first')).toBeTruthy()
+    expect(setFlightCheck).not.toHaveBeenCalled()
+    expect((screen.getByRole('button', { name: /Daily profile/i }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('stops prompting after a misroute and offers a clean restart', async () => {
+    let controlHandler: ((signal: { schemaVersion: 1; sequence: number; signalId: 'joyUp'; source: 'global-shortcut'; accelerator: string; receivedAt: string; monotonicNs: string }) => void) | undefined
+    const setFlightCheck = vi.fn((active: boolean) => Promise.resolve({ acknowledged: true, active, startedAt: active ? new Date().toISOString() : null }))
+    const restartFlightCheck = vi.fn().mockResolvedValue({ acknowledged: true, active: true, startedAt: new Date().toISOString() })
+    window.agentBoard = {
+      getStatus: vi.fn().mockResolvedValue({
+        boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
+        codex: true, claude: true, ashlr: false, workspace: '/tmp', shortcutCount: 20,
+        shortcutRegistrations: [], workspaceSnapshot: null,
+      }),
+      getMissionControl: vi.fn().mockResolvedValue({
+        schemaVersion: 1, observedAt: new Date().toISOString(), agentSource: 'unavailable', fleetSource: 'unavailable',
+        agents: Array.from({ length: 6 }, (_, index) => ({ slot: index + 1, provider: null, state: 'off' as const, title: 'Available slot', updatedAt: null })),
+        fleet: null, unassignedActiveSessions: 0, operatorNotices: [],
+      }),
+      focusAgentSlot: vi.fn(), setProfile: vi.fn(), setFlightCheck, restartFlightCheck, requestAction: vi.fn(), confirmAction: vi.fn(),
+      beginHold: vi.fn(), cancelHold: vi.fn(), chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(),
+      onControl: vi.fn((callback) => { controlHandler = callback as typeof controlHandler; return () => {} }),
+    } as unknown as NonNullable<typeof window.agentBoard>
+
+    render(<App />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Flight Check' }))
+    const daily = screen.getByRole('button', { name: /Daily profile/i })
+    await waitFor(() => expect((daily as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(daily)
+    await screen.findByRole('heading', { name: 'Dial left' })
+    act(() => controlHandler?.({
+      schemaVersion: 1, sequence: 1, signalId: 'joyUp', source: 'global-shortcut', accelerator: 'Control+Alt+Command+Up',
+      receivedAt: new Date().toISOString(), monotonicNs: '1',
+    }))
+
+    expect(screen.getByText('THIS RUN CANNOT PASS')).toBeTruthy()
+    expect(screen.getByText(/continuing cannot produce a passing receipt/i)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /End and restart/i }))
+    await waitFor(() => expect(restartFlightCheck).toHaveBeenCalledTimes(1))
+    expect(setFlightCheck.mock.calls.map(([active]) => active)).toEqual([true])
+    expect(await screen.findByRole('heading', { name: 'Dial left' })).toBeTruthy()
   })
 })

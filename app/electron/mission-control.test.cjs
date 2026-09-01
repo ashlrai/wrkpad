@@ -1,6 +1,78 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { appForProvider, detectClaudeHookHazards, isValidAgentPayload, isValidFleetPayload, summarizeAgentSnapshot, summarizeFleetStatus } = require('./mission-control.cjs')
+const { readFileSync } = require('node:fs')
+const path = require('node:path')
+const {
+  appForProvider,
+  detectClaudeHookHazards,
+  isValidAgentPayload,
+  isValidFleetPayload,
+  summarizeAgentSnapshot,
+  summarizeFleetStatus,
+  validateAgentPayload,
+  validateFleetPayload,
+} = require('./mission-control.cjs')
+
+function fixture(name) {
+  const file = path.join(__dirname, '..', 'fixtures', 'provider-contracts', name)
+  return JSON.parse(readFileSync(file, 'utf8'))
+}
+
+test('accepts the supported wrkpad fixture and exposes only bounded slot summaries', () => {
+  const payload = fixture('wrkpad-state-v1.valid.json')
+  assert.equal(validateAgentPayload(payload).code, 'ok')
+  assert.equal(isValidAgentPayload(payload), true)
+
+  const summary = summarizeAgentSnapshot(payload)
+  const serialized = JSON.stringify(summary)
+  assert.equal(summary.length, 6)
+  assert.deepEqual(summary[0], {
+    slot: 1, provider: 'codex', state: 'working', title: 'Synthetic verification', updatedAt: '2026-08-31T11:59:00Z',
+  })
+  assert.equal(serialized.includes('hmac-sha256:'), false)
+  assert.equal(serialized.includes('last_event_id'), false)
+})
+
+test('explains an unsupported wrkpad schema without treating it as online', () => {
+  const payload = fixture('wrkpad-state-v2.unsupported.json')
+  assert.deepEqual(validateAgentPayload(payload), {
+    ok: false,
+    code: 'unsupported_schema',
+    message: 'Expected wrkpad schema dev.wrkpad.hasp.state/v1.',
+  })
+  assert.equal(isValidAgentPayload(payload), false)
+})
+
+test('accepts the Ashlr adapter fixture and omits unrelated raw fields', () => {
+  const payload = fixture('ashlr-fleet-adapter-v1.valid.json')
+  assert.equal(validateFleetPayload(payload).code, 'ok')
+  assert.equal(isValidFleetPayload(payload), true)
+
+  const summary = summarizeFleetStatus(payload)
+  const serialized = JSON.stringify(summary)
+  assert.equal(summary.backlogItems, 4)
+  assert.equal(summary.repairBlockedItems, 2)
+  assert.equal(summary.nextActionSafety, 'read-only')
+  assert.equal(serialized.includes('SYNTHETIC-UNEXPOSED-SENTINEL'), false)
+})
+
+test('explains an incompatible Ashlr adapter field without inventing a Fleet status', () => {
+  const payload = fixture('ashlr-fleet-adapter-v1.incompatible.json')
+  assert.deepEqual(validateFleetPayload(payload), {
+    ok: false,
+    code: 'invalid_mission_directive',
+    message: 'Expected Ashlr Fleet field missionBrief.directive to match the adapter contract.',
+  })
+  assert.equal(isValidFleetPayload(payload), false)
+  assert.equal(summarizeFleetStatus(payload), null)
+})
+
+test('rejects an invalid or unbounded Fleet timestamp', () => {
+  const invalid = { ...fixture('ashlr-fleet-adapter-v1.valid.json'), generatedAt: 'not-a-timestamp' }
+  assert.equal(validateFleetPayload(invalid).code, 'invalid_generated_at')
+  const oversized = { ...invalid, generatedAt: `2026-08-31T12:00:00Z${'0'.repeat(65)}` }
+  assert.equal(validateFleetPayload(oversized).code, 'invalid_generated_at')
+})
 
 test('agent snapshot exposes six provider-neutral slots without stable session identifiers', () => {
   const summary = summarizeAgentSnapshot({ slots: [{

@@ -252,6 +252,11 @@ function App() {
   }
 
   const startFlightCheck = async (variant: 'daily' | 'diagnostic' = 'daily') => {
+    if (!status.boardConnected || status.shortcutCount !== hardware.bindableSignals) {
+      setView('flight')
+      setFlightPhase('inactive')
+      return
+    }
     const request = ++flightRequest.current
     setFlightSignals([])
     setFlightEvents([])
@@ -312,6 +317,28 @@ function App() {
     setView(nextView)
   }
 
+  const restartFlightCheck = async () => {
+    if (!bridge?.restartFlightCheck || flightPhase !== 'active') return
+    const request = ++flightRequest.current
+    setFlightPhase('arming')
+    try {
+      const acknowledgement = await bridge.restartFlightCheck()
+      if (request !== flightRequest.current) return
+      if (!acknowledgement.acknowledged || !acknowledgement.active || !acknowledgement.startedAt) {
+        setFlightPhase('error')
+        return
+      }
+      setFlightSignals([])
+      setFlightEvents([])
+      setFlightStartedAt(acknowledgement.startedAt)
+      setFlightExport(null)
+      flightExpected.current = stepsForVariant(flightVariant)[0].signals
+      setFlightPhase('active')
+    } catch {
+      if (request === flightRequest.current) setFlightPhase('error')
+    }
+  }
+
   const exportFlightReceipt = async () => {
     if (!bridge || !flightStartedAt) return
     const selectedSteps = stepsForVariant(flightVariant)
@@ -361,8 +388,13 @@ function App() {
         </div>
         <div className="system-strip" aria-label="System status">
           <StatusPill label={status.boardConnected ? 'USB linked' : 'USB absent'} tone={status.boardConnected ? 'ready' : 'off'} icon={<Keyboard size={14} />} />
-          <StatusPill label="Codex local" tone={status.codex ? 'ready' : 'off'} icon={<Sparkles size={14} />} />
-          <StatusPill label="Claude local" tone={status.claude ? 'ready' : 'off'} icon={<Bot size={14} />} />
+          <StatusPill label={status.codex ? 'Codex CLI found' : 'Codex CLI absent'} tone={status.codex ? 'ready' : 'off'} icon={<Sparkles size={14} />} />
+          <StatusPill label={status.claude ? 'Claude CLI found' : 'Claude CLI absent'} tone={status.claude ? 'ready' : 'off'} icon={<Bot size={14} />} />
+          <StatusPill
+            label={mission.agentSource === 'observer_online' ? 'Agent observer online' : mission.agentSource === 'invalid' ? 'Agent observer invalid' : 'Agent observer unavailable'}
+            tone={mission.agentSource === 'observer_online' ? 'ready' : mission.agentSource === 'invalid' ? 'warn' : 'off'}
+            icon={<Activity size={14} />}
+          />
           <StatusPill
             label={mission.fleetSource === 'status_receipt' ? (mission.fleet?.daemonRunning ? `Fleet ${mission.fleet.daemonPhase}` : 'Fleet offline') : mission.fleetSource === 'invalid' ? 'Fleet invalid' : 'Fleet unavailable'}
             tone={mission.fleet?.daemonRunning ? (mission.fleet.blocker || mission.fleet.guardBlocked || mission.fleet.killed ? 'warn' : 'ready') : 'off'}
@@ -385,7 +417,7 @@ function App() {
 
         <div className="readiness-ribbon">
           <span className={status.boardConnected ? 'check ready' : 'check'}><Check size={12} /> USB device</span>
-          <span className={status.shortcutCount === hardware.bindableSignals ? 'check ready' : 'check'}><Check size={12} /> {status.shortcutCount}/{hardware.bindableSignals} shortcuts claimed</span>
+          <span className={status.shortcutCount === hardware.bindableSignals ? 'check ready' : 'check'}><Check size={12} /> {status.shortcutCount}/{hardware.bindableSignals} desktop endpoints registered</span>
           <span className={status.inputInstalled ? 'check ready' : 'check'}><Check size={12} /> Work Louder Input</span>
           {status.workspaceSnapshot?.isGit && <span className={!status.workspaceSnapshot.statusKnown || status.workspaceSnapshot.dirtyFiles ? 'check warn' : 'check ready'}><GitBranch size={12} /> {status.workspaceSnapshot.branch} · {!status.workspaceSnapshot.statusKnown ? 'status unknown' : status.workspaceSnapshot.dirtyFiles ? `${status.workspaceSnapshot.dirtyFiles} changed` : 'clean'}</span>}
           <span className="check"><Keyboard size={12} /> Physical layer: Ashlr Daily shortcuts · unverified</span>
@@ -447,9 +479,9 @@ function App() {
       </> : view === 'flight' ? <FlightCheckView
         active={flightActive} events={flightEvents} startedAt={flightStartedAt}
         exportPath={flightExport} status={status} variant={flightVariant} phase={flightPhase} onStart={startFlightCheck}
-        onStop={() => void stopFlightCheck()} onExport={exportFlightReceipt}
+        onStop={() => void stopFlightCheck()} onRestart={() => void restartFlightCheck()} onExport={exportFlightReceipt}
         onSetup={() => void changeView('setup')} onOperate={() => void changeView('operate')}
-      /> : <SetupView status={status} onOperate={() => changeView('operate')} onFlightCheck={startFlightCheck} />}
+      /> : <SetupView status={status} onOperate={() => changeView('operate')} onFlightCheck={() => void changeView('flight')} />}
 
       <footer className="footer-bar">
         <div><span className={status.boardConnected ? 'footer-led ready' : 'footer-led'} /> {hardware.mechanicalSwitches} SWITCHES · 1 TOUCH · 1 DIAL · 1 PLANAR STICK</div>
@@ -603,10 +635,10 @@ function ActionConsole({ activeControl, action, result, approval, isRunning, hol
   </aside>
 }
 
-function FlightCheckView({ active, events, startedAt, exportPath, status, variant, phase, onStart, onStop, onExport, onSetup, onOperate }: {
+function FlightCheckView({ active, events, startedAt, exportPath, status, variant, phase, onStart, onStop, onRestart, onExport, onSetup, onOperate }: {
   active: boolean; events: FlightEvent[]; startedAt: string | null; exportPath: string | null; status: SystemStatus; variant: 'daily' | 'diagnostic'
   phase: 'inactive' | 'arming' | 'active' | 'disarming' | 'error'
-  onStart: (variant: 'daily' | 'diagnostic') => void; onStop: () => void; onExport: () => void; onSetup: () => void; onOperate: () => void
+  onStart: (variant: 'daily' | 'diagnostic') => void; onStop: () => void; onRestart: () => void; onExport: () => void; onSetup: () => void; onOperate: () => void
 }) {
   const selectedSteps = stepsForVariant(variant)
   const expectedSignals = variant === 'diagnostic' ? 20 : 19
@@ -618,6 +650,8 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
   const nextStep = selectedSteps.find((step) => !flightStepComplete(step, events))
   const progress = Math.round((completedSignals / expectedSignals) * 100)
   const problems = events.filter((event) => !event.matched)
+  const preflightReady = status.boardConnected && status.shortcutCount === hardware.bindableSignals
+  const runCannotPass = problems.length > 0
   const phaseLabel = active ? 'ACTIONS SUPPRESSED' : phase === 'arming' ? 'ARMING INTERLOCK' : phase === 'disarming' ? 'RELEASING INTERLOCK' : phase === 'error' ? 'INTERLOCK UNVERIFIED' : 'ACTIONS ENABLED'
   const blockedCompletion = routesComplete && !complete
   return <section className="flight-view">
@@ -630,9 +664,10 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
       <div className="flight-sequence">
         <div className="flight-prompt">
           <div className={complete ? 'prompt-icon complete' : active ? 'prompt-icon live' : 'prompt-icon'}>{complete ? <Check /> : active ? <Activity /> : <Keyboard />}</div>
-          <div><span className="eyebrow">{complete ? 'ACCEPTANCE PASSED' : blockedCompletion ? 'ACCEPTANCE FAILED' : active ? 'NEXT PHYSICAL GESTURE' : phase === 'arming' ? 'WAIT FOR INTERLOCK' : 'READY WHEN YOU ARE'}</span><h3>{complete ? `${expectedSignals} routed signals received` : blockedCompletion ? 'Resolve the recorded blockers and restart' : active && nextStep ? nextStep.label : 'Start a clean receipt'}</h3><p>{complete ? (variant === 'diagnostic' ? 'The disposable diagnostic path reported ACT10 and ACT11 inside one paired Mic gesture.' : 'The daily path reported one ACT10 Mic event while ACT11 remained silent.') : blockedCompletion ? `${problems.length} misroutes; USB ${status.boardConnected ? 'linked' : 'absent'}; shortcuts ${status.shortcutCount}/${hardware.bindableSignals}.` : active && nextStep ? nextStep.instruction : phase === 'arming' ? 'Do not touch the board until the main process acknowledges action suppression.' : 'This clears prior observations and temporarily turns every shortcut into a no-op test signal.'}</p></div>
-          {phase === 'inactive' && !complete && <div className="flight-start-actions"><button type="button" onClick={() => onStart('daily')}><Play size={15} /> Daily profile</button><button type="button" onClick={() => onStart('diagnostic')}>20-signal diagnostic</button></div>}
-          {active && !complete && <button type="button" className="stop-flight" onClick={onStop}><CircleStop size={15} /> Pause check</button>}
+          <div><span className="eyebrow">{complete ? 'ACCEPTANCE PASSED' : runCannotPass ? 'THIS RUN CANNOT PASS' : blockedCompletion ? 'ACCEPTANCE FAILED' : active ? 'NEXT PHYSICAL GESTURE' : phase === 'arming' ? 'WAIT FOR INTERLOCK' : 'READY WHEN YOU ARE'}</span><h3>{complete ? `${expectedSignals} routed signals received` : runCannotPass ? 'A signal arrived out of order' : blockedCompletion ? 'Resolve the recorded blockers and restart' : active && nextStep ? nextStep.label : preflightReady ? 'Start a clean receipt' : 'Complete preflight first'}</h3><p>{complete ? (variant === 'diagnostic' ? 'The disposable diagnostic path reported ACT10 and ACT11 inside one paired Mic gesture.' : 'The daily path reported one ACT10 Mic event while ACT11 remained silent.') : runCannotPass ? `${problems.length} misroute recorded. Restart to clear this failed evidence; continuing cannot produce a passing receipt.` : blockedCompletion ? `${problems.length} misroutes; USB ${status.boardConnected ? 'linked' : 'absent'}; shortcuts ${status.shortcutCount}/${hardware.bindableSignals}.` : active && nextStep ? nextStep.instruction : phase === 'arming' ? 'Do not touch the board until the main process acknowledges action suppression.' : preflightReady ? 'This clears prior observations and temporarily turns every shortcut into a no-op test signal.' : `USB must be linked and all ${hardware.bindableSignals} desktop endpoints must be registered before physical acceptance starts.`}</p></div>
+          {phase === 'inactive' && !complete && <div className="flight-start-actions"><button type="button" disabled={!preflightReady} onClick={() => onStart('daily')}><Play size={15} /> Daily profile</button><button type="button" disabled={!preflightReady} onClick={() => onStart('diagnostic')}>20-signal diagnostic</button></div>}
+          {active && runCannotPass && <button type="button" className="stop-flight" onClick={onRestart}><RotateCcw size={15} /> End and restart</button>}
+          {active && !complete && !runCannotPass && <button type="button" className="stop-flight" onClick={onStop}><CircleStop size={15} /> End check</button>}
           {phase === 'error' && <button type="button" className="stop-flight" onClick={onStop}><CircleStop size={15} /> Restore safe state</button>}
           {complete && <button type="button" onClick={onExport}><Download size={15} /> Export receipt</button>}
         </div>
@@ -676,7 +711,7 @@ function SetupView({ status, onOperate, onFlightCheck }: { status: SystemStatus;
     { number: '01', title: 'Connect the board', detail: 'USB-C is the best commissioning path. Bluetooth keyboard and trackpad can remain connected.', state: status.boardConnected ? 'Detected as Creator Micro 2' : 'Waiting for USB device', ready: status.boardConnected },
     { number: '02', title: 'Install Work Louder Input', detail: 'The signed vendor app owns profiles, layers, shortcuts, firmware updates, and the radial menu.', state: status.inputInstalled ? 'Input.app installed' : 'Input.app not found', ready: status.inputInstalled },
     { number: '03', title: 'Verify Input Monitoring', detail: 'In System Settings → Privacy & Security → Input Monitoring, allow the app that should receive board events. Only you can grant this.', state: 'Human verification required', ready: false },
-    { number: '04', title: 'Configure the Ashlr layer', detail: 'Map 19 daily gestures in Input. The app can count its desktop shortcut registrations, but only a physical Flight Check verifies the active board layer.', state: `${status.shortcutCount}/${hardware.bindableSignals} desktop endpoints claimed · physical layer unverified`, ready: false },
+    { number: '04', title: 'Configure the Ashlr layer', detail: 'Map 19 daily gestures in Input. The app can count its desktop shortcut registrations, but only a physical Flight Check verifies the active board layer.', state: `${status.shortcutCount}/${hardware.bindableSignals} desktop endpoints registered · physical layer unverified`, ready: false },
   ]
   return <section className="setup-view">
     <div className="setup-intro"><span className="eyebrow">COMMISSIONING / TRUTHFUL READINESS</span><h2>Make every layer observable.</h2><p>USB presence, macOS authority, Input configuration, and native Codex integration are separate states. This checklist keeps them separate so “connected” never means more than we proved.</p></div>

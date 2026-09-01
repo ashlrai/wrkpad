@@ -65,6 +65,8 @@ The focus contract is narrow: Codex opens ChatGPT, Claude Code opens cmux, and u
 
 Runtime discovery checks `~/.local/bin`, `~/.npm-global/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, and `/usr/bin`. It intentionally ignores inherited `PATH` entries. The file must be executable. Install or symlink the CLI into a supported directory, then restart the app.
 
+The doctor treats ChatGPT, Codex CLI, Claude Code, and Ashlr Hub as optional integrations. A missing optional tool produces a warning but does not fail the required board and Work Louder Input checks. In JSON output, `nextAction` prioritizes a failed required check or the next manual physical gate; install an optional tool only when you want that integration.
+
 ## A confirmation expires
 
 Authorizations expire after 30 seconds and fail if the window, action, or workspace changes. Select the action again. Hold actions also require a continuous 1.6-second hold.

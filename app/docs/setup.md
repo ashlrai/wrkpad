@@ -10,9 +10,9 @@ Connect the Creator Micro 2 directly over USB-C for commissioning. A Bluetooth k
 npm run doctor
 ```
 
-Expected USB result: `Creator Micro 2 USB: Work Louder 303A:8298`.
+Expected USB result: `Creator Micro 2 USB: Work Louder 303A:8298`. The board and Work Louder Input are required doctor checks. ChatGPT, Codex CLI, Claude Code, and Ashlr Hub are optional integrations: missing tools produce warnings but do not fail the doctor.
 
-The doctor also checks local app and CLI paths. It is read-only and cannot grant permissions or change board configuration. If USB is absent, use [troubleshooting](troubleshooting.md#usb-device-is-not-detected).
+The doctor is read-only and cannot grant permissions or change board configuration. `npm run doctor -- --json` includes `manualChecks` and a prioritized `nextAction`. Passing required checks does not prove Input Monitoring, the active Input layer, or the physical Flight Check; those remain manual acceptance gates. If USB is absent, use [troubleshooting](troubleshooting.md#usb-device-is-not-detected).
 
 ## 2. Install Work Louder Input
 
@@ -32,7 +32,7 @@ Map the physical controls to [the canonical shortcuts](controls.md#action-switch
 
 The daily layer has 19 gestures: six Agent keys, six visible action caps, four joystick directions, and dial left/right/press. The desktop reserves 20 shortcut endpoints because the Mic cap covers two switches. Assign the Mic shortcut to ACT10 and set ACT11 to `None` for daily use. Never give the two hidden halves different daily actions.
 
-The Setup screen's `20/20 desktop endpoints claimed` result proves only that Electron registered all expected global shortcuts. It does not inspect Input's active profile, prove that the mapping reached the board, or complete this setup step. The ordered physical Flight Check is the acceptance gate for the active layer.
+The Setup screen's `20/20 desktop endpoints registered` result proves only that Electron registered all expected global shortcuts. It does not inspect Input's active profile, prove that the mapping reached the board, or complete this setup step. The ordered physical Flight Check is the acceptance gate for the active layer.
 
 ## 5. Start the app
 

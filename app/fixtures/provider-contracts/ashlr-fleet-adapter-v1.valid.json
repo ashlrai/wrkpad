@@ -1,0 +1,30 @@
+{
+  "generatedAt": "2026-08-31T12:00:00Z",
+  "daemon": {
+    "running": true,
+    "activity": { "phase": "idle" }
+  },
+  "killed": false,
+  "queue": {
+    "backlogItems": 4,
+    "eligibleBacklogItems": 1,
+    "repairControlBlockedItems": 2
+  },
+  "proposals": { "pending": 1 },
+  "goalFocus": { "activeGoalCount": 2 },
+  "guardHealth": { "blocked": true },
+  "missionBrief": {
+    "operatingMode": "observe-only",
+    "directive": "Inspect synthetic blockers",
+    "blocker": {
+      "severity": "medium",
+      "label": "Synthetic evidence pending",
+      "detail": "Fixture-only evidence requires review."
+    },
+    "action": {
+      "label": "Review synthetic evidence",
+      "commands": [{ "safety": "read-only" }]
+    }
+  },
+  "fixtureOnlyIgnoredData": "SYNTHETIC-UNEXPOSED-SENTINEL"
+}
