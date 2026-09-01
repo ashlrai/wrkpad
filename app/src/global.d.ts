@@ -1,10 +1,11 @@
-import type { ExecutionResult, MissionControlSnapshot, PhysicalSignalEnvelope, ProfileId, SystemStatus } from './board'
+import type { BoardRoute, ExecutionResult, MissionControlSnapshot, PhysicalSignalEnvelope, ProfileId, SystemStatus } from './board'
 
 declare global {
   interface Window {
     agentBoard?: {
       getStatus(): Promise<SystemStatus>
       getMissionControl(): Promise<MissionControlSnapshot>
+      setBoardRoute(boardRoute: BoardRoute): Promise<BoardRoute>
       focusAgentSlot(slot: number): Promise<ExecutionResult>
       setProfile(profile: ProfileId): Promise<void>
       setFlightCheck(active: boolean): Promise<{ acknowledged: boolean; active: boolean; startedAt: string | null }>

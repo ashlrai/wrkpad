@@ -2,10 +2,12 @@ import { execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { homedir } from 'node:os'
-import { resolve } from 'node:path'
+import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const require = createRequire(import.meta.url)
+const { inspectCodexMicroLogs } = require('../electron/codex-micro-diagnostics.cjs')
+const { readAppSettings } = require('../electron/settings.cjs')
 const { resolveTool } = require('../electron/tool-resolver.cjs')
 
 const REQUIRED_CHECKS = [
@@ -24,6 +26,7 @@ const REQUIRED_CHECKS = [
 const OPTIONAL_CHECKS = [
   { key: 'chatgpt', name: 'ChatGPT desktop' },
   { key: 'codex', name: 'Codex CLI' },
+  { key: 'nativeCodex', name: 'Codex native Creator Micro' },
   { key: 'claude', name: 'Claude Code' },
   { key: 'ashlr', name: 'Ashlr Hub' },
   { key: 'logitech', name: 'Competing Logitech HID owner' },
@@ -54,6 +57,7 @@ const makeCheck = (definition, probe, category) => ({
   category,
   severity: probe?.ok ? 'pass' : category === 'required' ? 'error' : 'warning',
   blocking: category === 'required',
+  ...(typeof probe?.code === 'string' ? { code: probe.code } : {}),
 })
 
 export function evaluateDoctor(probes) {
@@ -64,6 +68,8 @@ export function evaluateDoctor(probes) {
     makeCheck(definition, probes[definition.key], 'optional'),
   )
   const failedRequiredIndex = requiredChecks.findIndex((check) => !check.ok)
+  const nativeFirmwareMissing = probes.nativeCodex?.code === 'firmware_rpc_missing'
+  const nativeRouteSelected = probes.boardRoute === 'codex_native'
   const manualChecks = MANUAL_CHECKS.map((check) => ({
     ...check,
     category: 'manual',
@@ -75,9 +81,17 @@ export function evaluateDoctor(probes) {
     ok: failedRequiredIndex === -1,
     checks: [...requiredChecks, ...optionalChecks],
     manualChecks,
+    modeGuidance: {
+      codexNative: nativeFirmwareMissing
+        ? 'Codex observed v.oai.rgbcfg RPC 404. Back up Input profiles, then qualify a stable vendor firmware candidate with Codex fully quit; release strings alone do not prove compatibility.'
+        : 'Native Codex requires an explicit connected receipt; process presence alone is not enough.',
+      ashlrLayer: 'The Ashlr shortcut route remains independently commissionable through Work Louder Input and the physical Flight Check.',
+    },
     nextAction:
       failedRequiredIndex === -1
-        ? manualChecks[0].detail
+        ? nativeFirmwareMissing && nativeRouteSelected
+          ? 'For the declared Codex Native route, back up the Input profile and plan a guarded vendor firmware qualification with Codex fully quit.'
+          : manualChecks[0].detail
         : REQUIRED_CHECKS[failedRequiredIndex].nextAction,
   }
 }
@@ -102,12 +116,25 @@ function collectProbes() {
   const chatgptInstalled = existsSync('/Applications/ChatGPT.app')
   const inputInstalled = existsSync('/Applications/Input.app')
   const logitechOwner = run('/usr/bin/pgrep', ['-fl', 'logioptionsplus_agent'])
+  const nativeCodex = inspectCodexMicroLogs(homedir())
+  const settings = readAppSettings(
+    join(homedir(), 'Library', 'Application Support', 'Ashlr Agent Board', 'settings.json'),
+    homedir(),
+  )
 
   return {
     board: { ok: boardDetected, detail: boardDetected ? 'Work Louder 303A:8298' : 'not detected' },
     input: { ok: inputInstalled, detail: inputInstalled ? 'installed' : 'missing' },
     chatgpt: { ok: chatgptInstalled, detail: chatgptInstalled ? 'installed' : 'missing' },
     codex: toolProbe('codex'),
+    nativeCodex: {
+      ok: nativeCodex.status === 'connected' && nativeCodex.fresh === true,
+      code: nativeCodex.status,
+      detail: nativeCodex.status === 'firmware_rpc_missing'
+        ? `v.oai.rgbcfg returned RPC 404${nativeCodex.fresh ? ' recently' : ` in historical evidence${nativeCodex.observedAt ? ` at ${nativeCodex.observedAt}` : ''}`}`
+        : nativeCodex.detail,
+    },
+    boardRoute: settings.boardRoute,
     claude: toolProbe('claude'),
     ashlr: toolProbe('ashlr'),
     logitech: {

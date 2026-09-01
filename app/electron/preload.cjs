@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron')
 contextBridge.exposeInMainWorld('agentBoard', {
   getStatus: () => ipcRenderer.invoke('board:getStatus'),
   getMissionControl: () => ipcRenderer.invoke('board:getMissionControl'),
+  setBoardRoute: (boardRoute) => ipcRenderer.invoke('board:setBoardRoute', boardRoute),
   focusAgentSlot: (slot) => ipcRenderer.invoke('board:focusAgentSlot', slot),
   setProfile: (profile) => ipcRenderer.invoke('board:setProfile', profile),
   setFlightCheck: (active) => ipcRenderer.invoke('board:setFlightCheck', active),

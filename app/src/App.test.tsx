@@ -10,6 +10,69 @@ afterEach(() => {
 })
 
 describe('operator interface', () => {
+  it('declares a board route locally without invoking actions or flight mode', async () => {
+    const setBoardRoute = vi.fn().mockResolvedValue('codex_native')
+    const requestAction = vi.fn()
+    const setFlightCheck = vi.fn()
+    window.agentBoard = {
+      getStatus: vi.fn().mockResolvedValue({
+        boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
+        codex: true, claude: true, ashlr: true, boardRoute: 'unknown',
+        nativeCodexMicro: { status: 'firmware_rpc_missing', observedAt: '2026-09-01T17:18:10Z', detail: 'RPC 404', fresh: true },
+        workspace: '/tmp', shortcutCount: 20, shortcutRegistrations: [], workspaceSnapshot: null,
+      }),
+      getMissionControl: vi.fn().mockResolvedValue({
+        schemaVersion: 1, observedAt: new Date().toISOString(), agentSource: 'unavailable', fleetSource: 'unavailable',
+        agents: Array.from({ length: 6 }, (_, index) => ({ slot: index + 1, provider: null, state: 'off', title: 'Available slot', updatedAt: null })),
+        fleet: null, unassignedActiveSessions: 0, operatorNotices: [],
+      }),
+      setBoardRoute, focusAgentSlot: vi.fn(), setProfile: vi.fn(), setFlightCheck,
+      requestAction, confirmAction: vi.fn(), beginHold: vi.fn(), cancelHold: vi.fn(),
+      chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(), onControl: vi.fn(() => () => {}),
+    } as unknown as NonNullable<typeof window.agentBoard>
+
+    render(<App />)
+    expect(await screen.findByText('Native route not selected')).toBeTruthy()
+    fireEvent.click(screen.getByRole('radio', { name: /Codex Native/i }))
+    expect(setBoardRoute).toHaveBeenCalledWith('codex_native')
+    expect(requestAction).not.toHaveBeenCalled()
+    expect(setFlightCheck).not.toHaveBeenCalled()
+    expect(await screen.findByText('Expected board route saved')).toBeTruthy()
+    expect(screen.getByText('Native RPC unavailable')).toBeTruthy()
+  })
+
+  it('keeps Codex Native observer-only and out of the Ashlr Flight Check', async () => {
+    const setFlightCheck = vi.fn()
+    const requestAction = vi.fn()
+    window.agentBoard = {
+      getStatus: vi.fn().mockResolvedValue({
+        boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
+        codex: true, claude: true, ashlr: true, boardRoute: 'codex_native',
+        nativeCodexMicro: { status: 'firmware_rpc_missing', observedAt: '2026-09-01T04:38:28Z', detail: 'RPC 404', fresh: false },
+        workspace: '/tmp', shortcutCount: 20, shortcutRegistrations: [], workspaceSnapshot: null,
+      }),
+      getMissionControl: vi.fn().mockResolvedValue({
+        schemaVersion: 1, observedAt: new Date().toISOString(), agentSource: 'unavailable', fleetSource: 'unavailable',
+        agents: Array.from({ length: 6 }, (_, index) => ({ slot: index + 1, provider: null, state: 'off', title: 'Available slot', updatedAt: null })),
+        fleet: null, unassignedActiveSessions: 0, operatorNotices: [],
+      }),
+      setBoardRoute: vi.fn(), focusAgentSlot: vi.fn(), setProfile: vi.fn(), setFlightCheck,
+      requestAction, confirmAction: vi.fn(), beginHold: vi.fn(), cancelHold: vi.fn(),
+      chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(), onControl: vi.fn(() => () => {}),
+    } as unknown as NonNullable<typeof window.agentBoard>
+
+    render(<App />)
+    expect(await screen.findByText('Codex Native observer only.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Disabled in Codex Native' }).hasAttribute('disabled')).toBe(true)
+    fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
+    expect(screen.queryByRole('button', { name: /Run Ashlr Flight Check/i })).toBeNull()
+    expect(screen.getByText(/Manual native gate/i)).toBeTruthy()
+    fireEvent.click(screen.getByRole('tab', { name: 'Flight Check' }))
+    expect(screen.getByRole('heading', { name: 'Flight Check belongs to Ashlr Layer.' })).toBeTruthy()
+    expect(setFlightCheck).not.toHaveBeenCalled()
+    expect(requestAction).not.toHaveBeenCalled()
+  })
+
   it('gives digital twin agent keys the live provider, title, and state', async () => {
     window.agentBoard = {
       getStatus: vi.fn().mockResolvedValue({
@@ -308,7 +371,7 @@ describe('operator interface', () => {
     render(<App />)
     fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
     await screen.findByText('19/20 desktop endpoints registered · physical layer unverified')
-    fireEvent.click(screen.getByRole('button', { name: /Run Flight Check/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Run Ashlr Flight Check/i }))
 
     expect(await screen.findByText('Complete preflight first')).toBeTruthy()
     expect(setFlightCheck).not.toHaveBeenCalled()

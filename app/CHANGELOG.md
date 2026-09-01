@@ -23,6 +23,12 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
   for wrkpad HASP v1 and the Ashlr Fleet adapter.
 - Required, optional, and manual doctor categories with a single prioritized
   recovery action.
+- A local-only Board Route declaration that separates expected Codex Native and
+  Ashlr Layer behavior without changing device state.
+- Privacy-bounded native Codex diagnostics that identify the exact
+  `v.oai.rgbcfg` firmware RPC 404 instead of reporting a generic connection
+  failure.
+- A black-opaque Creator Micro 2 screen twin and route-aware readiness copy.
 
 ### Changed
 
@@ -31,6 +37,8 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 - Block Flight Check until USB and all desktop endpoints are ready, stop a
   failed run immediately, and offer a clean restart after a misroute.
 - Keep operator safety notices visible even when Fleet evidence is unavailable.
+- Separate USB detection, native firmware compatibility, route declaration,
+  desktop endpoint registration, and physical acceptance in Setup and doctor.
 
 ### Security
 

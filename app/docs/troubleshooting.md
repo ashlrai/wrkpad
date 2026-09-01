@@ -24,6 +24,27 @@ Bluetooth keyboard and trackpad traffic is separate. USB presence still does not
 
 All 20 desktop shortcuts must register even though daily use emits 19 signals; ACT11 remains `None` on the daily layer.
 
+## Codex finds Creator Micro but native connection fails
+
+Run `npm run doctor -- --json`. If **Codex native Creator Micro** reports
+`v.oai.rgbcfg returned RPC 404`, the cable, USB identity,
+and vendor HID request/response path already worked. The board firmware lacks
+the first Codex control-plane method; Bluetooth keyboard/trackpad traffic and
+Agent Board's global shortcuts are not the cause.
+
+Do not repeatedly reconnect, grant more permissions, or quit Logitech just to
+clear this error. Follow the [separate firmware qualification
+workflow](setup.md#3-install-work-louder-input). The currently published vendor
+release is only a qualification candidate until this exact desk path passes.
+After updating, test Codex with
+Input fully quit. Codex must receive successful `v.oai.rgbcfg` and then
+`v.oai.thstatus` responses before native keys or lighting are described as
+connected.
+
+If those calls succeed but Codex still fails, verify Input Monitoring and test
+Codex as the only open board controller. Codex and Input can hold nonexclusive
+HID handles, but they do not share a cross-process RPC or lighting lease.
+
 ## The wide Mic cap fires twice
 
 The cap spans ACT10 and ACT11. Map Mic to ACT10 and set ACT11 to `None` for daily use. Use the [diagnostic Mic test](setup.md#diagnostic-mic-test) only on a disposable layer.
@@ -65,7 +86,7 @@ The focus contract is narrow: Codex opens ChatGPT, Claude Code opens cmux, and u
 
 Runtime discovery checks `~/.local/bin`, `~/.npm-global/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, and `/usr/bin`. It intentionally ignores inherited `PATH` entries. The file must be executable. Install or symlink the CLI into a supported directory, then restart the app.
 
-The doctor treats ChatGPT, Codex CLI, Claude Code, and Ashlr Hub as optional integrations. A missing optional tool produces a warning but does not fail the required board and Work Louder Input checks. In JSON output, `nextAction` prioritizes a failed required check or the next manual physical gate; install an optional tool only when you want that integration.
+The doctor treats ChatGPT, Codex CLI, native Codex control, Claude Code, and Ashlr Hub as optional integrations. A missing or firmware-incompatible optional integration produces a warning but does not fail the required board and Work Louder Input checks. In JSON output, `nextAction` prioritizes a failed required check, the declared Codex Native route's guarded qualification, or the next manual physical gate. Ashlr Layer never promotes a native firmware operation.
 
 ## A confirmation expires
 
