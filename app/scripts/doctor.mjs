@@ -9,6 +9,7 @@ const require = createRequire(import.meta.url)
 const { detectCreatorMicro2 } = require('../electron/creator-micro-identity.cjs')
 const { inspectCodexMicroLogs } = require('../electron/codex-micro-diagnostics.cjs')
 const { inspectInputProfile } = require('../electron/input-profile-diagnostics.cjs')
+const { inspectInputRuntime } = require('../electron/input-runtime-diagnostics.cjs')
 const { appSettingsPath, readAppSettings } = require('../electron/settings.cjs')
 const { resolveTool } = require('../electron/tool-resolver.cjs')
 
@@ -51,6 +52,7 @@ const MANUAL_CHECKS = [
     detail: 'Run the Daily Flight Check in Agent Board and export a passing receipt.',
   },
 ]
+const INPUT_RUNTIME_STATUSES = new Set(['unresolved_profile_layer', 'not_observed', 'log_missing', 'log_unsafe', 'log_unavailable'])
 
 const makeCheck = (definition, probe, category) => ({
   name: definition.name,
@@ -84,9 +86,17 @@ export function evaluateDoctor(probes, options = {}) {
   const dailyProfileReady = inputProfile.activeProfile === 'Ashlr Agent Board Corrected'
     && inputProfile.activeLayer === 'Ashlr Daily'
     && inputProfile.encoderDirection === 'correct'
+  const rawInputRuntime = probes.inputRuntime ?? {}
+  const inputRuntimeStatus = INPUT_RUNTIME_STATUSES.has(rawInputRuntime.status) ? rawInputRuntime.status : 'not_observed'
+  const runtimeProfileIndex = Number.isInteger(rawInputRuntime.profileIndex) && rawInputRuntime.profileIndex >= 0 && rawInputRuntime.profileIndex <= 31 ? rawInputRuntime.profileIndex : null
+  const runtimeLayerIndex = Number.isInteger(rawInputRuntime.layerIndex) && rawInputRuntime.layerIndex >= 0 && rawInputRuntime.layerIndex <= 15 ? rawInputRuntime.layerIndex : null
+  const unresolvedRuntimeObserved = inputRuntimeStatus === 'unresolved_profile_layer'
+    && rawInputRuntime.fresh === true && runtimeProfileIndex !== null && runtimeLayerIndex !== null
   const ashlrReason = failedRequiredIndex !== -1
     ? 'required_prerequisite_missing'
-    : inputProfile.encoderDirection === 'reversed'
+    : unresolvedRuntimeObserved
+      ? 'recent_unresolved_profile_layer_observed'
+      : inputProfile.encoderDirection === 'reversed'
       ? 'encoder_direction_reversed'
       : dailyProfileReady ? 'physical_acceptance_required' : 'input_profile_requires_activation'
   const manualChecks = MANUAL_CHECKS.map((check) => ({
@@ -110,6 +120,13 @@ export function evaluateDoctor(probes, options = {}) {
       encoderDirection: inputProfile.encoderDirection,
       dailyProfileReady,
     },
+    inputRuntime: {
+      status: inputRuntimeStatus,
+      profileIndex: runtimeProfileIndex,
+      layerIndex: runtimeLayerIndex,
+      observedAt: typeof rawInputRuntime.observedAt === 'string' && rawInputRuntime.observedAt.length <= 40 ? rawInputRuntime.observedAt : null,
+      fresh: unresolvedRuntimeObserved,
+    },
     manualChecks,
     readiness: {
       prerequisites: {
@@ -129,13 +146,17 @@ export function evaluateDoctor(probes, options = {}) {
       codexNative: nativeFirmwareMissing
         ? 'Codex observed v.oai.rgbcfg RPC 404. Back up Input profiles, then qualify a stable vendor firmware candidate with Codex fully quit; release strings alone do not prove compatibility.'
         : 'Native Codex requires an explicit connected receipt; process presence alone is not enough.',
-      ashlrLayer: 'The Ashlr shortcut route remains independently commissionable through Work Louder Input and the physical Flight Check.',
+      ashlrLayer: unresolvedRuntimeObserved
+        ? 'Input recently logged an unresolved profile/layer combination. This event is advisory and may predate the current cache; a fresh physical Flight Check can supersede it.'
+        : 'The Ashlr shortcut route remains independently commissionable through Work Louder Input and the physical Flight Check.',
     },
     nextAction:
       failedRequiredIndex === -1
         ? nativeFirmwareMissing && nativeRouteSelected
           ? 'For the declared Codex Native route, back up the Input profile and plan a guarded vendor firmware qualification with Codex fully quit.'
-          : manualChecks[0].detail
+          : unresolvedRuntimeObserved && route === 'ashlr_layer'
+            ? 'Review the recent unresolved Input profile/layer event. If the board remains silent, complete the Input-only reconciliation before firmware qualification.'
+            : manualChecks[0].detail
         : REQUIRED_CHECKS[failedRequiredIndex].nextAction,
   }
 }
@@ -180,6 +201,7 @@ export function collectProbes() {
     },
     boardRoute: settings.boardRoute,
     inputProfile: inspectInputProfile(home, boardIdentity?.storageId),
+    inputRuntime: inspectInputRuntime(home),
     claude: toolProbe('claude'),
     ashlr: toolProbe('ashlr'),
     logitech: {
@@ -204,6 +226,7 @@ function printHuman(result) {
   for (const check of result.manualChecks) console.log(`  • ${check.name}: ${check.detail}`)
   console.log(`\n${result.ok ? 'Doctor passed required checks.' : 'Doctor failed required checks.'}`)
   console.log(`Declared route: ${result.route}`)
+  if (result.inputRuntime.fresh) console.log(`Input runtime: unresolved profile ${result.inputRuntime.profileIndex} / layer ${result.inputRuntime.layerIndex} observed recently`)
   console.log(`Next: ${result.nextAction}`)
 }
 

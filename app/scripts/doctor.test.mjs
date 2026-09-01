@@ -12,6 +12,7 @@ const requiredProbes = {
     activeLayer: 'Ashlr Daily',
     encoderDirection: 'correct',
   },
+  inputRuntime: { status: 'not_observed', profileIndex: null, layerIndex: null, observedAt: null, fresh: false },
 }
 
 const missingOptionalProbes = {
@@ -160,4 +161,24 @@ test('doctor identifies the known reversed dial without exposing profile labels'
     encoderDirection: 'reversed',
     dailyProfileReady: false,
   })
+})
+
+test('doctor projects recent unresolved Input evidence without raw logs or a current-state claim', () => {
+  const result = evaluateDoctor({
+    ...requiredProbes,
+    ...missingOptionalProbes,
+    boardRoute: 'ashlr_layer',
+    inputRuntime: {
+      status: 'unresolved_profile_layer', profileIndex: 2, layerIndex: 1,
+      observedAt: '2026-09-01T19:33:00.000Z', fresh: true, raw: 'private log text',
+    },
+  })
+
+  assert.deepEqual(result.inputRuntime, {
+    status: 'unresolved_profile_layer', profileIndex: 2, layerIndex: 1,
+    observedAt: '2026-09-01T19:33:00.000Z', fresh: true,
+  })
+  assert.equal(result.readiness.ashlrLayer.reason, 'recent_unresolved_profile_layer_observed')
+  assert.match(result.modeGuidance.ashlrLayer, /may predate the current cache/)
+  assert.doesNotMatch(JSON.stringify(result), /private log text/)
 })

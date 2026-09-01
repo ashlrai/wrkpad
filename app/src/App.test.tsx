@@ -184,7 +184,7 @@ describe('operator interface', () => {
         boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
         inputProfile: correctedInputProfile,
         inputRuntime: { status: 'not_observed', profileIndex: null, layerIndex: null, observedAt: null, fresh: false },
-        runtime: { appVersion: '0.1.0', packaged: true, executablePath, appPath: '/Applications/Ashlr Agent Board.app/Contents/Resources/app.asar' },
+        receiverIdentity: { appVersion: '0.1.0', packaged: true, path: executablePath },
         codex: true, claude: true, ashlr: true, boardRoute: 'ashlr_layer', workspace: '/tmp', shortcutCount: 20,
         shortcutRegistrations: [], workspaceSnapshot: null,
       }),
@@ -209,8 +209,8 @@ describe('operator interface', () => {
       getStatus: vi.fn().mockResolvedValue({
         boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
         inputProfile: correctedInputProfile,
-        inputRuntime: { status: 'profile_layer_mismatch', profileIndex: 2, layerIndex: 1, observedAt: '2026-09-01T19:33:00.000Z', fresh: true },
-        runtime: null, codex: true, claude: true, ashlr: true, boardRoute: 'ashlr_layer', workspace: '/tmp', shortcutCount: 20,
+        inputRuntime: { status: 'unresolved_profile_layer', profileIndex: 2, layerIndex: 1, observedAt: '2026-09-01T19:33:00.000Z', fresh: true },
+        receiverIdentity: null, codex: true, claude: true, ashlr: true, boardRoute: 'ashlr_layer', workspace: '/tmp', shortcutCount: 20,
         shortcutRegistrations: [], workspaceSnapshot: null,
       }),
       getMissionControl: vi.fn().mockResolvedValue(initialUnavailableMission()),
@@ -220,12 +220,35 @@ describe('operator interface', () => {
 
     render(<App />)
     fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
-    expect(await screen.findByText('Clear the stale runtime layer safely.')).toBeTruthy()
-    expect(screen.getByText(/Input reported profile/i).textContent).toContain('layer 1')
-    expect(screen.getByText(/Do not reset, delete a protected layer, or flash firmware/i)).toBeTruthy()
+    expect(await screen.findByText('Input recently logged an unresolved combination.')).toBeTruthy()
+    expect(screen.getByText(/Input logged profile/i).textContent).toContain('layer 1')
+    expect(screen.getByText(/does not prove the board is still in that state/i)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Create corrected Input profile' })).toBeNull()
-    const runtimeState = screen.getByText(/Input runtime reported profile 2/i)
-    expect(runtimeState.closest('article')?.classList.contains('ready')).toBe(false)
+    const cacheState = screen.getByText(/Cache observed · Ashlr Agent Board Corrected/i)
+    expect(cacheState.closest('article')?.classList.contains('observed')).toBe(true)
+    fireEvent.click(screen.getByRole('tab', { name: 'Flight Check' }))
+    expect((screen.getByRole('button', { name: 'Daily profile' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('shows one recovery path when cache and recent Input log evidence both disagree', async () => {
+    window.agentBoard = {
+      getStatus: vi.fn().mockResolvedValue({
+        boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
+        inputProfile: { cacheStatus: 'available', activeProfile: 'Default', activeLayer: 'Layer 1', encoderDirection: 'unrecognized' },
+        inputRuntime: { status: 'unresolved_profile_layer', profileIndex: 2, layerIndex: 1, observedAt: '2026-09-01T19:33:00.000Z', fresh: true },
+        receiverIdentity: null, codex: true, claude: true, ashlr: true, boardRoute: 'ashlr_layer', workspace: '/tmp', shortcutCount: 20,
+        shortcutRegistrations: [], workspaceSnapshot: null,
+      }),
+      getMissionControl: vi.fn().mockResolvedValue(initialUnavailableMission()),
+      focusAgentSlot: vi.fn(), setProfile: vi.fn(), setFlightCheck: vi.fn(), requestAction: vi.fn(), confirmAction: vi.fn(),
+      beginHold: vi.fn(), cancelHold: vi.fn(), chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(), onControl: vi.fn(() => () => {}),
+    } as unknown as NonNullable<typeof window.agentBoard>
+
+    render(<App />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
+    expect(await screen.findByText('Input recently logged an unresolved combination.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Create corrected Input profile' })).toBeNull()
+    expect(document.querySelectorAll('.input-reconciliation')).toHaveLength(1)
   })
 
   it('surfaces the sanitized active Input profile and blocks a reversed dial mapping', async () => {

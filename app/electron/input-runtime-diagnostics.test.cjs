@@ -29,7 +29,7 @@ test('returns only bounded indexes and sanitized timing for the newest exact sig
   ].join('\n'), now)
 
   assert.deepEqual(classified, {
-    status: 'profile_layer_mismatch',
+    status: 'unresolved_profile_layer',
     profileIndex: 2,
     layerIndex: 1,
     observedAt: newest.toISOString(),
@@ -72,7 +72,7 @@ test('reads only the bounded tail of the fixed Input main log', () => {
     const recentSignal = signal('2026-09-01 18:39:25.111')
     writeFixedLog(home, `${'x'.repeat(MAX_LOG_TAIL_BYTES + 100)}\n${recentSignal}\n`)
     const now = new Date(2026, 8, 1, 18, 40, 0, 0)
-    assert.equal(inspectInputRuntime(home, now).status, 'profile_layer_mismatch')
+    assert.equal(inspectInputRuntime(home, now).status, 'unresolved_profile_layer')
   } finally {
     rmSync(home, { recursive: true, force: true })
   }

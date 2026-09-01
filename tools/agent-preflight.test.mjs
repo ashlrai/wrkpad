@@ -27,6 +27,7 @@ const appDoctor = {
     encoderDirection: 'correct',
     dailyProfileReady: true,
   },
+  inputRuntime: { status: 'not_observed', profileIndex: null, layerIndex: null, observedAt: null, fresh: false },
 }
 
 function commandFixture(_executable, args) {
@@ -91,6 +92,24 @@ test('Ashlr Layer blocks the known reversed dial mapping', () => {
 
   assert.equal(result.overall, 'blocked')
   assert.equal(result.checks.find((item) => item.id === 'input_profile').reason, 'the read-only cache identifies the known reversed dial mapping')
+})
+
+test('Ashlr Layer exposes recent unresolved Input evidence as a bounded advisory', () => {
+  const result = buildPreflight({
+    route: 'ashlr_layer', source, stable: null,
+    appDoctorRaw: {
+      ...appDoctor,
+      inputRuntime: { status: 'unresolved_profile_layer', profileIndex: 2, layerIndex: 1, observedAt: '2026-09-01T19:33:00.000Z', fresh: true },
+      readiness: { ...appDoctor.readiness, ashlrLayer: { status: 'manual', reason: 'recent_unresolved_profile_layer_observed' } },
+    },
+    developmentBinary: '/missing/development/binary', runCommand: commandFixture,
+    observedAt: '2026-09-01T20:00:00.000Z',
+  })
+
+  const runtime = result.checks.find((item) => item.id === 'input_runtime')
+  assert.equal(runtime.status, 'warn')
+  assert.match(runtime.evidence, /profile_index=2; layer_index=1/)
+  assert.match(runtime.reason, /may predate the current cache/)
 })
 
 test('preflight output never publishes executable firmware or permission steps', () => {

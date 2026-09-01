@@ -43,7 +43,7 @@ function classifyInputRuntimeLog(text, now = new Date()) {
   if (!latest) return result('not_observed')
   const age = now.getTime() - latest.timestamp.getTime()
   return result(
-    'profile_layer_mismatch',
+    'unresolved_profile_layer',
     latest.profileIndex,
     latest.layerIndex,
     latest.timestamp.toISOString(),

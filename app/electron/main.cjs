@@ -150,11 +150,10 @@ ipcMain.handle('board:getStatus', trustedIpc(async () => {
     shortcutCount: shortcutRegistrations.filter((registration) => registration.registered).length,
     shortcutRegistrations,
     workspaceSnapshot,
-    runtime: {
+    receiverIdentity: {
       appVersion: app.getVersion(),
       packaged: app.isPackaged,
-      executablePath: process.execPath,
-      appPath: app.getAppPath(),
+      path: app.isPackaged ? process.execPath : app.getAppPath(),
     },
   }
 }))

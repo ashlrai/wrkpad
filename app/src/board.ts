@@ -84,7 +84,7 @@ export interface SystemStatus {
   shortcutCount: number
   shortcutRegistrations: ShortcutRegistration[]
   workspaceSnapshot: WorkspaceSnapshot | null
-  runtime: RuntimeIdentity | null
+  receiverIdentity: ReceiverIdentity | null
 }
 
 export interface InputProfileStatus {
@@ -95,18 +95,17 @@ export interface InputProfileStatus {
 }
 
 export interface InputRuntimeStatus {
-  status: 'profile_layer_mismatch' | 'not_observed' | 'log_missing' | 'log_unsafe' | 'log_unavailable'
+  status: 'unresolved_profile_layer' | 'not_observed' | 'log_missing' | 'log_unsafe' | 'log_unavailable'
   profileIndex: number | null
   layerIndex: number | null
   observedAt: string | null
   fresh: boolean
 }
 
-export interface RuntimeIdentity {
+export interface ReceiverIdentity {
   appVersion: string
   packaged: boolean
-  executablePath: string
-  appPath: string
+  path: string
 }
 
 export const correctedInputProfileObservedForVariant = (profile: InputProfileStatus, variant: 'daily' | 'diagnostic'): boolean =>

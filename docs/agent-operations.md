@@ -79,8 +79,10 @@ proof of source identity, review, provenance, signing, or release.
 5. Have the operator use Input's **Set as current profile** action for `Ashlr
    Agent Board Corrected`, verify `Ashlr Daily`, and grant Input Monitoring.
    Inspect the read-only `input_profile` receipt, but do not treat it as board
-   synchronization. If a fresh stale/protected layer is reported, stop: do not
-   delete or transform `KV_OAI_*`; use the Input-only recovery procedure.
+   synchronization. If `input_runtime` reports a recent unresolved-index event,
+   treat it as advisory log evidence that may predate the cache. A fresh
+   physical Flight Check may supersede it; if the board remains silent, use the
+   Input-only recovery procedure and never delete or transform `KV_OAI_*`.
 6. Arm Daily Flight Check. Wait for the screen to say actions are suppressed,
    then have the operator complete all 19 gestures on the physical board.
 7. Operate from Agent Board. Slot selection may foreground Codex Desktop or

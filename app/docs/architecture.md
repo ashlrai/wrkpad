@@ -38,8 +38,9 @@ timestamp, and fixed detail. Raw logs, private paths, task content, and unknown
 fields never cross IPC.
 
 The Input diagnostics use fixed Creator Micro 2 cache and log paths, reject
-symlinks, and cap each read at 512 KiB. Cache output contains only sanitized
-labels, `activeProfileId`, a uniquely observable single layer, and encoder
+symlinks, and cap each read at 512 KiB. The cache selects the current profile
+using `activeProfileId`, then exposes only sanitized labels, a uniquely
+observable single layer, and encoder
 classification. Runtime output contains only a bounded profile/layer index,
 timestamp, freshness, and reason code for the exact unresolved-combination
 signal. Neither diagnostic proves device synchronization or physical output.

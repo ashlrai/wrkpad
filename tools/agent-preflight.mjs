@@ -157,6 +157,13 @@ function projectAppDoctor(raw) {
       encoderDirection: raw.inputProfile.encoderDirection ?? 'unavailable',
       dailyProfileReady: raw.inputProfile.dailyProfileReady === true,
     } : null,
+    inputRuntime: raw.inputRuntime && typeof raw.inputRuntime === 'object' ? {
+      status: raw.inputRuntime.status ?? 'not_observed',
+      profileIndex: Number.isInteger(raw.inputRuntime.profileIndex) ? raw.inputRuntime.profileIndex : null,
+      layerIndex: Number.isInteger(raw.inputRuntime.layerIndex) ? raw.inputRuntime.layerIndex : null,
+      observedAt: typeof raw.inputRuntime.observedAt === 'string' ? raw.inputRuntime.observedAt : null,
+      fresh: raw.inputRuntime.fresh === true,
+    } : null,
     requiredReady: required.length > 0 && required.every((item) => item.ok === true),
     nativeStatus: raw.readiness?.codexNative?.status ?? 'unknown',
     nativeReason: raw.readiness?.codexNative?.reason ?? 'native_readiness_unavailable',
@@ -266,6 +273,7 @@ export function buildPreflight({
 
   if (route === 'ashlr_layer') {
     const profile = appDoctor?.inputProfile
+    const runtime = appDoctor?.inputRuntime
     checks.push(check(
       'input_profile',
       profile?.dailyProfileReady ? 'pass' : profile?.encoderDirection === 'reversed' ? 'blocked' : 'warn',
@@ -273,6 +281,16 @@ export function buildPreflight({
       profile?.dailyProfileReady
         ? 'the read-only cache matches the corrected daily profile; a board write and physical dial route are not yet proven'
         : profile?.encoderDirection === 'reversed' ? 'the read-only cache identifies the known reversed dial mapping' : 'activate the corrected daily profile in Work Louder Input before Flight Check',
+    ))
+    checks.push(check(
+      'input_runtime',
+      runtime?.status === 'unresolved_profile_layer' && runtime.fresh ? 'warn' : runtime ? 'pass' : 'warn',
+      runtime?.status === 'unresolved_profile_layer'
+        ? `reason=unresolved_profile_layer; profile_index=${runtime.profileIndex ?? 'unknown'}; layer_index=${runtime.layerIndex ?? 'unknown'}; fresh=${runtime.fresh}`
+        : runtime ? `reason=${runtime.status}; no recent unresolved combination projected` : 'bounded Input runtime evidence unavailable',
+      runtime?.status === 'unresolved_profile_layer' && runtime.fresh
+        ? 'Input recently logged an unresolved index combination; it may predate the current cache and does not prove current device state'
+        : 'no recent unresolved Input profile/layer event requires an advisory',
     ))
     checks.push(check(
       'route_readiness',

@@ -31,7 +31,7 @@ Bluetooth keyboard and trackpad traffic is separate. USB presence still does not
 
 All 20 desktop shortcuts must register even though daily use emits 19 signals; ACT11 remains `None` on the daily layer.
 
-## Input shows the right profile, but the board is on another layer
+## Input-only reconciliation
 
 Input exposes three different states: the profile shown in the editor, the
 profile marked current through **Set as current profile**, and the profile/layer
@@ -39,31 +39,34 @@ actually emitting from the board. They are not interchangeable. A successful
 import or `layout updated` message proves neither current-profile activation nor
 physical emission.
 
-If Agent Board reports a fresh unresolved profile/layer combination, end Flight
-Check and fully quit Agent Board, Codex, and every other board controller. Power
-cycle the board, open Input alone, use **Set as current profile** for **Ashlr
-Agent Board Corrected**, select **Ashlr Daily**, then fully quit and relaunch
-Input. Reopen the exact Agent Board receiver and run a fresh check. Do not reset,
-delete or transform a protected `KV_OAI_*` layer, or flash firmware from this
-receipt.
+Use this single recovery procedure when the physical check remains silent, the
+cache is wrong, or Agent Board shows recent unresolved-index log evidence:
+
+1. Stop Flight Check so the action interlock returns to a known state.
+2. If Setup reports reversed or unverified dial directions, use **Create
+   corrected Input profile** with an ordinary export. The artifact does not
+   activate itself or write to the device.
+3. Fully quit Agent Board, Codex, and every other board controller, then power
+   cycle the board.
+4. Open Input alone. Import the artifact only when Step 2 created one, use **Set
+   as current profile** for **Ashlr Agent Board Corrected**, and select **Ashlr
+   Daily**.
+5. Fully quit and relaunch Input alone. Confirm the same current profile; a
+   `layout updated` message is not acceptance.
+6. Confirm Agent Board has Input Monitoring authority, then reopen the exact
+   intended receiver build.
+7. Run a fresh physical Flight Check without simulating shortcuts from the
+   keyboard.
+
+Recent unresolved-index evidence may predate the current cache, so it is an
+advisory rather than proof of the current board state. Do not reset, delete or
+transform a protected `KV_OAI_*` layer, or flash firmware from that evidence.
 
 If Flight Check receives zero raw signals, use the top-right black rotary dial.
 The top-left white control is the joystick and the bottom-left circle is the
 Bluetooth host selector. If the correct control still emits nothing, do not
-simulate the shortcut from the keyboard:
-
-1. Stop Flight Check so the action interlock returns to a known state.
-2. Confirm **Ashlr Agent Board Corrected** is the current keyboard profile, not merely the
-   profile shown in Input's editor.
-3. If Setup reports reversed or unverified dial directions, choose **Create
-   corrected Input profile**. Select an ordinary Input export and save the new
-   offline repair artifact; this does not activate it or write to the device.
-4. Quit every board controller, open Input alone, import and activate **Ashlr
-   Agent Board Corrected**, then fully quit and relaunch Input. Confirm **Ashlr
-   Daily** remains current; `layout updated` alone is not proof of reconciliation.
-5. Confirm Agent Board has Input Monitoring authority.
-6. Quit any duplicate Agent Board process and reopen the exact intended build.
-7. Start a fresh check and confirm it still records `0` raw receipts.
+simulate the shortcut from the keyboard. Complete the Input-only reconciliation
+above, then confirm the fresh check still records `0` raw receipts.
 
 Only after a fresh second check still receives zero signals should firmware
 qualification be considered. Keep the

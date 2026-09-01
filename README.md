@@ -67,8 +67,9 @@ marks missing observers and optional CLIs as unavailable.
   `v.oai.rgbcfg` RPC 404 evidence to a route-scoped qualification warning while
   leaving the shortcut route independently usable.
 - Privacy-bounded Input cache/runtime diagnostics report the cache-current
-  profile, a uniquely observable single layer, encoder order, and exact stale
-  profile/layer reason codes without exposing raw logs or claiming device sync.
+  profile, a uniquely observable single layer, encoder order, and exact
+  unresolved-index reason codes without exposing raw logs or claiming current
+  device state.
 - Both components sanitize private provider content and distinguish source,
   package, integration, provider, physical, and user acceptance.
 
@@ -151,9 +152,10 @@ node tools/agent-preflight.mjs inspect --route ashlr_layer --json
 node tools/agent-preflight.mjs inspect --route codex_native --json
 ```
 
-Agents should read `requested_route`, `declared_route`, `input_profile`,
-`route_readiness`, actor/safety, and `does_not_prove`, then follow the linked
-recovery procedure rather than inventing a device or permission claim.
+Agents should read `requested_route` and `declared_route`, then inspect the
+`input_profile`, `input_runtime`, and `route_readiness` check entries plus each
+next step's actor, safety, and `does_not_prove`. Follow the linked recovery
+procedure rather than inventing a device or permission claim.
 
 See the [agent operations runbook](docs/agent-operations.md) for the daily
 Codex/Claude workflow and human handoff gates.
