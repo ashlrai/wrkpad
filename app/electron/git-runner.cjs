@@ -110,7 +110,7 @@ function spawnGit(args, options = {}) {
 
 async function configuredFilterCommands(options = {}) {
   const result = await spawnGit([
-    'config', '--null', '--name-only', '--get-regexp', FILTER_CONFIG_PATTERN,
+    'config', '--local', '--null', '--name-only', '--get-regexp', FILTER_CONFIG_PATTERN,
   ], {
     cwd: options.cwd,
     env: options.env,

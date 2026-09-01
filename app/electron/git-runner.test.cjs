@@ -83,6 +83,21 @@ test('resolves only absolute platform-owned Git locations', () => {
   assert.equal(resolveGitExecutable('linux', () => false), null)
 })
 
+test('global Git LFS filters do not make an otherwise safe repository unusable', async (t) => {
+  const executable = testGitExecutable()
+  if (!executable) return t.skip('Git is unavailable on this test runner')
+  const root = mkdtempSync(path.join(tmpdir(), 'agent-board-global-filter-git-'))
+  const globalConfig = path.join(root, '.gitconfig')
+  const repo = path.join(root, 'repo')
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  require('node:fs').mkdirSync(repo)
+  rawGit(executable, repo, ['init', '--quiet'])
+  writeFileSync(globalConfig, '[filter "lfs"]\n\tclean = git-lfs clean -- %f\n\tsmudge = git-lfs smudge -- %f\n\tprocess = git-lfs filter-process\n')
+
+  const configured = await configuredFilterCommands({ cwd: repo, env: { ...process.env, HOME: root } })
+  assert.deepEqual(configured.keys, [])
+})
+
 test('read-only Git runner refuses repository fsmonitor, external diff, and textconv helpers', async (t) => {
   const executable = testGitExecutable()
   if (!executable) return t.skip('Git is unavailable on this test runner')
