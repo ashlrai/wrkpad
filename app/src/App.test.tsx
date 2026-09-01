@@ -241,6 +241,7 @@ describe('operator interface', () => {
     expect(screen.queryByText('No physical shortcut arrived')).toBeNull()
     act(() => vi.advanceTimersByTime(12_000))
     expect(screen.getByText('No physical shortcut arrived')).toBeTruthy()
+    expect(screen.getByText('Ashlr Agent Board Corrected')).toBeTruthy()
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Open recovery checklist' }))

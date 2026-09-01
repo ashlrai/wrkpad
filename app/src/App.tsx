@@ -817,7 +817,7 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
         </div>
         {showNoSignalRecovery && <div className="no-signal-recovery" role="status">
           <strong>No physical shortcut arrived</strong>
-          <p>Use the top-right rotary dial—not the bottom-left Bluetooth host selector. In Work Louder Input, set <b>Ashlr Agent Board</b> as the current keyboard profile and verify <b>Ashlr Daily</b>. If the board still emits nothing, stop this check and qualify the vendor firmware with Codex and every other board controller fully quit.</p>
+          <p>Use the top-right rotary dial—not the bottom-left Bluetooth host selector. In Work Louder Input, set <b>Ashlr Agent Board Corrected</b> as the current keyboard profile and verify <b>Ashlr Daily</b>. If the board still emits nothing, stop this check and qualify the vendor firmware with Codex and every other board controller fully quit.</p>
           <button type="button" onClick={onSetup}>Open recovery checklist</button>
         </div>}
         {exportPath && <div className="exported-receipt"><Check size={14} /><span>Receipt saved</span><code title={exportPath}>{exportPath}</code></div>}
