@@ -8,7 +8,7 @@ import {
   actions, controls, effortLevels, hardware, profileOrder, profiles,
   type ActionDefinition, type AgentSlotSummary, type ControlId, type ExecutionResult, type MissionControlSnapshot, type PhysicalSignalEnvelope, type ProfileId, type SystemStatus, type WorkspaceSnapshot,
 } from './board'
-import { agentProviderLabel, agentVisibleStateLabel } from './agent-accessibility'
+import { agentProviderLabel, agentStateClassName, agentStateLabels, agentStateLegendOrder, agentVisibleStateLabel } from './agent-accessibility'
 import AttentionDeck from './components/AttentionDeck'
 import FleetBrief from './components/FleetBrief'
 import { expectedSignalsAfter, flightAcceptance, flightStepComplete, stepsForVariant, type FlightEvent, type FlightVariant } from './flight-check'
@@ -692,7 +692,7 @@ function SetupView({ status, onOperate, onFlightCheck }: { status: SystemStatus;
         <div className="hardware-note"><Mic2 size={18} /><p><strong>Mic is one cap, two switches.</strong> The visible wide key spans ACT10 + ACT11. Never give its halves different actions.</p></div>
         <div className="hardware-note"><ShieldCheck size={18} /><p><strong>Freeze firmware during acceptance.</strong> If Input offers an update, defer it until the active profile is backed up and a separate firmware qualification is planned.</p></div>
         <div className="hardware-note"><RotateCcw size={18} /><p><strong>The bottom-left circle is not a key.</strong> It is the firmware-owned haptic selector for three Bluetooth host profiles.</p></div>
-        <div className="rgb-legend" aria-label="Black-opaque state language"><span className="eyebrow">BLACK-OPAQUE STATE LANGUAGE</span><div><i className="error" />Error <i className="waiting" />Needs you <i className="thinking" />Working <i className="done" />Ready to review <i className="idle" />Idle <i className="off" />Available</div><small>The screen is the complete legend. Black caps use edge and underglow only after lighting transport is qualified; a frosted hero cap is optional.</small></div>
+        <div className="rgb-legend" aria-label="Black-opaque state language"><span className="eyebrow">BLACK-OPAQUE STATE LANGUAGE</span><div>{agentStateLegendOrder.map((state) => <span key={state}><i className={agentStateClassName(state)} />{agentStateLabels[state]}{' '}</span>)}</div><small>The screen is the complete legend. Black caps use edge and underglow only after lighting transport is qualified; a frosted hero cap is optional.</small></div>
         <button type="button" className="operate-button" onClick={onFlightCheck}>Run Flight Check <ChevronRight size={16} /></button>
         <button type="button" className="operate-button secondary" onClick={onOperate}>Return to board</button>
       </aside>

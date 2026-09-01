@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require('electron')
+const { app, BrowserWindow, nativeImage } = require('electron')
 const { mkdir, writeFile } = require('node:fs/promises')
 const path = require('node:path')
 
@@ -9,6 +9,39 @@ const rendererPath = path.join(__dirname, '..', 'dist-renderer', 'index.html')
 const outputPath = path.join(__dirname, '..', '..', 'docs', 'assets', 'agent-board-public-demo.png')
 
 app.commandLine.appendSwitch('force-device-scale-factor', '1')
+
+function compareImages(candidate, existing) {
+  const candidateSize = candidate.getSize()
+  const existingSize = existing.getSize()
+  if (candidateSize.width !== existingSize.width || candidateSize.height !== existingSize.height) {
+    return { equivalent: false, changedPixels: null, maximumChannelDelta: null }
+  }
+
+  const candidatePixels = candidate.toBitmap()
+  const existingPixels = existing.toBitmap()
+  let changedPixels = 0
+  let maximumChannelDelta = 0
+
+  for (let index = 0; index < candidatePixels.length; index += 4) {
+    let pixelDelta = 0
+    for (let channel = 0; channel < 4; channel += 1) {
+      pixelDelta = Math.max(pixelDelta, Math.abs(candidatePixels[index + channel] - existingPixels[index + channel]))
+    }
+    if (pixelDelta > 0) {
+      changedPixels += 1
+      maximumChannelDelta = Math.max(maximumChannelDelta, pixelDelta)
+    }
+  }
+
+  // Chromium can move a tiny fraction of antialiasing values by a few levels
+  // between identical headless captures. Preserve the reviewed asset for that
+  // noise, while still replacing it for any visible renderer change.
+  return {
+    equivalent: changedPixels <= 4096 && maximumChannelDelta <= 4,
+    changedPixels,
+    maximumChannelDelta,
+  }
+}
 
 async function capture() {
   const window = new BrowserWindow({
@@ -27,7 +60,11 @@ async function capture() {
   })
 
   await window.loadFile(rendererPath, { query: { documentationFixture: 'public' } })
-  await window.webContents.insertCSS('* { animation: none !important; transition: none !important; caret-color: transparent !important; }')
+  await window.webContents.insertCSS(`
+    * { animation: none !important; transition: none !important; caret-color: transparent !important; }
+    body { min-height: 0 !important; }
+    #root, .app-shell { min-height: calc(100vh - 44px) !important; }
+  `)
   const fixtureEvidence = await window.webContents.executeJavaScript(`
     (async () => {
       await document.fonts.ready;
@@ -51,13 +88,25 @@ async function capture() {
     throw new Error(`Public fixture validation failed: ${JSON.stringify(fixtureEvidence)}`)
   }
 
-  window.setContentSize(width, Math.max(minimumHeight, Math.min(maximumHeight, fixtureEvidence.contentHeight)))
+  if (fixtureEvidence.contentHeight > maximumHeight) {
+    throw new Error(`Public fixture height ${fixtureEvidence.contentHeight}px exceeds the ${maximumHeight}px capture limit`)
+  }
+
+  const captureHeight = Math.max(minimumHeight, fixtureEvidence.contentHeight)
+  window.setContentSize(width, captureHeight)
   await new Promise((resolve) => setTimeout(resolve, 250))
+  const finalContentHeight = await window.webContents.executeJavaScript('Math.ceil(document.documentElement.scrollHeight)')
+  if (finalContentHeight > captureHeight) {
+    throw new Error(`Public fixture grew to ${finalContentHeight}px after layout and would be truncated at ${captureHeight}px`)
+  }
   const image = await window.webContents.capturePage()
   await mkdir(path.dirname(outputPath), { recursive: true })
-  await writeFile(outputPath, image.toPNG())
+  const existingImage = nativeImage.createFromPath(outputPath)
+  const comparison = existingImage.isEmpty() ? null : compareImages(image, existingImage)
+  const updated = comparison === null || !comparison.equivalent
+  if (updated) await writeFile(outputPath, image.toPNG())
   window.destroy()
-  return { outputPath, width: image.getSize().width, height: image.getSize().height }
+  return { outputPath, width: image.getSize().width, height: image.getSize().height, updated, comparison }
 }
 
 app.whenReady().then(async () => {

@@ -10,11 +10,6 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 - Source-SHA and SHA-256 manifest for explicitly unsigned preview artifacts.
 - Deterministic, action-disabled public screenshot harness with synthetic agent
   states and no local paths, device claims, or remote authority.
-
-## [0.1.0] - Unreleased
-
-### Added
-
 - Local-first Electron mission control for Creator Micro 2 on macOS.
 - Six-slot black-cap attention runway with provider, title, icon, text, and state color.
 - Stable `2 + 4` Agent-key geometry across five software lenses.
@@ -32,5 +27,4 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 - Signed, notarized, or published macOS artifacts.
 - Provider activation or physical user acceptance.
 
-[Unreleased]: https://github.com/ashlrai/wrkpad/compare/agent-board-v0.1.0...HEAD
-[0.1.0]: https://github.com/ashlrai/wrkpad/releases/tag/agent-board-v0.1.0
+[Unreleased]: https://github.com/ashlrai/wrkpad/commits/main/app

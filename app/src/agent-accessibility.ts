@@ -1,8 +1,14 @@
 import type { AgentSlotSummary } from './board'
 
-const stateLabel: Record<AgentSlotSummary['state'], string> = {
+export const agentStateLabels: Record<AgentSlotSummary['state'], string> = {
   off: 'Available', idle: 'Idle', unread: 'Ready to review', working: 'Working', needs_input: 'Needs you', error: 'Error',
 }
+
+export const agentStateLegendOrder: AgentSlotSummary['state'][] = [
+  'error', 'needs_input', 'working', 'unread', 'idle', 'off',
+]
+
+export const agentStateClassName = (state: AgentSlotSummary['state']) => state.replace('_', '-')
 
 export function agentProviderLabel(agent: AgentSlotSummary) {
   if (agent.provider === 'claude') return 'Claude Code'
@@ -12,5 +18,5 @@ export function agentProviderLabel(agent: AgentSlotSummary) {
 }
 
 export function agentVisibleStateLabel(agent: AgentSlotSummary) {
-  return agent.state === 'off' && agent.provider ? 'Inactive' : stateLabel[agent.state]
+  return agent.state === 'off' && agent.provider ? 'Inactive' : agentStateLabels[agent.state]
 }

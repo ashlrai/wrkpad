@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Activity, Bot, CheckCircle2, Circle, CircleAlert, CircleX, Command, Pause, Radio } from 'lucide-react'
-import { agentProviderLabel, agentVisibleStateLabel } from '../agent-accessibility'
+import { agentProviderLabel, agentStateClassName, agentStateLabels, agentStateLegendOrder, agentVisibleStateLabel } from '../agent-accessibility'
 import type { AgentSlotSummary } from '../board'
 
 function isUrgent(state: AgentSlotSummary['state']) {
@@ -81,12 +81,7 @@ export default function AttentionDeck({ agents, selectedSlot, source, onSelect, 
     </div>
     <div className="screen-legend" aria-label="Agent state legend for opaque keycaps">
       <span className="legend-title">BLACK-CAP LEGEND</span>
-      <span><i className="error" />Error</span>
-      <span><i className="needs-input" />Needs you</span>
-      <span><i className="working" />Working</span>
-      <span><i className="unread" />Ready to review</span>
-      <span><i className="idle" />Idle</span>
-      <span><i className="off" />Available</span>
+      {agentStateLegendOrder.map((state) => <span key={state}><i className={agentStateClassName(state)} />{agentStateLabels[state]}</span>)}
       <small>Screen is authoritative now; edge lighting follows only after hardware qualification.</small>
     </div>
   </section>
