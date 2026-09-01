@@ -76,8 +76,11 @@ proof of source identity, review, provenance, signing, or release.
 4. Have the operator trust only the exact wrkpad Codex hooks in `/hooks` and run
    one disposable Codex and Claude Code receipt. Claude Desktop chats do not
    expose the Claude Code hook lifecycle.
-5. Have the operator select `Ashlr Agent Board Corrected` / `Ashlr Daily` in
-   Input and grant Input Monitoring. These are macOS/vendor UI actions.
+5. Have the operator use Input's **Set as current profile** action for `Ashlr
+   Agent Board Corrected`, verify `Ashlr Daily`, and grant Input Monitoring.
+   Inspect the read-only `input_profile` receipt, but do not treat it as board
+   synchronization. If a fresh stale/protected layer is reported, stop: do not
+   delete or transform `KV_OAI_*`; use the Input-only recovery procedure.
 6. Arm Daily Flight Check. Wait for the screen to say actions are suppressed,
    then have the operator complete all 19 gestures on the physical board.
 7. Operate from Agent Board. Slot selection may foreground Codex Desktop or

@@ -7,6 +7,7 @@ const { ACTION_SPECS, executeSpec } = require('./action-registry.cjs')
 const { detectCreatorMicro2 } = require('./creator-micro-identity.cjs')
 const { inspectCodexMicroLogs } = require('./codex-micro-diagnostics.cjs')
 const { inspectInputProfile } = require('./input-profile-diagnostics.cjs')
+const { inspectInputRuntime } = require('./input-runtime-diagnostics.cjs')
 const { writeGeneratedProfile } = require('./input-profile-generator.cjs')
 const { holdSatisfied } = require('./approval-guard.cjs')
 const { evaluateFlightSignals } = require('./flight-receipt.cjs')
@@ -138,6 +139,7 @@ ipcMain.handle('board:getStatus', trustedIpc(async () => {
     boardConnected: Boolean(board),
     inputInstalled: existsSync('/Applications/Input.app'),
     inputProfile: inspectInputProfile(home, board?.storageId),
+    inputRuntime: inspectInputRuntime(home),
     inputMonitoring: 'unverified',
     codex,
     nativeCodexMicro: inspectCodexMicroLogs(home),
@@ -148,6 +150,12 @@ ipcMain.handle('board:getStatus', trustedIpc(async () => {
     shortcutCount: shortcutRegistrations.filter((registration) => registration.registered).length,
     shortcutRegistrations,
     workspaceSnapshot,
+    runtime: {
+      appVersion: app.getVersion(),
+      packaged: app.isPackaged,
+      executablePath: process.execPath,
+      appPath: app.getAppPath(),
+    },
   }
 }))
 ipcMain.handle('board:getMissionControl', trustedIpc(() => missionControl()))

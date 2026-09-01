@@ -73,6 +73,7 @@ export interface SystemStatus {
   boardConnected: boolean
   inputInstalled: boolean
   inputProfile: InputProfileStatus
+  inputRuntime: InputRuntimeStatus
   inputMonitoring: 'unverified'
   codex: boolean
   nativeCodexMicro: CodexNativeMicroStatus
@@ -83,6 +84,7 @@ export interface SystemStatus {
   shortcutCount: number
   shortcutRegistrations: ShortcutRegistration[]
   workspaceSnapshot: WorkspaceSnapshot | null
+  runtime: RuntimeIdentity | null
 }
 
 export interface InputProfileStatus {
@@ -90,6 +92,21 @@ export interface InputProfileStatus {
   activeProfile: string | null
   activeLayer: string | null
   encoderDirection: 'correct' | 'reversed' | 'unrecognized' | 'unavailable'
+}
+
+export interface InputRuntimeStatus {
+  status: 'profile_layer_mismatch' | 'not_observed' | 'log_missing' | 'log_unsafe' | 'log_unavailable'
+  profileIndex: number | null
+  layerIndex: number | null
+  observedAt: string | null
+  fresh: boolean
+}
+
+export interface RuntimeIdentity {
+  appVersion: string
+  packaged: boolean
+  executablePath: string
+  appPath: string
 }
 
 export const correctedInputProfileObservedForVariant = (profile: InputProfileStatus, variant: 'daily' | 'diagnostic'): boolean =>

@@ -17,10 +17,11 @@ import './App.css'
 const initialStatus: SystemStatus = {
   boardConnected: false, inputInstalled: false, inputMonitoring: 'unverified',
   inputProfile: { cacheStatus: 'missing', activeProfile: null, activeLayer: null, encoderDirection: 'unavailable' },
+  inputRuntime: { status: 'not_observed', profileIndex: null, layerIndex: null, observedAt: null, fresh: false },
   codex: false, claude: false, ashlr: false,
   nativeCodexMicro: { status: 'not_observed', observedAt: null, detail: 'No recent native Codex Creator Micro connection evidence was found.' },
   boardRoute: 'unknown',
-  workspace: '/Choose a working directory', shortcutCount: 0, shortcutRegistrations: [], workspaceSnapshot: null,
+  workspace: '/Choose a working directory', shortcutCount: 0, shortcutRegistrations: [], workspaceSnapshot: null, runtime: null,
 }
 const initialMission: MissionControlSnapshot = {
   schemaVersion: 1, observedAt: new Date(0).toISOString(), agentSource: 'unavailable', fleetSource: 'unavailable',
@@ -291,7 +292,7 @@ function App() {
   const startFlightCheck = async (variant: 'daily' | 'diagnostic' = 'daily') => {
     if (status.boardRoute === 'codex_native') {
       setView('setup')
-      internalResult('Native verification is separate', 'The Ashlr Flight Check validates only the Work Louder Input shortcut layer. Verify Codex Native in Codex Settings → Creator Micro with Input quit.')
+      internalResult('Native verification is separate', 'The Ashlr Flight Check validates only the Work Louder Input shortcut layer. Quit Work Louder Input and quit this Agent Board app. Open Codex alone, then verify Settings → Creator Micro.')
       return
     }
     if (!correctedInputProfileObservedForVariant(status.inputProfile ?? initialStatus.inputProfile, variant)) {
@@ -773,7 +774,7 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
   const showNoSignalRecovery = noSignalRecoveryNeeded(active, startedAt, events, clock)
   return <section className="flight-view">
     <div className="flight-hero">
-      <div><span className="eyebrow">HARDWARE ACCEPTANCE / {phaseLabel}</span><h2>{nativeRoute ? 'Flight Check belongs to Ashlr Layer.' : complete ? 'Every signal is accounted for.' : blockedCompletion ? 'Acceptance is blocked by evidence.' : active ? 'Prove the physical path.' : phase === 'arming' ? 'Establishing the safety barrier…' : 'Run a safe Flight Check.'}</h2><p>{nativeRoute ? 'This receipt validates Work Louder Input shortcuts, not Codex’s native keys or lighting. Choose Ashlr Layer to run it; verify Codex Native in Codex Settings → Creator Micro.' : 'Press the real board controls only after the app confirms Actions Suppressed. The board twin and mouse clicks do not count; ordinary keyboard use can generate the same shortcuts, so keep your hands on the board during acceptance.'}</p></div>
+      <div><span className="eyebrow">HARDWARE ACCEPTANCE / {phaseLabel}</span><h2>{nativeRoute ? 'Flight Check belongs to Ashlr Layer.' : complete ? 'Every signal is accounted for.' : blockedCompletion ? 'Acceptance is blocked by evidence.' : active ? 'Prove the physical path.' : phase === 'arming' ? 'Establishing the safety barrier…' : 'Run a safe Flight Check.'}</h2><p>{nativeRoute ? 'This receipt validates Work Louder Input shortcuts, not Codex’s native keys or lighting. Quit Work Louder Input and quit this Agent Board app. Open Codex alone, then verify Settings → Creator Micro.' : 'Press the real board controls only after the app confirms Actions Suppressed. The board twin and mouse clicks do not count; ordinary keyboard use can generate the same shortcuts, so keep your hands on the board during acceptance.'}</p></div>
       <div className={complete ? 'flight-score complete' : 'flight-score'}><strong>{completedSignals}<small>/{expectedSignals}</small></strong><span>{completedGestures}/19 gestures</span><i style={{ '--flight-progress': `${progress}%` } as React.CSSProperties} /></div>
     </div>
 
@@ -817,7 +818,7 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
         </div>
         {showNoSignalRecovery && <div className="no-signal-recovery" role="status">
           <strong>No physical shortcut arrived</strong>
-          <p>Use the top-right rotary dial—not the bottom-left Bluetooth host selector. In Work Louder Input, set <b>Ashlr Agent Board Corrected</b> as the current keyboard profile and verify <b>Ashlr Daily</b>. If the board still emits nothing, stop this check and qualify the vendor firmware with Codex and every other board controller fully quit.</p>
+          <p>Use the top-right rotary dial—not the bottom-left Bluetooth host selector. End this check, quit competing board controllers, then open Work Louder Input alone. Use <b>Set as current profile</b> for <b>Ashlr Agent Board Corrected</b>, verify <b>Ashlr Daily</b>, fully relaunch Input, and run a fresh check. Do not jump to firmware from one zero-signal receipt.</p>
           <button type="button" onClick={onSetup}>Open recovery checklist</button>
         </div>}
         {exportPath && <div className="exported-receipt"><Check size={14} /><span>Receipt saved</span><code title={exportPath}>{exportPath}</code></div>}
@@ -834,24 +835,28 @@ function SetupView({ status, routeSaving, routeError, onRouteChange, onOperate, 
   const [repairResult, setRepairResult] = useState<ProfileRepairResult | null>(null)
   const nativeCodexMicro = status.nativeCodexMicro ?? initialStatus.nativeCodexMicro
   const inputProfile = status.inputProfile ?? initialStatus.inputProfile
+  const inputRuntime = status.inputRuntime ?? initialStatus.inputRuntime
+  const runtimeMismatch = inputRuntime.status === 'profile_layer_mismatch' && inputRuntime.fresh
   const observedInputProfile = inputProfile.activeProfile && inputProfile.activeLayer
     ? `${inputProfile.activeProfile} · ${inputProfile.activeLayer}`
     : inputProfile.activeProfile
-  const profileState = inputProfile.encoderDirection === 'correct'
-    ? `${observedInputProfile ?? 'Input profile'} · dial directions ready for physical check`
+  const profileState = runtimeMismatch
+    ? `Input runtime reported profile ${inputRuntime.profileIndex} · layer ${inputRuntime.layerIndex} unresolved`
+    : inputProfile.encoderDirection === 'correct'
+    ? `${observedInputProfile ?? 'Input profile'} · cached mapping observed`
     : inputProfile.encoderDirection === 'reversed'
       ? `${observedInputProfile ?? 'Input profile'} · dial directions reversed`
       : observedInputProfile
         ? `${observedInputProfile} · dial mapping unverified`
         : 'Current keyboard profile requires physical verification'
   const correctedProfileObserved = correctedInputProfileObserved(inputProfile)
-  const steps = [
+  const steps: Array<{ number: string; title: string; detail: string; state: string; ready: boolean; observed?: boolean }> = [
     { number: '01', title: 'Connect the board', detail: 'USB-C is the best commissioning path. Bluetooth keyboard and trackpad can remain connected.', state: status.boardConnected ? 'Detected as Creator Micro 2' : 'Waiting for USB device', ready: status.boardConnected },
     { number: '02', title: 'Declare the expected board route', detail: 'Codex Native and the Ashlr shortcut layer are separate operating contracts. The declaration never changes the device.', state: status.boardRoute === 'codex_native' ? 'Codex Native declared · not detected' : status.boardRoute === 'ashlr_layer' ? 'Ashlr Layer declared · not detected' : 'No route selected', ready: status.boardRoute !== 'unknown' },
     { number: '03', title: 'Install Work Louder Input', detail: 'The signed vendor app owns profiles, layers, shortcuts, firmware updates, and the radial menu.', state: status.inputInstalled ? 'Input.app installed' : 'Input.app not found', ready: status.inputInstalled },
     { number: '04', title: 'Verify Input Monitoring', detail: 'In System Settings → Privacy & Security → Input Monitoring, allow the app that should receive board events. Only you can grant this.', state: 'Human verification required', ready: false },
-    { number: '05', title: 'Set the live keyboard profile', detail: status.boardRoute === 'codex_native' ? 'Codex Native requires its own connection and operator verification; Agent Board does not infer native RGB or thread ownership.' : inputProfile.encoderDirection === 'reversed' ? 'The read-only Input cache shows the known clockwise/counterclockwise inversion. Import and activate the uniquely named corrected profile through Input before restarting Flight Check.' : correctedProfileObserved ? 'The read-only cache confirms Ashlr Agent Board Corrected, Ashlr Daily, and the corrected encoder order. A fresh physical Flight Check is still required.' : 'In Input, choose Ashlr Agent Board Corrected, use its link control to set it as the current keyboard profile, and verify Ashlr Daily. A correct encoder-only receipt under another profile name is not enough; cache observation does not prove the board write or physical route.', state: status.boardRoute === 'codex_native' ? (nativeCodexMicro.status === 'firmware_rpc_missing' ? `Qualification required: v.oai.rgbcfg returned RPC 404${nativeCodexMicro.fresh ? ' recently' : ' in historical evidence'}` : nativeCodexMicro.status === 'connected' && nativeCodexMicro.fresh ? 'Recent native connection evidence found' : 'Native board state unverified') : profileState, ready: status.boardRoute === 'ashlr_layer' && correctedProfileObserved },
-    { number: '06', title: 'Verify the declared physical route', detail: status.boardRoute === 'codex_native' ? 'Verify Codex Native in Codex Settings → Creator Micro after Input is fully quit.' : 'Run all 19 daily gestures. The first gesture uses the top-right rotary dial; the bottom-left circle only selects a Bluetooth host.', state: status.boardRoute === 'codex_native' ? 'Manual Codex verification required' : `${status.shortcutCount}/${hardware.bindableSignals} desktop endpoints registered · physical layer unverified`, ready: false },
+    { number: '05', title: "Inspect Input's cached profile", detail: status.boardRoute === 'codex_native' ? 'Codex Native requires its own connection and operator verification; Agent Board does not infer native RGB or thread ownership.' : runtimeMismatch ? `Input logged an unresolved profile ${inputRuntime.profileIndex} / layer ${inputRuntime.layerIndex} combination. This is runtime evidence, not a device write receipt. Complete the Input-only reconciliation below before another Flight Check.` : inputProfile.encoderDirection === 'reversed' ? 'The read-only Input cache shows the known clockwise/counterclockwise inversion. Import and activate the uniquely named corrected profile through Input before restarting Flight Check.' : correctedProfileObserved ? 'Input’s header is only the profile being edited. The cache-current profile and the profile physically emitting are separate states; a fresh Flight Check is still required.' : 'In Input, choose Ashlr Agent Board Corrected, use Set as current profile, and verify Ashlr Daily. A correct encoder-only receipt under another profile name is not enough; cache observation does not prove the board write or physical route.', state: status.boardRoute === 'codex_native' ? (nativeCodexMicro.status === 'firmware_rpc_missing' ? `Qualification required: v.oai.rgbcfg returned RPC 404${nativeCodexMicro.fresh ? ' recently' : ' in historical evidence'}` : nativeCodexMicro.status === 'connected' && nativeCodexMicro.fresh ? 'Recent native connection evidence found' : 'Native board state unverified') : correctedProfileObserved && !runtimeMismatch ? 'Cache observed · Ashlr Agent Board Corrected · Ashlr Daily · device sync unproven' : profileState, ready: false, observed: status.boardRoute === 'ashlr_layer' && correctedProfileObserved && !runtimeMismatch },
+    { number: '06', title: 'Verify the declared physical route', detail: status.boardRoute === 'codex_native' ? 'Quit Work Louder Input and quit this Agent Board app. Open Codex alone, then verify Settings → Creator Micro.' : 'Run all 19 daily gestures. The first gesture uses the top-right rotary dial; the bottom-left circle only selects a Bluetooth host.', state: status.boardRoute === 'codex_native' ? 'Manual Codex verification required' : `${status.shortcutCount}/${hardware.bindableSignals} desktop endpoints registered · physical layer unverified`, ready: false },
   ]
   const repairNeeded = status.boardRoute === 'ashlr_layer' && !correctedProfileObserved
   const createRepairProfile = async () => {
@@ -875,7 +880,7 @@ function SetupView({ status, routeSaving, routeError, onRouteChange, onOperate, 
     <BoardRouteRail route={status.boardRoute} saving={routeSaving} error={routeError} onChange={onRouteChange} />
     <div className="setup-grid">
       <div className="setup-steps">
-        {steps.map((step) => <article key={step.number} className={step.ready ? 'setup-step ready' : 'setup-step'}>
+        {steps.map((step) => <article key={step.number} className={step.ready ? 'setup-step ready' : step.observed ? 'setup-step observed' : 'setup-step'}>
           <span className="step-number">{step.number}</span><div><h3>{step.title}</h3><p>{step.detail}</p><strong><i />{step.state}</strong></div>
         </article>)}
         {repairNeeded && <section className="profile-repair" aria-labelledby="profile-repair-title">
@@ -891,6 +896,10 @@ function SetupView({ status, routeSaving, routeError, onRouteChange, onOperate, 
           {repairResult?.status === 'failed' && <div className="profile-repair-result failed" role="alert"><strong>Repair not created.</strong><p>{repairResult.message}</p></div>}
           {repairResult?.status === 'canceled' && <div className="profile-repair-result" role="status"><p>{repairResult.message}</p></div>}
         </section>}
+        {status.boardRoute === 'ashlr_layer' && runtimeMismatch && <section className="profile-repair input-reconciliation" aria-labelledby="input-reconciliation-title">
+          <div><span className="eyebrow">INPUT RECONCILIATION / NO DEVICE CLAIM</span><h3 id="input-reconciliation-title">Clear the stale runtime layer safely.</h3></div>
+          <p>Input reported profile <b>{inputRuntime.profileIndex}</b> with layer <b>{inputRuntime.layerIndex}</b>, but that combination was not resolvable. End Flight Check; fully quit Agent Board, Codex, and other board controllers; power-cycle the board; then open Input alone. Use <b>Set as current profile</b> for <b>Ashlr Agent Board Corrected</b>, select <b>Ashlr Daily</b>, fully relaunch Input, and confirm persistence before reopening this exact receiver for a fresh check. Do not reset, delete a protected layer, or flash firmware from this receipt.</p>
+        </section>}
       </div>
       <aside className="hardware-truth">
         <span className="eyebrow">PHYSICAL CONTRACT</span><h3>{hardware.name}</h3>
@@ -899,8 +908,9 @@ function SetupView({ status, routeSaving, routeError, onRouteChange, onOperate, 
         <div className="hardware-note"><ShieldCheck size={18} /><p>{status.boardRoute === 'codex_native' ? <><strong>Native firmware changes require a guarded qualification.</strong> Back up Input, quit Codex, use only a stable vendor candidate, then re-prove both native RPCs and every control.</> : <><strong>Freeze firmware during acceptance for Ashlr Layer.</strong> Defer it until the active profile is backed up and a separate qualification is planned.</>}</p></div>
         <div className="hardware-note"><RotateCcw size={18} /><p><strong>The bottom-left circle is not a key.</strong> It is the firmware-owned haptic selector for three Bluetooth host profiles.</p></div>
         <div className="rgb-legend" aria-label="Black-opaque state language"><span className="eyebrow">BLACK-OPAQUE STATE LANGUAGE</span><div>{agentStateLegendOrder.map((state) => <span key={state}><i className={agentStateClassName(state)} />{agentStateLabels[state]}{' '}</span>)}</div><small>The screen is the complete legend. Black caps use edge and underglow only after lighting transport is qualified; a frosted hero cap is optional.</small></div>
+        {status.runtime && <div className="receiver-identity"><span className="eyebrow">CURRENT RECEIVER BUILD</span><strong>{status.runtime.packaged ? 'Packaged' : 'Development'} · v{status.runtime.appVersion}</strong><code title={status.runtime.executablePath}>{status.runtime.executablePath}</code><small title={status.runtime.appPath}>{status.runtime.appPath}</small><p>This identifies the receiver process only; it does not prove macOS permission, shortcut receipt, signing, or physical acceptance.</p></div>}
         {status.boardRoute === 'codex_native'
-          ? <div className="native-manual-gate"><ShieldCheck size={16} /><span><strong>Manual native gate</strong> Quit Work Louder Input, then verify the connection in Codex Settings → Creator Micro. Agent Board cannot perform or accept that check.</span></div>
+          ? <div className="native-manual-gate"><ShieldCheck size={16} /><span><strong>Manual native gate</strong> Quit Work Louder Input and quit this Agent Board app. Open Codex alone, then verify Settings → Creator Micro. Agent Board cannot perform or accept that check.</span></div>
           : <button type="button" className="operate-button" onClick={onFlightCheck}>Run Ashlr Flight Check <ChevronRight size={16} /></button>}
         <button type="button" className="operate-button secondary" onClick={onOperate}>Return to board</button>
       </aside>

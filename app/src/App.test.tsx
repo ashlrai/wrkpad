@@ -10,6 +10,17 @@ const correctedInputProfile = {
   encoderDirection: 'correct' as const,
 }
 
+const initialUnavailableMission = () => ({
+  schemaVersion: 1 as const,
+  observedAt: new Date().toISOString(),
+  agentSource: 'unavailable' as const,
+  fleetSource: 'unavailable' as const,
+  agents: Array.from({ length: 6 }, (_, index) => ({ slot: index + 1, provider: null, state: 'off' as const, title: 'Available slot', updatedAt: null })),
+  fleet: null,
+  unassignedActiveSessions: 0,
+  operatorNotices: [],
+})
+
 afterEach(() => {
   cleanup()
   vi.useRealTimers()
@@ -73,9 +84,12 @@ describe('operator interface', () => {
     expect(screen.getByRole('button', { name: 'Disabled in Codex Native' }).hasAttribute('disabled')).toBe(true)
     fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
     expect(screen.queryByRole('button', { name: /Run Ashlr Flight Check/i })).toBeNull()
-    expect(screen.getByText(/Manual native gate/i)).toBeTruthy()
+    const nativeGate = screen.getByText(/Manual native gate/i).closest('.native-manual-gate')
+    expect(nativeGate?.textContent).toContain('Quit Work Louder Input and quit this Agent Board app')
+    expect(nativeGate?.textContent).toContain('Open Codex alone')
     fireEvent.click(screen.getByRole('tab', { name: 'Flight Check' }))
     expect(screen.getByRole('heading', { name: 'Flight Check belongs to Ashlr Layer.' })).toBeTruthy()
+    expect(screen.getByText(/Quit Work Louder Input and quit this Agent Board app/i)).toBeTruthy()
     expect(setFlightCheck).not.toHaveBeenCalled()
     expect(requestAction).not.toHaveBeenCalled()
   })
@@ -161,6 +175,57 @@ describe('operator interface', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Flight Check' }))
     expect((screen.getByRole('button', { name: 'Daily profile' }) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByText(/requires Ashlr Agent Board Corrected, Ashlr Daily, and a corrected encoder receipt/i)).toBeTruthy()
+  })
+
+  it('keeps a cache match observational and exposes the exact local receiver build', async () => {
+    const executablePath = '/Applications/Ashlr Agent Board.app/Contents/MacOS/Ashlr Agent Board'
+    window.agentBoard = {
+      getStatus: vi.fn().mockResolvedValue({
+        boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
+        inputProfile: correctedInputProfile,
+        inputRuntime: { status: 'not_observed', profileIndex: null, layerIndex: null, observedAt: null, fresh: false },
+        runtime: { appVersion: '0.1.0', packaged: true, executablePath, appPath: '/Applications/Ashlr Agent Board.app/Contents/Resources/app.asar' },
+        codex: true, claude: true, ashlr: true, boardRoute: 'ashlr_layer', workspace: '/tmp', shortcutCount: 20,
+        shortcutRegistrations: [], workspaceSnapshot: null,
+      }),
+      getMissionControl: vi.fn().mockResolvedValue(initialUnavailableMission()),
+      focusAgentSlot: vi.fn(), setProfile: vi.fn(), setFlightCheck: vi.fn(), requestAction: vi.fn(), confirmAction: vi.fn(),
+      beginHold: vi.fn(), cancelHold: vi.fn(), chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(), onControl: vi.fn(() => () => {}),
+    } as unknown as NonNullable<typeof window.agentBoard>
+
+    render(<App />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
+    const cacheState = await screen.findByText(/Cache observed · Ashlr Agent Board Corrected/i)
+    expect(cacheState.closest('article')?.classList.contains('observed')).toBe(true)
+    expect(cacheState.closest('article')?.classList.contains('ready')).toBe(false)
+    expect(cacheState.textContent).toContain('device sync unproven')
+    expect(screen.queryByText('Set the live keyboard profile')).toBeNull()
+    expect(screen.getByText(executablePath)).toBeTruthy()
+    expect(screen.getByText(/identifies the receiver process only/i)).toBeTruthy()
+  })
+
+  it('turns a fresh Input profile-layer error into a safe reconciliation path', async () => {
+    window.agentBoard = {
+      getStatus: vi.fn().mockResolvedValue({
+        boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
+        inputProfile: correctedInputProfile,
+        inputRuntime: { status: 'profile_layer_mismatch', profileIndex: 2, layerIndex: 1, observedAt: '2026-09-01T19:33:00.000Z', fresh: true },
+        runtime: null, codex: true, claude: true, ashlr: true, boardRoute: 'ashlr_layer', workspace: '/tmp', shortcutCount: 20,
+        shortcutRegistrations: [], workspaceSnapshot: null,
+      }),
+      getMissionControl: vi.fn().mockResolvedValue(initialUnavailableMission()),
+      focusAgentSlot: vi.fn(), setProfile: vi.fn(), setFlightCheck: vi.fn(), requestAction: vi.fn(), confirmAction: vi.fn(),
+      beginHold: vi.fn(), cancelHold: vi.fn(), chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(), onControl: vi.fn(() => () => {}),
+    } as unknown as NonNullable<typeof window.agentBoard>
+
+    render(<App />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
+    expect(await screen.findByText('Clear the stale runtime layer safely.')).toBeTruthy()
+    expect(screen.getByText(/Input reported profile/i).textContent).toContain('layer 1')
+    expect(screen.getByText(/Do not reset, delete a protected layer, or flash firmware/i)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Create corrected Input profile' })).toBeNull()
+    const runtimeState = screen.getByText(/Input runtime reported profile 2/i)
+    expect(runtimeState.closest('article')?.classList.contains('ready')).toBe(false)
   })
 
   it('surfaces the sanitized active Input profile and blocks a reversed dial mapping', async () => {

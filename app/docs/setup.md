@@ -93,13 +93,18 @@ The daily layer has 19 gestures: six Agent keys, six visible action caps, four j
 The Setup screen's `20/20 desktop endpoints registered` result proves only that Electron registered all expected global shortcuts. It does not inspect Input's active profile, prove that the mapping reached the board, or complete this setup step. The ordered physical Flight Check is the acceptance gate for the active layer.
 
 Agent Board also reads a bounded, fixed-path copy of Input's Creator Micro 2
-cache and reports only the sanitized active profile, layer, and encoder health.
+cache and reports only the sanitized active profile, its layer when uniquely
+observable, and encoder health.
 That receipt can identify the known reversed dial mapping, but it still does not
 prove Input synchronized the device or that the firmware emitted a gesture.
 
-The profile shown in Input's header is the profile being edited, not necessarily
-the current keyboard profile. Open the profile chooser and use **Set as current
-profile** for **Ashlr Agent Board Corrected**, then verify its **Ashlr Daily** layer. Input
+Treat these as three separate states: the profile shown in Input's header for
+editing, the profile marked current in Input and its cache, and the profile/layer
+actually synchronized and emitting on hardware. The cache diagnostic can
+support the second state; only Flight Check supports the third.
+
+Open the profile chooser and use **Set as current profile** for **Ashlr Agent
+Board Corrected**, then verify its **Ashlr Daily** layer. Input
 serializes encoder positions as clockwise, counterclockwise, press; this differs
 from the user-facing left, right, press action list.
 
@@ -144,6 +149,13 @@ or activate the result, send HID packets, or write firmware.
 | Ashlr Layer daily | Input, Agent Board, ChatGPT/Codex, Claude Code, Claude Desktop, and cmux | Input emits shortcuts; Agent Board receives them | Cross-provider shortcuts and hook state; no native Codex RGB claim |
 | Codex Native qualification | Codex alone; Input and Agent Board device routing fully quit | Codex vendor protocol | Native RPC and lighting qualification only |
 | Firmware qualification | Signed Input app only after all other board/HID controllers quit | Input updater | Download, install, restored profile, and post-update acceptance remain separate |
+
+Declaring `ashlr_layer` does not disable Codex's native device client. Daily
+co-presence supports shortcut operation only and is not native ownership or RGB
+evidence. For native qualification, fully quit Input and Agent Board and leave
+Codex as the sole intended controller. For Input profile or firmware mutation,
+fully quit Codex and Agent Board and leave signed Input as the sole intended
+controller. Process absence is still not cryptographic proof of exclusivity.
 
 Claude Code hook events can populate the runway after the guarded
 [`wrkpad` hook setup](../../docs/hook-setup.md). Claude Desktop chats are not

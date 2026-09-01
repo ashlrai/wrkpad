@@ -22,6 +22,10 @@ These instructions extend the repository-root `AGENTS.md` for files under
   navigation denial, sandboxing, context isolation, and schema validation.
 - New local writes must use new private files or an existing guarded atomic
   lifecycle. Never mutate Input's database/cache or the device.
+- Derive the cache-current profile only from `activeProfileId`. A multi-layer
+  cache has no uniquely observable active layer and must remain null/manual.
+  UI and diagnostics must distinguish editor selection, cache-current state,
+  device synchronization, and physical acceptance.
 - Do not add prompt submission, exact task/pane claims, or one-press
   consequential actions.
 - Add text/icon state for every color state and keyboard-accessible behavior for

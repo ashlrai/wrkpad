@@ -31,6 +31,22 @@ Bluetooth keyboard and trackpad traffic is separate. USB presence still does not
 
 All 20 desktop shortcuts must register even though daily use emits 19 signals; ACT11 remains `None` on the daily layer.
 
+## Input shows the right profile, but the board is on another layer
+
+Input exposes three different states: the profile shown in the editor, the
+profile marked current through **Set as current profile**, and the profile/layer
+actually emitting from the board. They are not interchangeable. A successful
+import or `layout updated` message proves neither current-profile activation nor
+physical emission.
+
+If Agent Board reports a fresh unresolved profile/layer combination, end Flight
+Check and fully quit Agent Board, Codex, and every other board controller. Power
+cycle the board, open Input alone, use **Set as current profile** for **Ashlr
+Agent Board Corrected**, select **Ashlr Daily**, then fully quit and relaunch
+Input. Reopen the exact Agent Board receiver and run a fresh check. Do not reset,
+delete or transform a protected `KV_OAI_*` layer, or flash firmware from this
+receipt.
+
 If Flight Check receives zero raw signals, use the top-right black rotary dial.
 The top-left white control is the joystick and the bottom-left circle is the
 Bluetooth host selector. If the correct control still emits nothing, do not
@@ -49,7 +65,8 @@ simulate the shortcut from the keyboard:
 6. Quit any duplicate Agent Board process and reopen the exact intended build.
 7. Start a fresh check and confirm it still records `0` raw receipts.
 
-Only after those checks should firmware qualification be considered. Keep the
+Only after a fresh second check still receives zero signals should firmware
+qualification be considered. Keep the
 external profile backup and fully quit ChatGPT/Codex Desktop, Agent Board, and
 every other board/HID controller before the signed Input updater downloads or
 enters a bootloader.

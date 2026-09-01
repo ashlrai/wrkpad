@@ -15,6 +15,11 @@ agents. Keep it concise and keep provider-specific files pointed here.
 5. Choose the route explicitly: `ashlr_layer` for daily cross-provider use, or
    `codex_native` for exclusive native-firmware qualification. Never combine
    their readiness claims.
+6. For hardware/setup work, inspect `requested_route`, `declared_route`, and
+   `input_profile`. Never infer the current profile from Input's editor/header,
+   board synchronization from cache state, or physical acceptance from either.
+   Protected `KV_OAI_*` recovery is a human Input-only operation, never an agent
+   rewrite or deletion.
 
 ## Repository map
 

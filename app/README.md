@@ -66,7 +66,7 @@ npm run dev
 route-specific evidence using the shared repository contract. Append
 `-- --route codex_native` only for the separate native qualification route.
 
-Before pressing physical controls, follow [setup and Flight Check](docs/setup.md). Work Louder Input must emit the exact shortcuts expected by the app, and macOS Input Monitoring must be granted by the user.
+Before pressing physical controls, follow [setup and Flight Check](docs/setup.md). Work Louder Input must emit the exact shortcuts expected by the app, and macOS Input Monitoring must be granted by the user. Input's header is the edit target, not proof of the current keyboard profile; use **Set as current profile**, then require the read-only receipt and physical Flight Check.
 
 To populate the six slots with live Codex and Claude Code state, also complete
 the guarded [`wrkpad` service and hook setup](../docs/hook-setup.md). A configured

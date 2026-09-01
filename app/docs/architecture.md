@@ -32,10 +32,17 @@ Actions resolve through `electron/action-registry.cjs`; unknown IDs fail closed.
 
 The declared board route is a private local preference with only three values:
 `unknown`, `codex_native`, and `ashlr_layer`. It never changes device state.
-`electron/codex-micro-diagnostics.cjs` reads at most eight recent Codex log
-tails, each capped at 2 MiB, and projects only a reason-coded native state,
+`electron/codex-micro-diagnostics.cjs` reads at most four recent Codex log
+tails, each capped at 512 KiB, and projects only a reason-coded native state,
 timestamp, and fixed detail. Raw logs, private paths, task content, and unknown
 fields never cross IPC.
+
+The Input diagnostics use fixed Creator Micro 2 cache and log paths, reject
+symlinks, and cap each read at 512 KiB. Cache output contains only sanitized
+labels, `activeProfileId`, a uniquely observable single layer, and encoder
+classification. Runtime output contains only a bounded profile/layer index,
+timestamp, freshness, and reason code for the exact unresolved-combination
+signal. Neither diagnostic proves device synchronization or physical output.
 
 ### Local adapters
 
