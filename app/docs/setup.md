@@ -1,6 +1,8 @@
 # Setup and Flight Check
 
-Setup proves four different things: USB presence, macOS authority, shortcut configuration, and physical routing. Do not treat one as proof of the others.
+Setup proves six different things: USB presence, declared board route, native
+Codex firmware compatibility, macOS authority, shortcut configuration, and
+physical routing. Do not treat one as proof of the others.
 
 ## 1. Connect the board
 
@@ -12,21 +14,58 @@ npm run doctor
 
 Expected USB result: `Creator Micro 2 USB: Work Louder 303A:8298`. The board and Work Louder Input are required doctor checks. ChatGPT, Codex CLI, Claude Code, and Ashlr Hub are optional integrations: missing tools produce warnings but do not fail the doctor.
 
-The doctor is read-only and cannot grant permissions or change board configuration. `npm run doctor -- --json` includes `manualChecks` and a prioritized `nextAction`. Passing required checks does not prove Input Monitoring, the active Input layer, or the physical Flight Check; those remain manual acceptance gates. If USB is absent, use [troubleshooting](troubleshooting.md#usb-device-is-not-detected).
+The doctor is read-only and cannot grant permissions or change board configuration. `npm run doctor -- --json` includes `manualChecks`, route-specific `modeGuidance`, and a prioritized `nextAction`. It inspects only a bounded tail of recent Codex Desktop logs and projects a reason code; raw log lines and paths never reach the renderer. Passing required checks does not prove native Codex connection, Input Monitoring, the active Input layer, or the physical Flight Check. If USB is absent, use [troubleshooting](troubleshooting.md#usb-device-is-not-detected).
 
-## 2. Install Work Louder Input
+## 2. Declare the board route
+
+Agent Board stores one local expectation:
+
+- **Codex Native:** Codex is expected to handle vendor HID events and lighting.
+- **Ashlr Layer:** Work Louder Input is expected to emit the canonical desktop
+  shortcuts for Codex, Claude Code/cmux, and Ashlr Fleet.
+- **Not selected:** no physical route is inferred.
+
+This is labeled **Declared here — not detected**. Changing it writes only the
+private Agent Board settings file. It does not change firmware, Input, Codex,
+shortcuts, processes, hooks, or `wrkpad` occupancy.
+
+## 3. Install Work Louder Input
 
 Install the signed vendor application from [Work Louder](https://worklouder.cc/input/). Input owns board profiles, layers, shortcuts, firmware updates, and its radial menu. Agent Board does not write firmware or Input's configuration database.
 
 Do not use QMK/VIA instructions intended for the legacy Creator Micro v1.
 
-If Input offers a firmware update during commissioning, defer it. Firmware availability is not firmware qualification, and changing firmware invalidates the configuration baseline you are trying to test. Plan an update as a separate operation with the active profile backed up, an explicit rollback path, and a fresh Flight Check afterward.
+If Input offers a firmware update during Ashlr-layer commissioning, defer it.
+Firmware availability is not firmware qualification, and changing firmware
+invalidates the configuration baseline.
 
-## 3. Grant Input Monitoring
+For **Codex Native**, a recent Codex log result of
+`firmware_rpc_missing` is different: USB and HID work, but the board returned
+RPC 404 for `v.oai.rgbcfg`. The tested desk unit reports firmware `v0.1.50`.
+Work Louder currently marks [Creator Micro v2 firmware
+v0.6.2](https://github.com/worklouder/cm-v2-fw-releases/releases/tag/v0.6.2)
+as its latest release, and its release asset contains both required Codex RPC
+names. That string-level evidence makes v0.6.2 a vendor candidate, not a proven
+compatible minimum for PID `303A:8298` or the installed Codex build. Updating
+remains an explicit vendor operation and the post-update checks below are the
+acceptance gate:
+
+1. Export or back up the Input profile.
+2. Use direct USB and stable power.
+3. Fully quit Codex and every other board controller.
+4. Apply only the stable/latest version offered by the signed Input app; stop if
+   it offers a prerelease or different channel.
+5. Reconnect, confirm Input reports the intended version, and verify the saved
+   profile.
+6. Quit Input, launch Codex alone, and verify `v.oai.rgbcfg` followed by
+   `v.oai.thstatus` succeeds.
+7. Re-run the appropriate physical acceptance afterward.
+
+## 4. Grant Input Monitoring
 
 Open **System Settings → Privacy & Security → Input Monitoring** and enable the application that receives the board's shortcuts. Only the logged-in user can grant this macOS permission. Agent Board does not inspect or modify the protected TCC database.
 
-## 4. Create the daily Input layer
+## 5. Create the daily Input layer
 
 Map the physical controls to [the canonical shortcuts](controls.md#action-switches-and-motion-controls).
 
@@ -34,7 +73,7 @@ The daily layer has 19 gestures: six Agent keys, six visible action caps, four j
 
 The Setup screen's `20/20 desktop endpoints registered` result proves only that Electron registered all expected global shortcuts. It does not inspect Input's active profile, prove that the mapping reached the board, or complete this setup step. The ordered physical Flight Check is the acceptance gate for the active layer.
 
-## 5. Start the app
+## 6. Start the app
 
 For development:
 

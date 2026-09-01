@@ -74,13 +74,24 @@ export interface SystemStatus {
   inputInstalled: boolean
   inputMonitoring: 'unverified'
   codex: boolean
+  nativeCodexMicro: CodexNativeMicroStatus
   claude: boolean
   ashlr: boolean
+  boardRoute: BoardRoute
   workspace: string
   shortcutCount: number
   shortcutRegistrations: ShortcutRegistration[]
   workspaceSnapshot: WorkspaceSnapshot | null
 }
+
+export interface CodexNativeMicroStatus {
+  status: 'connected' | 'firmware_rpc_missing' | 'connection_failed' | 'not_observed' | 'log_unavailable'
+  observedAt: string | null
+  detail: string
+  fresh?: boolean
+}
+
+export type BoardRoute = 'unknown' | 'codex_native' | 'ashlr_layer'
 
 export type AgentProvider = 'codex' | 'claude' | 'manual' | 'unknown'
 export type AgentState = 'off' | 'idle' | 'unread' | 'working' | 'needs_input' | 'error'
@@ -208,7 +219,7 @@ export const controls = {
 }
 
 export const hardware = {
-  name: 'Codex Micro',
+  name: 'Creator Micro 2',
   usbName: 'Creator Micro 2',
   mechanicalSwitches: 13,
   touchSensors: 1,

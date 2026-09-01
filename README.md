@@ -56,6 +56,11 @@ marks missing observers and optional CLIs as unavailable.
   sending a prompt or terminal input.
 - Agent Board maps 20 shortcuts across five software lenses, guards consequential
   actions, and exports a hashed operator-guided Flight Check receipt.
+- Agent Board keeps Codex Native and the cross-provider Ashlr Layer as explicit,
+  local-only route declarations; neither is inferred or applied to the board.
+- A privacy-bounded native diagnostic maps fresh versus historical
+  `v.oai.rgbcfg` RPC 404 evidence to a route-scoped qualification warning while
+  leaving the shortcut route independently usable.
 - Both components sanitize private provider content and distinguish source,
   package, integration, provider, physical, and user acceptance.
 

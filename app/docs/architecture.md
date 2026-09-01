@@ -30,6 +30,13 @@ The preload exposes named IPC calls rather than `ipcRenderer`. `electron/main.cj
 
 Actions resolve through `electron/action-registry.cjs`; unknown IDs fail closed. Renderer-supplied commands, executable paths, arguments, and app names are never executed.
 
+The declared board route is a private local preference with only three values:
+`unknown`, `codex_native`, and `ashlr_layer`. It never changes device state.
+`electron/codex-micro-diagnostics.cjs` reads at most eight recent Codex log
+tails, each capped at 2 MiB, and projects only a reason-coded native state,
+timestamp, and fixed detail. Raw logs, private paths, task content, and unknown
+fields never cross IPC.
+
 ### Local adapters
 
 `electron/mission-control.cjs` resolves `wrkpad` and `ashlr` from `~/.local/bin`, `~/.npm-global/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, or `/usr/bin`, then starts them without a shell. Runtime callers intentionally do not trust inherited `PATH` entries:
@@ -53,6 +60,11 @@ Mission snapshots expose only six bounded slot summaries, bounded Fleet facts, s
 `wrkpad` converts supported Codex lifecycle receipts into provider-neutral slot states. Selecting a Codex slot runs `open -a ChatGPT`; opening a workspace invokes the resolved Codex CLI as `codex app <workspace>`.
 
 This is not yet a Codex app-server integration and cannot focus an exact task. No prompt or approval is submitted.
+
+Codex provider lifecycle state and Codex's native Creator Micro control plane
+are separate evidence sources. Provider hooks can populate the six-slot runway
+while native firmware initialization is unavailable. Conversely, a native HID
+connection does not prove provider hook trust or receipt delivery.
 
 ### Claude Code and cmux
 

@@ -4,13 +4,14 @@ const { createHash, randomUUID } = require('node:crypto')
 const { existsSync, renameSync, writeFileSync } = require('node:fs')
 const path = require('node:path')
 const { ACTION_SPECS, executeSpec } = require('./action-registry.cjs')
+const { inspectCodexMicroLogs } = require('./codex-micro-diagnostics.cjs')
 const { holdSatisfied } = require('./approval-guard.cjs')
 const { evaluateFlightSignals } = require('./flight-receipt.cjs')
 const { createFlightSession } = require('./flight-session.cjs')
 const { inspectWorkspace } = require('./workspace-inspector.cjs')
 const { appForProvider, collectMissionControl } = require('./mission-control.cjs')
 const { configuredRendererUrl, trustedRendererUrl } = require('./renderer-trust.cjs')
-const { readWorkspaceSettings, saveWorkspaceSettings } = require('./settings.cjs')
+const { readWorkspaceSettings, saveBoardRouteSettings, saveWorkspaceSettings, validBoardRoute } = require('./settings.cjs')
 const { resolveTool } = require('./tool-resolver.cjs')
 
 const PROFILE_IDS = new Set(['codex', 'claude', 'fleet', 'ship', 'emergency'])
@@ -27,7 +28,8 @@ const flightSession = createFlightSession()
 
 function settingsPath() { return path.join(app.getPath('userData'), 'settings.json') }
 function readSettings() { return readWorkspaceSettings(settingsPath(), app.getPath('home')) }
-function saveWorkspace(workspace) { saveWorkspaceSettings(settingsPath(), workspace) }
+function saveWorkspace(workspace) { saveWorkspaceSettings(settingsPath(), workspace, app.getPath('home')) }
+function saveBoardRoute(boardRoute) { saveBoardRouteSettings(settingsPath(), boardRoute, app.getPath('home')) }
 
 function createWindow() {
   rendererUrl = configuredRendererUrl(app.isPackaged ? undefined : process.env.VITE_DEV_SERVER_URL, path.join(__dirname, '..', 'dist-renderer', 'index.html'))
@@ -134,8 +136,10 @@ ipcMain.handle('board:getStatus', trustedIpc(async () => {
     inputInstalled: existsSync('/Applications/Input.app'),
     inputMonitoring: 'unverified',
     codex,
+    nativeCodexMicro: inspectCodexMicroLogs(home),
     claude,
     ashlr,
+    boardRoute: settings.boardRoute,
     workspace: settings.workspace,
     shortcutCount: shortcutRegistrations.filter((registration) => registration.registered).length,
     shortcutRegistrations,
@@ -143,6 +147,11 @@ ipcMain.handle('board:getStatus', trustedIpc(async () => {
   }
 }))
 ipcMain.handle('board:getMissionControl', trustedIpc(() => missionControl()))
+ipcMain.handle('board:setBoardRoute', trustedIpc((_event, boardRoute) => {
+  if (!validBoardRoute(boardRoute)) throw new TypeError('Unsupported board route declaration')
+  saveBoardRoute(boardRoute)
+  return boardRoute
+}))
 ipcMain.handle('board:focusAgentSlot', trustedIpc(async (_event, slot) => {
   if (flightSession.isActive()) return { ok:false,title:'Flight Check interlock',message:'Agent focus is disabled until hardware acceptance ends.',timestamp:new Date().toISOString() }
   if (!Number.isInteger(slot) || slot < 1 || slot > 6) return { ok:false,title:'Slot unavailable',message:'Choose one of the six physical agent slots.',timestamp:new Date().toISOString() }

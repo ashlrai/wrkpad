@@ -11,6 +11,7 @@ const requiredProbes = {
 const missingOptionalProbes = {
   chatgpt: { ok: false, detail: 'missing' },
   codex: { ok: false, detail: 'unavailable' },
+  nativeCodex: { ok: false, detail: 'not observed' },
   claude: { ok: false, detail: 'unavailable' },
   ashlr: { ok: false, detail: 'unavailable' },
   logitech: { ok: true, detail: 'not running' },
@@ -67,6 +68,7 @@ test('available optional integrations are reported as passing', () => {
     ...requiredProbes,
     chatgpt: { ok: true, detail: 'installed' },
     codex: { ok: true, detail: 'codex 1.0' },
+    nativeCodex: { ok: true, detail: 'connected' },
     claude: { ok: true, detail: 'claude 1.0' },
     ashlr: { ok: true, detail: 'ashlr 1.0' },
     logitech: { ok: true, detail: 'not running' },
@@ -76,4 +78,31 @@ test('available optional integrations are reported as passing', () => {
     result.checks.filter((check) => check.category === 'optional').every((check) => check.severity === 'pass'),
     true,
   )
+})
+
+test('native firmware RPC failure receives specific nonblocking recovery guidance', () => {
+  const result = evaluateDoctor({
+    ...requiredProbes,
+    ...missingOptionalProbes,
+    boardRoute: 'codex_native',
+    nativeCodex: { ok: false, code: 'firmware_rpc_missing', detail: 'RPC 404' },
+  })
+
+  assert.equal(result.ok, true)
+  assert.match(result.nextAction, /guarded vendor firmware qualification/)
+  assert.match(result.modeGuidance.codexNative, /RPC 404/)
+  assert.match(result.modeGuidance.ashlrLayer, /independently commissionable/)
+})
+
+test('Ashlr Layer never promotes an optional native firmware operation', () => {
+  const result = evaluateDoctor({
+    ...requiredProbes,
+    ...missingOptionalProbes,
+    boardRoute: 'ashlr_layer',
+    nativeCodex: { ok: false, code: 'firmware_rpc_missing', detail: 'historical RPC 404' },
+  })
+
+  assert.match(result.nextAction, /Input Monitoring/)
+  assert.match(result.modeGuidance.codexNative, /firmware candidate/)
+  assert.match(result.modeGuidance.ashlrLayer, /independently commissionable/)
 })
