@@ -4,8 +4,10 @@ const { createHash, randomUUID } = require('node:crypto')
 const { existsSync, renameSync, writeFileSync } = require('node:fs')
 const path = require('node:path')
 const { ACTION_SPECS, executeSpec } = require('./action-registry.cjs')
+const { detectCreatorMicro2 } = require('./creator-micro-identity.cjs')
 const { inspectCodexMicroLogs } = require('./codex-micro-diagnostics.cjs')
 const { inspectInputProfile } = require('./input-profile-diagnostics.cjs')
+const { writeGeneratedProfile } = require('./input-profile-generator.cjs')
 const { holdSatisfied } = require('./approval-guard.cjs')
 const { evaluateFlightSignals } = require('./flight-receipt.cjs')
 const { createFlightSession } = require('./flight-session.cjs')
@@ -94,7 +96,7 @@ async function boardConnected() {
   return new Promise((resolve) => {
     const child = spawn('/usr/sbin/ioreg', ['-p', 'IOUSB', '-n', 'Creator Micro 2', '-r', '-l'])
     let output = ''; child.stdout.on('data', (chunk) => { output += chunk })
-    child.on('error', () => resolve(false)); child.on('close', () => resolve(output.includes('Work Louder') && output.includes('33432')))
+    child.on('error', () => resolve(null)); child.on('close', () => resolve(detectCreatorMicro2(output)))
   })
 }
 
@@ -133,9 +135,9 @@ ipcMain.handle('board:getStatus', trustedIpc(async () => {
     inspectWorkspace(settings.workspace),
   ])
   return {
-    boardConnected: board,
+    boardConnected: Boolean(board),
     inputInstalled: existsSync('/Applications/Input.app'),
-    inputProfile: inspectInputProfile(home),
+    inputProfile: inspectInputProfile(home, board?.storageId),
     inputMonitoring: 'unverified',
     codex,
     nativeCodexMicro: inspectCodexMicroLogs(home),
@@ -185,6 +187,46 @@ ipcMain.handle('board:chooseWorkspace', trustedIpc(async () => {
   if (result.canceled || !result.filePaths[0]) return null
   saveWorkspace(result.filePaths[0]); return result.filePaths[0]
 }))
+ipcMain.handle('board:createCorrectedInputProfile', trustedIpc(async () => {
+  if (flightSession.isActive()) {
+    return { status: 'failed', message: 'End Flight Check before creating a repair artifact. No file or device setting changed.' }
+  }
+  const source = await dialog.showOpenDialog(mainWindow, {
+    title: 'Choose an ordinary Creator Micro 2 profile export',
+    properties: ['openFile'],
+    filters: [{ name: 'Work Louder Input profile', extensions: ['json'] }],
+  })
+  if (source.canceled || !source.filePaths[0]) return { status: 'canceled', message: 'No profile selected. Nothing changed.' }
+
+  const suggestedName = `Ashlr-Agent-Board-corrected-${new Date().toISOString().slice(0, 10)}.json`
+  const destination = await dialog.showSaveDialog(mainWindow, {
+    title: 'Save the corrected Input profile',
+    defaultPath: path.join(app.getPath('documents'), suggestedName),
+    filters: [{ name: 'Work Louder Input profile', extensions: ['json'] }],
+  })
+  if (destination.canceled || !destination.filePath) return { status: 'canceled', message: 'No destination selected. Nothing changed.' }
+
+  try {
+    const artifact = writeGeneratedProfile(source.filePaths[0], destination.filePath, 'daily')
+    return {
+      status: 'saved',
+      filePath: artifact.outputPath,
+      sha256: artifact.sha256,
+      message: 'Corrected profile saved. Input and the Creator Micro were not modified.',
+    }
+  } catch (error) {
+    const reason = error?.code === 'EEXIST'
+      ? 'Choose a new filename; repair generation never overwrites an existing file.'
+      : error instanceof SyntaxError
+        ? 'The selected file is not valid JSON.'
+        : typeof error?.message === 'string' && /protected KV_OAI/.test(error.message)
+          ? 'The selected export contains protected Codex mappings. Export an ordinary Creator Micro 2 profile instead.'
+          : typeof error?.message === 'string' && /US Creator Micro V2|missing its base layout|no larger than/.test(error.message)
+            ? error.message
+            : 'The corrected profile could not be created from that export.'
+    return { status: 'failed', message: `${reason} No existing file, Input setting, or device setting changed.` }
+  }
+}))
 ipcMain.handle('board:saveFlightReceipt', trustedIpc(async (_event, receipt) => {
   const flight = flightSession.snapshot()
   if (!flight.active || !flight.startedAt) return null
@@ -197,7 +239,7 @@ ipcMain.handle('board:saveFlightReceipt', trustedIpc(async (_event, receipt) => 
   if (!receipt.events.every((item) => item && allowedSignals.has(item.signal) && typeof item.receivedAt === 'string')) return null
   const variant = receipt.profileKind === 'diagnostic' ? 'diagnostic' : 'daily'
   const evaluation = evaluateFlightSignals(variant, flight.rawEvents)
-  const usbDetected = await boardConnected()
+  const usbDetected = Boolean(await boardConnected())
   const registeredCount = shortcutRegistrations.filter((item) => item.registered).length
   const status = evaluation.status === 'passed' && usbDetected && registeredCount === Object.keys(HOTKEYS).length ? 'passed' : evaluation.status === 'incomplete' ? 'incomplete' : 'failed'
   const payload = {

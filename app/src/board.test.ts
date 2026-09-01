@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { actions, allControlIds, hardware, profileOrder, profiles } from './board'
+import { actions, allControlIds, correctedInputProfileObserved, correctedInputProfileObservedForVariant, hardware, profileOrder, profiles } from './board'
 
 describe('board contract', () => {
   it('maps every physical signal in every profile', () => {
@@ -34,5 +34,25 @@ describe('board contract', () => {
     expect(allControlIds).toHaveLength(20)
     expect(new Set(allControlIds).size).toBe(20)
     expect(allControlIds).toEqual(expect.arrayContaining(['cmd5', 'cmd6']))
+  })
+  it('accepts only the uniquely named corrected Input profile receipt', () => {
+    const corrected = {
+      cacheStatus: 'available' as const,
+      activeProfile: 'Ashlr Agent Board Corrected',
+      activeLayer: 'Ashlr Daily',
+      encoderDirection: 'correct' as const,
+    }
+    expect(correctedInputProfileObserved(corrected)).toBe(true)
+    expect(correctedInputProfileObserved({ ...corrected, activeProfile: 'Ashlr Agent Board' })).toBe(false)
+    expect(correctedInputProfileObserved({ ...corrected, activeLayer: 'Other' })).toBe(false)
+    expect(correctedInputProfileObserved({ ...corrected, encoderDirection: 'reversed' })).toBe(false)
+    const diagnostic = {
+      ...corrected,
+      activeProfile: 'Ashlr Flight Check Corrected - diagnostic',
+      activeLayer: 'Ashlr Diagnostic',
+    }
+    expect(correctedInputProfileObservedForVariant(diagnostic, 'diagnostic')).toBe(true)
+    expect(correctedInputProfileObservedForVariant(corrected, 'diagnostic')).toBe(false)
+    expect(correctedInputProfileObservedForVariant(diagnostic, 'daily')).toBe(false)
   })
 })

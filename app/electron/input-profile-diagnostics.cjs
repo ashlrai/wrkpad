@@ -2,7 +2,8 @@ const { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync } = r
 const path = require('node:path')
 
 const MAX_KEYMAP_BYTES = 512 * 1024
-const DEVICE_PID = '33432'
+const DEFAULT_DEVICE_STORAGE_ID = '33432'
+const SUPPORTED_DEVICE_STORAGE_IDS = new Set(['33431', '33432'])
 const EXPECTED_ENCODER_KEYS = Object.freeze({
   correct: ['KC_W', 'KC_Q', 'KC_R'],
   reversed: ['KC_Q', 'KC_W', 'KC_R'],
@@ -89,8 +90,9 @@ function classifyInputKeymap(raw) {
   }
 }
 
-function keymapPath(home) {
-  return path.join(home, 'Library', 'Application Support', 'input', 'devices', DEVICE_PID, 'keymap.json')
+function keymapPath(home, deviceStorageId) {
+  if (!SUPPORTED_DEVICE_STORAGE_IDS.has(deviceStorageId)) return null
+  return path.join(home, 'Library', 'Application Support', 'input', 'devices', deviceStorageId, 'keymap.json')
 }
 
 function pathHasSymlink(home, filePath) {
@@ -105,10 +107,11 @@ function pathHasSymlink(home, filePath) {
   return false
 }
 
-function inspectInputProfile(home) {
+function inspectInputProfile(home, deviceStorageId = DEFAULT_DEVICE_STORAGE_ID) {
   let descriptor
   try {
-    const filePath = keymapPath(home)
+    const filePath = keymapPath(home, deviceStorageId)
+    if (!filePath) return unavailable('missing')
     if (pathHasSymlink(home, filePath)) return unavailable('unsafe')
     descriptor = openSync(filePath, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0))
     const stats = fstatSync(descriptor)
@@ -124,8 +127,9 @@ function inspectInputProfile(home) {
 }
 
 module.exports = {
-  DEVICE_PID,
+  DEFAULT_DEVICE_STORAGE_ID,
   MAX_KEYMAP_BYTES,
+  SUPPORTED_DEVICE_STORAGE_IDS,
   classifyEncoderDirection,
   classifyInputKeymap,
   inspectInputProfile,

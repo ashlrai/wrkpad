@@ -5,8 +5,8 @@ import {
   Mic2, Play, RotateCcw, ShieldCheck, Sparkles, Split, TerminalSquare, Waypoints, X, Zap,
 } from 'lucide-react'
 import {
-  actions, controls, effortLevels, hardware, profileOrder, profiles,
-  type ActionDefinition, type AgentSlotSummary, type BoardRoute, type ControlId, type ExecutionResult, type MissionControlSnapshot, type PhysicalSignalEnvelope, type ProfileId, type SystemStatus, type WorkspaceSnapshot,
+  actions, controls, correctedInputProfileObserved, correctedInputProfileObservedForVariant, effortLevels, hardware, profileOrder, profiles,
+  type ActionDefinition, type AgentSlotSummary, type BoardRoute, type ControlId, type ExecutionResult, type MissionControlSnapshot, type PhysicalSignalEnvelope, type ProfileId, type ProfileRepairResult, type SystemStatus, type WorkspaceSnapshot,
 } from './board'
 import { agentProviderLabel, agentStateClassName, agentStateLabels, agentStateLegendOrder, agentVisibleStateLabel } from './agent-accessibility'
 import AttentionDeck from './components/AttentionDeck'
@@ -292,6 +292,18 @@ function App() {
     if (status.boardRoute === 'codex_native') {
       setView('setup')
       internalResult('Native verification is separate', 'The Ashlr Flight Check validates only the Work Louder Input shortcut layer. Verify Codex Native in Codex Settings → Creator Micro with Input quit.')
+      return
+    }
+    if (!correctedInputProfileObservedForVariant(status.inputProfile ?? initialStatus.inputProfile, variant)) {
+      setView('setup')
+      internalResult(
+        'Activate the corrected Input profile first',
+        status.inputProfile?.encoderDirection === 'reversed'
+          ? 'The read-only Input receipt shows clockwise and counterclockwise are reversed. Flight Check cannot produce a valid first gesture until the corrected profile is active.'
+          : variant === 'daily'
+            ? 'Daily Flight Check requires the read-only Input receipt to confirm Ashlr Agent Board Corrected, Ashlr Daily, and the corrected encoder order.'
+            : 'Diagnostic Flight Check requires the temporary Ashlr Flight Check Corrected - diagnostic profile, Ashlr Diagnostic layer, and the corrected encoder order.',
+      )
       return
     }
     if (!status.boardConnected || status.shortcutCount !== hardware.bindableSignals) {
@@ -749,7 +761,12 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
   const progress = Math.round((completedSignals / expectedSignals) * 100)
   const problems = events.filter((event) => !event.matched)
   const nativeRoute = status.boardRoute === 'codex_native'
-  const preflightReady = !nativeRoute && status.boardConnected && status.shortcutCount === hardware.bindableSignals
+  const currentInputProfile = status.inputProfile ?? initialStatus.inputProfile
+  const hardwareReady = !nativeRoute && status.boardConnected && status.shortcutCount === hardware.bindableSignals
+  const dailyPreflightReady = hardwareReady && correctedInputProfileObservedForVariant(currentInputProfile, 'daily')
+  const diagnosticPreflightReady = hardwareReady && correctedInputProfileObservedForVariant(currentInputProfile, 'diagnostic')
+  const preflightReady = dailyPreflightReady || diagnosticPreflightReady
+  const profileBlocked = !correctedInputProfileObservedForVariant(currentInputProfile, variant)
   const runCannotPass = problems.length > 0
   const phaseLabel = active ? 'ACTIONS SUPPRESSED' : phase === 'arming' ? 'ARMING INTERLOCK' : phase === 'disarming' ? 'RELEASING INTERLOCK' : phase === 'error' ? 'INTERLOCK UNVERIFIED' : 'ACTIONS ENABLED'
   const blockedCompletion = routesComplete && !complete
@@ -764,8 +781,8 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
       <div className="flight-sequence">
         <div className="flight-prompt">
           <div className={complete ? 'prompt-icon complete' : active ? 'prompt-icon live' : 'prompt-icon'}>{complete ? <Check /> : active ? <Activity /> : <Keyboard />}</div>
-          <div><span className="eyebrow">{complete ? 'ACCEPTANCE PASSED' : runCannotPass ? 'THIS RUN CANNOT PASS' : blockedCompletion ? 'ACCEPTANCE FAILED' : active ? 'NEXT PHYSICAL GESTURE' : phase === 'arming' ? 'WAIT FOR INTERLOCK' : 'READY WHEN YOU ARE'}</span><h3>{complete ? `${expectedSignals} routed signals received` : runCannotPass ? 'A signal arrived out of order' : blockedCompletion ? 'Resolve the recorded blockers and restart' : active && nextStep ? nextStep.label : preflightReady ? 'Start a clean receipt' : 'Complete preflight first'}</h3><p>{complete ? (variant === 'diagnostic' ? 'The disposable diagnostic path reported ACT10 and ACT11 inside one paired Mic gesture.' : 'The daily path reported one ACT10 Mic event while ACT11 remained silent.') : runCannotPass ? `${problems.length} misroute recorded. Restart to clear this failed evidence; continuing cannot produce a passing receipt.` : blockedCompletion ? `${problems.length} misroutes; USB ${status.boardConnected ? 'linked' : 'absent'}; shortcuts ${status.shortcutCount}/${hardware.bindableSignals}.` : active && nextStep ? nextStep.instruction : phase === 'arming' ? 'Do not touch the board until the main process acknowledges action suppression.' : preflightReady ? 'This clears prior observations and temporarily turns every shortcut into a no-op test signal.' : `USB must be linked and all ${hardware.bindableSignals} desktop endpoints must be registered before physical acceptance starts.`}</p></div>
-          {phase === 'inactive' && !complete && <div className="flight-start-actions"><button type="button" disabled={!preflightReady} onClick={() => onStart('daily')}><Play size={15} /> Daily profile</button><button type="button" disabled={!preflightReady} onClick={() => onStart('diagnostic')}>20-signal diagnostic</button></div>}
+          <div><span className="eyebrow">{complete ? 'ACCEPTANCE PASSED' : runCannotPass ? 'THIS RUN CANNOT PASS' : blockedCompletion ? 'ACCEPTANCE FAILED' : active ? 'NEXT PHYSICAL GESTURE' : phase === 'arming' ? 'WAIT FOR INTERLOCK' : 'READY WHEN YOU ARE'}</span><h3>{complete ? `${expectedSignals} routed signals received` : runCannotPass ? 'A signal arrived out of order' : blockedCompletion ? 'Resolve the recorded blockers and restart' : active && nextStep ? nextStep.label : preflightReady ? 'Start a clean receipt' : 'Complete preflight first'}</h3><p>{complete ? (variant === 'diagnostic' ? 'The disposable diagnostic path reported ACT10 and ACT11 inside one paired Mic gesture.' : 'The daily path reported one ACT10 Mic event while ACT11 remained silent.') : runCannotPass ? `${problems.length} misroute recorded. Restart to clear this failed evidence; continuing cannot produce a passing receipt.` : blockedCompletion ? `${problems.length} misroutes; USB ${status.boardConnected ? 'linked' : 'absent'}; shortcuts ${status.shortcutCount}/${hardware.bindableSignals}.` : active && nextStep ? nextStep.instruction : phase === 'arming' ? 'Do not touch the board until the main process acknowledges action suppression.' : preflightReady ? 'This clears prior observations and temporarily turns every shortcut into a no-op test signal.' : profileBlocked ? status.inputProfile?.encoderDirection === 'reversed' ? 'The active Input receipt has clockwise and counterclockwise reversed. Open Setup and create the corrected profile before Flight Check.' : 'Flight Check requires Ashlr Agent Board Corrected, Ashlr Daily, and a corrected encoder receipt. Open Setup to finish profile recovery.' : `USB must be linked and all ${hardware.bindableSignals} desktop endpoints must be registered before physical acceptance starts.`}</p></div>
+          {phase === 'inactive' && !complete && <div className="flight-start-actions"><button type="button" disabled={!dailyPreflightReady} onClick={() => onStart('daily')}><Play size={15} /> Daily profile</button><button type="button" disabled={!diagnosticPreflightReady} onClick={() => onStart('diagnostic')}>20-signal diagnostic</button></div>}
           {active && runCannotPass && <button type="button" className="stop-flight" onClick={onRestart}><RotateCcw size={15} /> End and restart</button>}
           {active && !complete && !runCannotPass && <button type="button" className="stop-flight" onClick={onStop}><CircleStop size={15} /> End check</button>}
           {phase === 'error' && <button type="button" className="stop-flight" onClick={onStop}><CircleStop size={15} /> Restore safe state</button>}
@@ -813,6 +830,8 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
 }
 
 function SetupView({ status, routeSaving, routeError, onRouteChange, onOperate, onFlightCheck }: { status: SystemStatus; routeSaving: boolean; routeError: string | null; onRouteChange: (route: BoardRoute) => void; onOperate: () => void; onFlightCheck: () => void }) {
+  const [repairBusy, setRepairBusy] = useState(false)
+  const [repairResult, setRepairResult] = useState<ProfileRepairResult | null>(null)
   const nativeCodexMicro = status.nativeCodexMicro ?? initialStatus.nativeCodexMicro
   const inputProfile = status.inputProfile ?? initialStatus.inputProfile
   const observedInputProfile = inputProfile.activeProfile && inputProfile.activeLayer
@@ -825,14 +844,32 @@ function SetupView({ status, routeSaving, routeError, onRouteChange, onOperate, 
       : observedInputProfile
         ? `${observedInputProfile} · dial mapping unverified`
         : 'Current keyboard profile requires physical verification'
+  const correctedProfileObserved = correctedInputProfileObserved(inputProfile)
   const steps = [
     { number: '01', title: 'Connect the board', detail: 'USB-C is the best commissioning path. Bluetooth keyboard and trackpad can remain connected.', state: status.boardConnected ? 'Detected as Creator Micro 2' : 'Waiting for USB device', ready: status.boardConnected },
     { number: '02', title: 'Declare the expected board route', detail: 'Codex Native and the Ashlr shortcut layer are separate operating contracts. The declaration never changes the device.', state: status.boardRoute === 'codex_native' ? 'Codex Native declared · not detected' : status.boardRoute === 'ashlr_layer' ? 'Ashlr Layer declared · not detected' : 'No route selected', ready: status.boardRoute !== 'unknown' },
     { number: '03', title: 'Install Work Louder Input', detail: 'The signed vendor app owns profiles, layers, shortcuts, firmware updates, and the radial menu.', state: status.inputInstalled ? 'Input.app installed' : 'Input.app not found', ready: status.inputInstalled },
     { number: '04', title: 'Verify Input Monitoring', detail: 'In System Settings → Privacy & Security → Input Monitoring, allow the app that should receive board events. Only you can grant this.', state: 'Human verification required', ready: false },
-    { number: '05', title: 'Set the live keyboard profile', detail: status.boardRoute === 'codex_native' ? 'Codex Native requires its own connection and operator verification; Agent Board does not infer native RGB or thread ownership.' : inputProfile.encoderDirection === 'reversed' ? 'The read-only Input cache shows the known clockwise/counterclockwise inversion. Import and activate the corrected profile through Input before restarting Flight Check.' : 'In Input, choose Ashlr Agent Board, use its link control to set it as the current keyboard profile, and verify Ashlr Daily. Merely viewing or importing a profile does not activate it; cache observation does not prove the board write or physical route.', state: status.boardRoute === 'codex_native' ? (nativeCodexMicro.status === 'firmware_rpc_missing' ? `Qualification required: v.oai.rgbcfg returned RPC 404${nativeCodexMicro.fresh ? ' recently' : ' in historical evidence'}` : nativeCodexMicro.status === 'connected' && nativeCodexMicro.fresh ? 'Recent native connection evidence found' : 'Native board state unverified') : profileState, ready: status.boardRoute === 'ashlr_layer' && inputProfile.encoderDirection === 'correct' },
+    { number: '05', title: 'Set the live keyboard profile', detail: status.boardRoute === 'codex_native' ? 'Codex Native requires its own connection and operator verification; Agent Board does not infer native RGB or thread ownership.' : inputProfile.encoderDirection === 'reversed' ? 'The read-only Input cache shows the known clockwise/counterclockwise inversion. Import and activate the uniquely named corrected profile through Input before restarting Flight Check.' : correctedProfileObserved ? 'The read-only cache confirms Ashlr Agent Board Corrected, Ashlr Daily, and the corrected encoder order. A fresh physical Flight Check is still required.' : 'In Input, choose Ashlr Agent Board Corrected, use its link control to set it as the current keyboard profile, and verify Ashlr Daily. A correct encoder-only receipt under another profile name is not enough; cache observation does not prove the board write or physical route.', state: status.boardRoute === 'codex_native' ? (nativeCodexMicro.status === 'firmware_rpc_missing' ? `Qualification required: v.oai.rgbcfg returned RPC 404${nativeCodexMicro.fresh ? ' recently' : ' in historical evidence'}` : nativeCodexMicro.status === 'connected' && nativeCodexMicro.fresh ? 'Recent native connection evidence found' : 'Native board state unverified') : profileState, ready: status.boardRoute === 'ashlr_layer' && correctedProfileObserved },
     { number: '06', title: 'Verify the declared physical route', detail: status.boardRoute === 'codex_native' ? 'Verify Codex Native in Codex Settings → Creator Micro after Input is fully quit.' : 'Run all 19 daily gestures. The first gesture uses the top-right rotary dial; the bottom-left circle only selects a Bluetooth host.', state: status.boardRoute === 'codex_native' ? 'Manual Codex verification required' : `${status.shortcutCount}/${hardware.bindableSignals} desktop endpoints registered · physical layer unverified`, ready: false },
   ]
+  const repairNeeded = status.boardRoute === 'ashlr_layer' && !correctedProfileObserved
+  const createRepairProfile = async () => {
+    if (repairBusy) return
+    if (!window.agentBoard?.createCorrectedInputProfile) {
+      setRepairResult({ status: 'failed', message: 'This build does not include the offline profile repair flow. No setting changed.' })
+      return
+    }
+    setRepairBusy(true)
+    setRepairResult(null)
+    try {
+      setRepairResult(await window.agentBoard.createCorrectedInputProfile())
+    } catch {
+      setRepairResult({ status: 'failed', message: 'Profile repair could not start. No file, Input setting, or device setting changed.' })
+    } finally {
+      setRepairBusy(false)
+    }
+  }
   return <section className="setup-view">
     <div className="setup-intro"><span className="eyebrow">COMMISSIONING / TRUTHFUL READINESS</span><h2>Make every layer observable.</h2><p>USB presence, macOS authority, Input configuration, and native Codex integration are separate states. This checklist keeps them separate so “connected” never means more than we proved.</p></div>
     <BoardRouteRail route={status.boardRoute} saving={routeSaving} error={routeError} onChange={onRouteChange} />
@@ -841,6 +878,19 @@ function SetupView({ status, routeSaving, routeError, onRouteChange, onOperate, 
         {steps.map((step) => <article key={step.number} className={step.ready ? 'setup-step ready' : 'setup-step'}>
           <span className="step-number">{step.number}</span><div><h3>{step.title}</h3><p>{step.detail}</p><strong><i />{step.state}</strong></div>
         </article>)}
+        {repairNeeded && <section className="profile-repair" aria-labelledby="profile-repair-title">
+          <div><span className="eyebrow">OFFLINE REPAIR / NO DEVICE WRITE</span><h3 id="profile-repair-title">Create the corrected profile here.</h3></div>
+          <p>Select an ordinary US Creator Micro 2 profile exported from Work Louder Input. Agent Board will validate it and save a new <b>Ashlr Daily</b> import with the clockwise/counterclockwise order corrected. It never opens Input, edits Input's cache, or writes to the board.</p>
+          <button type="button" onClick={() => void createRepairProfile()} disabled={repairBusy}><Download size={14} />{repairBusy ? 'Creating…' : 'Create corrected Input profile'}</button>
+          {repairResult?.status === 'saved' && <div className="profile-repair-result saved" role="status">
+            <strong>Repair artifact ready—nothing activated yet.</strong>
+            <code title={repairResult.filePath}>{repairResult.filePath}</code>
+            <small>SHA-256 {repairResult.sha256}</small>
+            <p>Before importing, quit Agent Board, Codex/ChatGPT, Claude, and every other board controller. Open Input alone, import this file, activate <b>Ashlr Agent Board Corrected</b>, then fully quit and relaunch Input. Confirm the corrected profile is still current before reopening Agent Board; require its read-only cache receipt and a fresh Flight Check. Input's “layout updated” message alone is not acceptance.</p>
+          </div>}
+          {repairResult?.status === 'failed' && <div className="profile-repair-result failed" role="alert"><strong>Repair not created.</strong><p>{repairResult.message}</p></div>}
+          {repairResult?.status === 'canceled' && <div className="profile-repair-result" role="status"><p>{repairResult.message}</p></div>}
+        </section>}
       </div>
       <aside className="hardware-truth">
         <span className="eyebrow">PHYSICAL CONTRACT</span><h3>{hardware.name}</h3>

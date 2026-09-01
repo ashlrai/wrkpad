@@ -23,6 +23,9 @@ All notable changes will be documented here. The project follows semantic versio
 - Guarded hook status/plan/install/repair/uninstall with ownership markers and private backups.
 - Opt-in per-user macOS LaunchAgent lifecycle with fixed argv, executable/content confirmation, authenticated health, and rollback.
 - Distinct Codex subagent slot identities and explicit `wrkpad forget AG` recovery.
+- Offline, allowlisted Creator Micro 2 profile repair that emits a uniquely named
+  private artifact without opening Input or writing the board.
+- Read-only active-profile receipts for both bounded Creator Micro 2 USB identities.
 
 ### Changed
 
@@ -32,6 +35,8 @@ All notable changes will be documented here. The project follows semantic versio
   preview artifacts.
 - Document the black-keycap experience with a privacy-safe capture from the
   real renderer and link its existing architecture and trust model.
+- Make Setup distinguish an encoder-only observation from the exact corrected
+  profile and block Flight Check while a known reversed dial mapping is active.
 
 ### Fixed
 

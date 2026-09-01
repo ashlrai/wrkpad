@@ -20,7 +20,7 @@ Bluetooth keyboard and trackpad traffic is separate. USB presence still does not
 ## Shortcuts are missing or controls do nothing
 
 1. Confirm Work Louder Input is installed and open.
-2. In Input's profile chooser, set **Ashlr Agent Board** as the current keyboard
+2. In Input's profile chooser, set **Ashlr Agent Board Corrected** as the current keyboard
    profile and verify **Ashlr Daily**. The profile shown for editing is not proof
    of the current keyboard profile.
 3. Verify the active Input layer matches [the canonical shortcuts](controls.md).
@@ -37,12 +37,17 @@ Bluetooth host selector. If the correct control still emits nothing, do not
 simulate the shortcut from the keyboard:
 
 1. Stop Flight Check so the action interlock returns to a known state.
-2. Confirm **Ashlr Agent Board** is the current keyboard profile, not merely the
+2. Confirm **Ashlr Agent Board Corrected** is the current keyboard profile, not merely the
    profile shown in Input's editor.
-3. Confirm **Ashlr Daily**, the imported mapping, and Input's device-sync result.
-4. Confirm Agent Board has Input Monitoring authority.
-5. Quit any duplicate Agent Board process and reopen the exact intended build.
-6. Start a fresh check and confirm it still records `0` raw receipts.
+3. If Setup reports reversed or unverified dial directions, choose **Create
+   corrected Input profile**. Select an ordinary Input export and save the new
+   offline repair artifact; this does not activate it or write to the device.
+4. Quit every board controller, open Input alone, import and activate **Ashlr
+   Agent Board Corrected**, then fully quit and relaunch Input. Confirm **Ashlr
+   Daily** remains current; `layout updated` alone is not proof of reconciliation.
+5. Confirm Agent Board has Input Monitoring authority.
+6. Quit any duplicate Agent Board process and reopen the exact intended build.
+7. Start a fresh check and confirm it still records `0` raw receipts.
 
 Only after those checks should firmware qualification be considered. Keep the
 external profile backup and fully quit ChatGPT/Codex Desktop, Agent Board, and

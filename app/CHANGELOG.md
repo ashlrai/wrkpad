@@ -35,6 +35,11 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
   joystick, and firmware-owned Bluetooth host selector.
 - A bounded, read-only Input cache receipt that identifies the active profile,
   layer, and known reversed encoder mapping without exposing macros or paths.
+- An in-app, offline profile-repair flow that validates an ordinary export and
+  saves a uniquely named, allowlisted, mode-`0600` corrected artifact without
+  opening Input, changing its cache, or writing the device.
+- One shared bounded identity contract for the desk-verified `303A:8298` device
+  and the read-only `303A:8297` candidate.
 
 ### Changed
 
@@ -47,6 +52,9 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
   desktop endpoint registration, and physical acceptance in Setup and doctor.
 - Correct the screen twin and canonical layout to place the white joystick at
   top-left and the black rotary dial at top-right.
+- Refuse to arm Flight Check when the active Input receipt has a known reversed
+  encoder, reserve Setup readiness for the exact corrected profile receipt, and
+  keep daily and disposable diagnostic acceptance gates distinct.
 
 ### Security
 

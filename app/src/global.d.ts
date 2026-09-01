@@ -1,4 +1,4 @@
-import type { BoardRoute, ExecutionResult, MissionControlSnapshot, PhysicalSignalEnvelope, ProfileId, SystemStatus } from './board'
+import type { BoardRoute, ExecutionResult, MissionControlSnapshot, PhysicalSignalEnvelope, ProfileId, ProfileRepairResult, SystemStatus } from './board'
 
 declare global {
   interface Window {
@@ -15,6 +15,7 @@ declare global {
       beginHold(actionId: string, token: string): Promise<boolean>
       cancelHold(actionId: string, token: string): Promise<boolean>
       chooseWorkspace(): Promise<string | null>
+      createCorrectedInputProfile(): Promise<ProfileRepairResult>
       saveFlightReceipt(receipt: Record<string, unknown>): Promise<string | null>
       onControl(callback: (signal: PhysicalSignalEnvelope) => void): () => void
     }

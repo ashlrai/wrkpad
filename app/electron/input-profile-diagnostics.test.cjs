@@ -31,8 +31,8 @@ function fixture(encoder = ['KA_A19', 'KA_A18', 'KA_A20']) {
   }
 }
 
-function writeFixedKeymap(home, value) {
-  const directory = path.join(home, 'Library', 'Application Support', 'input', 'devices', '33432')
+function writeFixedKeymap(home, value, storageId = '33432') {
+  const directory = path.join(home, 'Library', 'Application Support', 'input', 'devices', storageId)
   mkdirSync(directory, { recursive: true })
   writeFileSync(path.join(directory, 'keymap.json'), typeof value === 'string' ? value : JSON.stringify(value))
 }
@@ -82,6 +82,17 @@ test('reads only the fixed bounded Creator Micro 2 keymap path', () => {
     assert.equal(inspectInputProfile(home).encoderDirection, 'correct')
     writeFixedKeymap(home, 'x'.repeat(MAX_KEYMAP_BYTES + 1))
     assert.equal(inspectInputProfile(home).cacheStatus, 'invalid')
+  } finally {
+    rmSync(home, { recursive: true, force: true })
+  }
+})
+
+test('reads the candidate 8297 cache only when that bounded identity is selected', () => {
+  const home = mkdtempSync(path.join(tmpdir(), 'input-profile-diagnostics-'))
+  try {
+    writeFixedKeymap(home, fixture(), '33431')
+    assert.equal(inspectInputProfile(home, '33431').encoderDirection, 'correct')
+    assert.equal(inspectInputProfile(home, '99999').cacheStatus, 'missing')
   } finally {
     rmSync(home, { recursive: true, force: true })
   }

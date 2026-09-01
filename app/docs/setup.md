@@ -92,7 +92,7 @@ prove Input synchronized the device or that the firmware emitted a gesture.
 
 The profile shown in Input's header is the profile being edited, not necessarily
 the current keyboard profile. Open the profile chooser and use **Set as current
-profile** for **Ashlr Agent Board**, then verify its **Ashlr Daily** layer. Input
+profile** for **Ashlr Agent Board Corrected**, then verify its **Ashlr Daily** layer. Input
 serializes encoder positions as clockwise, counterclockwise, press; this differs
 from the user-facing left, right, press action list.
 
@@ -101,18 +101,28 @@ To create and activate the daily profile safely:
 1. In Input, export a fresh ordinary Creator Micro 2 profile that contains no
    protected `KV_OAI_*` layer. Keep this unmodified export outside the repository
    as rollback.
-2. From `wrkpad/app`, transform it into a new file:
+2. In Agent Board Setup, choose **Create corrected Input profile**, select that
+   export, and save the newly generated file. This offline flow does not open
+   Input, change its cache, or write to the board. For development and audit,
+   the equivalent CLI is:
 
 ```bash
 npm run profile:generate -- source-profile.json ashlr-agent-board.json daily
 ```
 
-3. Inspect the generated profile name, **Ashlr Daily** layer, Mic mapping, and
+3. Inspect the generated **Ashlr Agent Board Corrected** profile name, **Ashlr
+   Daily** layer, Mic mapping, and
    dial mapping before importing it into Input.
-4. Import the generated JSON in Input. Importing does not make it current.
+4. Quit Agent Board, Codex/ChatGPT, Claude, and every other board controller.
+   Open Input alone, then import the generated JSON. Importing performs a board
+   write but does not make the new profile current.
 5. In the profile chooser, use **Set as current profile** for **Ashlr Agent
-   Board** and wait for Input to finish device synchronization.
-6. Run a fresh daily Flight Check. If it receives zero signals or any misroute,
+   Board Corrected**, fully quit Input, relaunch it alone, and confirm the same
+   profile remains current. Input's `layout updated` message alone is not
+   acceptance; same-name imports can also leave ambiguous duplicates.
+6. Reopen Agent Board and require its read-only cache receipt to report **Ashlr
+   Agent Board Corrected**, **Ashlr Daily**, and the corrected directions. Then
+   run a fresh daily Flight Check. If it receives zero signals or any misroute,
    stop the check and restore the exported profile before attempting firmware.
 
 The transformer creates a new mode-`0600` JSON artifact, clears inherited
@@ -169,12 +179,17 @@ Receipts are written with mode `0600` and include a SHA-256 over the canonical p
 
 ## Diagnostic Mic test
 
-1. Create a disposable Input layer.
-2. Map ACT10 and ACT11 to their separate expected shortcuts.
-3. Start **20-signal diagnostic**.
+1. Generate the disposable diagnostic profile from an ordinary export with
+   `npm run profile:generate -- source.json diagnostic.json diagnostic`.
+2. In an exclusive Input-only window, import and activate **Ashlr Flight Check
+   Corrected - diagnostic**, then verify **Ashlr Diagnostic**. This performs the
+   same two Input writes and restart/reconciliation checks as the daily profile.
+3. Reopen Agent Board and require the exact diagnostic profile receipt before
+   starting **20-signal diagnostic**. The daily profile cannot arm this check.
 4. Press the wide cap once; both signals must arrive within 250 milliseconds.
-5. Deactivate the disposable layer afterward.
-6. Restore ACT11 to `None` on the daily layer.
+5. Deactivate the diagnostic profile afterward.
+6. Restore **Ashlr Agent Board Corrected** / **Ashlr Daily**, where ACT11 is
+   `None`, and verify its fresh read-only receipt before daily use.
 
 ## Optional agent and Fleet receipts
 

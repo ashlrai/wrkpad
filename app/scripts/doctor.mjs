@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const require = createRequire(import.meta.url)
+const { detectCreatorMicro2 } = require('../electron/creator-micro-identity.cjs')
 const { inspectCodexMicroLogs } = require('../electron/codex-micro-diagnostics.cjs')
 const { readAppSettings } = require('../electron/settings.cjs')
 const { resolveTool } = require('../electron/tool-resolver.cjs')
@@ -110,12 +111,7 @@ const toolProbe = (tool) => {
   return { ok: Boolean(version), detail: version || 'unavailable' }
 }
 
-export function detectCreatorMicro2(usb) {
-  if (typeof usb !== 'string' || !usb.includes('Work Louder')) return null
-  if (usb.includes('33432')) return { vidPid: '303A:8298', evidence: 'desk_verified' }
-  if (usb.includes('33431')) return { vidPid: '303A:8297', evidence: 'candidate' }
-  return null
-}
+export { detectCreatorMicro2 }
 
 function collectProbes() {
   const usb = run('/usr/sbin/ioreg', ['-p', 'IOUSB', '-n', 'Creator Micro 2', '-r', '-l'])

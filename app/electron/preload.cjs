@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('agentBoard', {
   beginHold: (actionId, token) => ipcRenderer.invoke('board:beginHold', actionId, token),
   cancelHold: (actionId, token) => ipcRenderer.invoke('board:cancelHold', actionId, token),
   chooseWorkspace: () => ipcRenderer.invoke('board:chooseWorkspace'),
+  createCorrectedInputProfile: () => ipcRenderer.invoke('board:createCorrectedInputProfile'),
   saveFlightReceipt: (receipt) => ipcRenderer.invoke('board:saveFlightReceipt', receipt),
   onControl: (callback) => {
     const listener = (_event, signal) => callback(signal)

@@ -92,6 +92,21 @@ export interface InputProfileStatus {
   encoderDirection: 'correct' | 'reversed' | 'unrecognized' | 'unavailable'
 }
 
+export const correctedInputProfileObservedForVariant = (profile: InputProfileStatus, variant: 'daily' | 'diagnostic'): boolean =>
+  profile.activeProfile === (variant === 'daily' ? 'Ashlr Agent Board Corrected' : 'Ashlr Flight Check Corrected - diagnostic')
+  && profile.activeLayer === (variant === 'daily' ? 'Ashlr Daily' : 'Ashlr Diagnostic')
+  && profile.encoderDirection === 'correct'
+
+export const correctedInputProfileObserved = (profile: InputProfileStatus): boolean =>
+  correctedInputProfileObservedForVariant(profile, 'daily')
+
+export interface ProfileRepairResult {
+  status: 'saved' | 'canceled' | 'failed'
+  message: string
+  filePath?: string
+  sha256?: string
+}
+
 export interface CodexNativeMicroStatus {
   status: 'connected' | 'firmware_rpc_missing' | 'connection_failed' | 'not_observed' | 'log_unavailable'
   observedAt: string | null
