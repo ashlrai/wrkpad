@@ -1,6 +1,10 @@
 # Troubleshooting
 
-Run commands from the repository root.
+Run desktop commands from the app directory:
+
+```bash
+cd wrkpad/app
+```
 
 ## USB device is not detected
 
@@ -16,13 +20,34 @@ Bluetooth keyboard and trackpad traffic is separate. USB presence still does not
 ## Shortcuts are missing or controls do nothing
 
 1. Confirm Work Louder Input is installed and open.
-2. Verify the active Input layer matches [the canonical shortcuts](controls.md).
-3. Verify the receiving app under **System Settings → Privacy & Security → Input Monitoring**.
-4. Check the shortcut count in Agent Board.
-5. Look for another app that already owns the same global shortcut.
-6. Restart Agent Board after permission or ownership changes.
+2. In Input's profile chooser, set **Ashlr Agent Board** as the current keyboard
+   profile and verify **Ashlr Daily**. The profile shown for editing is not proof
+   of the current keyboard profile.
+3. Verify the active Input layer matches [the canonical shortcuts](controls.md).
+4. Verify the receiving app under **System Settings → Privacy & Security → Input Monitoring**.
+5. Check the shortcut count in Agent Board.
+6. Look for another app that already owns the same global shortcut.
+7. Restart Agent Board after permission or ownership changes.
 
 All 20 desktop shortcuts must register even though daily use emits 19 signals; ACT11 remains `None` on the daily layer.
+
+If Flight Check receives zero raw signals, use the top-right black rotary dial.
+The top-left white control is the joystick and the bottom-left circle is the
+Bluetooth host selector. If the correct control still emits nothing, do not
+simulate the shortcut from the keyboard:
+
+1. Stop Flight Check so the action interlock returns to a known state.
+2. Confirm **Ashlr Agent Board** is the current keyboard profile, not merely the
+   profile shown in Input's editor.
+3. Confirm **Ashlr Daily**, the imported mapping, and Input's device-sync result.
+4. Confirm Agent Board has Input Monitoring authority.
+5. Quit any duplicate Agent Board process and reopen the exact intended build.
+6. Start a fresh check and confirm it still records `0` raw receipts.
+
+Only after those checks should firmware qualification be considered. Keep the
+external profile backup and fully quit ChatGPT/Codex Desktop, Agent Board, and
+every other board/HID controller before the signed Input updater downloads or
+enters a bootloader.
 
 ## Codex finds Creator Micro but native connection fails
 

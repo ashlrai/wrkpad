@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { evaluateDoctor } from './doctor.mjs'
+import { detectCreatorMicro2, evaluateDoctor } from './doctor.mjs'
 
 const requiredProbes = {
   board: { ok: true, detail: 'Work Louder 303A:8298' },
@@ -16,6 +16,13 @@ const missingOptionalProbes = {
   ashlr: { ok: false, detail: 'unavailable' },
   logitech: { ok: true, detail: 'not running' },
 }
+
+test('recognizes both documented Creator Micro 2 identities without broad USB matching', () => {
+  assert.deepEqual(detectCreatorMicro2('Work Louder ProductID = 33432'), { vidPid: '303A:8298', evidence: 'desk_verified' })
+  assert.deepEqual(detectCreatorMicro2('Work Louder ProductID = 33431'), { vidPid: '303A:8297', evidence: 'candidate' })
+  assert.equal(detectCreatorMicro2('Other Vendor ProductID = 33432'), null)
+  assert.equal(detectCreatorMicro2('Work Louder ProductID = 99999'), null)
+})
 
 test('missing optional integrations do not fail required doctor checks', () => {
   const result = evaluateDoctor({ ...requiredProbes, ...missingOptionalProbes })

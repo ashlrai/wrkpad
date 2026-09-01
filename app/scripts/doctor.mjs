@@ -110,9 +110,16 @@ const toolProbe = (tool) => {
   return { ok: Boolean(version), detail: version || 'unavailable' }
 }
 
+export function detectCreatorMicro2(usb) {
+  if (typeof usb !== 'string' || !usb.includes('Work Louder')) return null
+  if (usb.includes('33432')) return { vidPid: '303A:8298', evidence: 'desk_verified' }
+  if (usb.includes('33431')) return { vidPid: '303A:8297', evidence: 'candidate' }
+  return null
+}
+
 function collectProbes() {
   const usb = run('/usr/sbin/ioreg', ['-p', 'IOUSB', '-n', 'Creator Micro 2', '-r', '-l'])
-  const boardDetected = Boolean(usb?.includes('Work Louder') && usb.includes('33432'))
+  const boardIdentity = detectCreatorMicro2(usb)
   const chatgptInstalled = existsSync('/Applications/ChatGPT.app')
   const inputInstalled = existsSync('/Applications/Input.app')
   const logitechOwner = run('/usr/bin/pgrep', ['-fl', 'logioptionsplus_agent'])
@@ -123,7 +130,7 @@ function collectProbes() {
   )
 
   return {
-    board: { ok: boardDetected, detail: boardDetected ? 'Work Louder 303A:8298' : 'not detected' },
+    board: { ok: Boolean(boardIdentity), detail: boardIdentity ? `Work Louder ${boardIdentity.vidPid}${boardIdentity.evidence === 'candidate' ? ' candidate' : ''}` : 'not detected' },
     input: { ok: inputInstalled, detail: inputInstalled ? 'installed' : 'missing' },
     chatgpt: { ok: chatgptInstalled, detail: chatgptInstalled ? 'installed' : 'missing' },
     codex: toolProbe('codex'),

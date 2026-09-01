@@ -4,6 +4,12 @@ Setup proves six different things: USB presence, declared board route, native
 Codex firmware compatibility, macOS authority, shortcut configuration, and
 physical routing. Do not treat one as proof of the others.
 
+Run desktop commands from the app directory:
+
+```bash
+cd wrkpad/app
+```
+
 ## 1. Connect the board
 
 Connect the Creator Micro 2 directly over USB-C for commissioning. A Bluetooth keyboard and trackpad can remain connected.
@@ -12,7 +18,7 @@ Connect the Creator Micro 2 directly over USB-C for commissioning. A Bluetooth k
 npm run doctor
 ```
 
-Expected USB result: `Creator Micro 2 USB: Work Louder 303A:8298`. The board and Work Louder Input are required doctor checks. ChatGPT, Codex CLI, Claude Code, and Ashlr Hub are optional integrations: missing tools produce warnings but do not fail the doctor.
+Expected USB result: `Creator Micro 2 USB: Work Louder 303A:8298` on the desk-verified unit. The read-only doctor also recognizes `303A:8297` as a candidate and labels it accordingly; neither identity authorizes writes. The board and Work Louder Input are required doctor checks. ChatGPT, Codex CLI, Claude Code, and Ashlr Hub are optional integrations: missing tools produce warnings but do not fail the doctor.
 
 The doctor is read-only and cannot grant permissions or change board configuration. `npm run doctor -- --json` includes `manualChecks`, route-specific `modeGuidance`, and a prioritized `nextAction`. It inspects only a bounded tail of recent Codex Desktop logs and projects a reason code; raw log lines and paths never reach the renderer. Passing required checks does not prove native Codex connection, Input Monitoring, the active Input layer, or the physical Flight Check. If USB is absent, use [troubleshooting](troubleshooting.md#usb-device-is-not-detected).
 
@@ -42,7 +48,7 @@ invalidates the configuration baseline.
 For **Codex Native**, a recent Codex log result of
 `firmware_rpc_missing` is different: USB and HID work, but the board returned
 RPC 404 for `v.oai.rgbcfg`. The tested desk unit reports firmware `v0.1.50`.
-Work Louder currently marks [Creator Micro v2 firmware
+As verified on September 1, 2026, Work Louder marks [Creator Micro v2 firmware
 v0.6.2](https://github.com/worklouder/cm-v2-fw-releases/releases/tag/v0.6.2)
 as its latest release, and its release asset contains both required Codex RPC
 names. That string-level evidence makes v0.6.2 a vendor candidate, not a proven
@@ -52,14 +58,20 @@ acceptance gate:
 
 1. Export or back up the Input profile.
 2. Use direct USB and stable power.
-3. Fully quit Codex and every other board controller.
-4. Apply only the stable/latest version offered by the signed Input app; stop if
+3. Fully quit ChatGPT/Codex Desktop, Ashlr Agent Board, and every other HID or
+   board controller. Do not click **Download** or enter the bootloader while any
+   of them remains open.
+4. Record the external backup path and the candidate firmware checksum before
+   any download. Downloading is not installing; do not proceed if the asset or
+   channel differs from the reviewed candidate.
+5. Apply only the stable version offered by the signed Input app; stop if
    it offers a prerelease or different channel.
-5. Reconnect, confirm Input reports the intended version, and verify the saved
+6. Reconnect, confirm Input reports the intended version, and verify the saved
    profile.
-6. Quit Input, launch Codex alone, and verify `v.oai.rgbcfg` followed by
+7. Quit Input, launch Codex alone, and verify `v.oai.rgbcfg` followed by
    `v.oai.thstatus` succeeds.
-7. Re-run the appropriate physical acceptance afterward.
+8. Re-run the appropriate physical acceptance afterward. Restore the exported
+   profile if the mapping or device sync changed.
 
 ## 4. Grant Input Monitoring
 
@@ -72,6 +84,53 @@ Map the physical controls to [the canonical shortcuts](controls.md#action-switch
 The daily layer has 19 gestures: six Agent keys, six visible action caps, four joystick directions, and dial left/right/press. The desktop reserves 20 shortcut endpoints because the Mic cap covers two switches. Assign the Mic shortcut to ACT10 and set ACT11 to `None` for daily use. Never give the two hidden halves different daily actions.
 
 The Setup screen's `20/20 desktop endpoints registered` result proves only that Electron registered all expected global shortcuts. It does not inspect Input's active profile, prove that the mapping reached the board, or complete this setup step. The ordered physical Flight Check is the acceptance gate for the active layer.
+
+Agent Board also reads a bounded, fixed-path copy of Input's Creator Micro 2
+cache and reports only the sanitized active profile, layer, and encoder health.
+That receipt can identify the known reversed dial mapping, but it still does not
+prove Input synchronized the device or that the firmware emitted a gesture.
+
+The profile shown in Input's header is the profile being edited, not necessarily
+the current keyboard profile. Open the profile chooser and use **Set as current
+profile** for **Ashlr Agent Board**, then verify its **Ashlr Daily** layer. Input
+serializes encoder positions as clockwise, counterclockwise, press; this differs
+from the user-facing left, right, press action list.
+
+To create and activate the daily profile safely:
+
+1. In Input, export a fresh ordinary Creator Micro 2 profile that contains no
+   protected `KV_OAI_*` layer. Keep this unmodified export outside the repository
+   as rollback.
+2. From `wrkpad/app`, transform it into a new file:
+
+```bash
+npm run profile:generate -- source-profile.json ashlr-agent-board.json daily
+```
+
+3. Inspect the generated profile name, **Ashlr Daily** layer, Mic mapping, and
+   dial mapping before importing it into Input.
+4. Import the generated JSON in Input. Importing does not make it current.
+5. In the profile chooser, use **Set as current profile** for **Ashlr Agent
+   Board** and wait for Input to finish device synchronization.
+6. Run a fresh daily Flight Check. If it receives zero signals or any misroute,
+   stop the check and restore the exported profile before attempting firmware.
+
+The transformer creates a new mode-`0600` JSON artifact, clears inherited
+smart/multi actions and app links, and refuses to overwrite an existing file or
+touch protected `KV_OAI_*` layers. It does not modify Input's database, import
+or activate the result, send HID packets, or write firmware.
+
+## Operating modes
+
+| Mode | Apps that may remain open | What owns the board route | Evidence boundary |
+| --- | --- | --- | --- |
+| Ashlr Layer daily | Input, Agent Board, ChatGPT/Codex, Claude Code, Claude Desktop, and cmux | Input emits shortcuts; Agent Board receives them | Cross-provider shortcuts and hook state; no native Codex RGB claim |
+| Codex Native qualification | Codex alone; Input and Agent Board device routing fully quit | Codex vendor protocol | Native RPC and lighting qualification only |
+| Firmware qualification | Signed Input app only after all other board/HID controllers quit | Input updater | Download, install, restored profile, and post-update acceptance remain separate |
+
+Claude Code hook events can populate the runway after the guarded
+[`wrkpad` hook setup](../../docs/hook-setup.md). Claude Desktop chats are not
+enrolled unless a separate adapter contract has been implemented and verified.
 
 ## 6. Start the app
 
@@ -94,7 +153,10 @@ Open the architecture directory created under `release/`, then select a working 
 
 1. Open **Flight Check** and choose **Daily profile**.
 2. Wait until the app says **Actions suppressed**.
-3. Use only the physical board while following each gesture prompt.
+3. Use only the physical board while following each gesture prompt. The white
+   control at top-left is the joystick, the black control at top-right is the
+   rotary dial, and the bottom-left circle with three LEDs is only the Bluetooth
+   host selector.
 4. Confirm USB is linked, 20 desktop shortcuts are registered, and misroutes remain zero.
 5. Export a receipt only after all 19 daily signals pass.
 6. Stop Flight Check or return to Operate to release the interlock.

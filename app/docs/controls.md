@@ -7,7 +7,7 @@ This document is the canonical physical map for Ashlr Agent Board.
 The six Agent keys retain the same slot identity in every software lens.
 
 ```text
-Physical row 1:  DIAL | AG00 | AG01 | STICK
+Physical row 1: STICK | AG00 | AG01 | DIAL
 Physical row 2:         AG02 | AG03 | AG04 | AG05
 ```
 
@@ -53,13 +53,17 @@ Provider is always shown as text and an icon. New `error` and `needs_input` tran
 | JOY_RIGHT | Joystick right | `Control+Option+Command+Right` | Next lens |
 | JOY_DOWN | Joystick down | `Control+Option+Command+Down` | Lens-specific inspect/copy action |
 | JOY_LEFT | Joystick left | `Control+Option+Command+Left` | Previous lens |
-| ENC_CC | Dial left | `Control+Option+Command+Q` | Lower displayed reasoning depth |
-| ENC_CW | Dial right | `Control+Option+Command+W` | Raise displayed reasoning depth |
+| ENC_CC | Dial left / counter-clockwise | `Control+Option+Command+Q` | Lower displayed reasoning depth |
+| ENC_CW | Dial right / clockwise | `Control+Option+Command+W` | Raise displayed reasoning depth |
 | ENC_CLK | Dial press | `Control+Option+Command+R` | Next lens |
 
 The wide Mic cap spans ACT10 and ACT11. In the daily profile, map the desired Mic shortcut to ACT10 and set ACT11 to `None`. Map both only on a disposable diagnostic layer used by the 20-signal Flight Check.
 
 The bottom-left circular surface is not a bindable key. It is the firmware-owned haptic selector for Bluetooth host profiles.
+
+Work Louder Input serializes the encoder slots as `[clockwise,
+counter-clockwise, press]`. That storage order is intentionally different from
+the operator-facing Flight Check order of left, right, press.
 
 ## Lens action map
 

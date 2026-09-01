@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { allControlIds, type ControlId } from './board'
-import { dailyFlightSteps, diagnosticFlightSteps, expectedSignalsAfter, flightAcceptance, flightStepComplete, type FlightEvent } from './flight-check'
+import { dailyFlightSteps, diagnosticFlightSteps, expectedSignalsAfter, flightAcceptance, flightStepComplete, noSignalRecoveryNeeded, type FlightEvent } from './flight-check'
 
 const event = (signal: ControlId, expectedSignals: ControlId[], at: number, matched = expectedSignals.includes(signal)): FlightEvent => ({
   signal, expectedSignals, matched, sequence: at, receivedAt: new Date(at).toISOString(), accelerator: 'test', monotonicNs: String(at),
@@ -21,6 +21,18 @@ describe('Flight Check model', () => {
     const step = diagnosticFlightSteps[0]
     expect(flightStepComplete(step, [event('dialLeft', step.signals, 1), event('dialLeft', step.signals, 2)])).toBe(false)
     expect(flightStepComplete(step, [1, 2, 3].map((time) => event('dialLeft', step.signals, time)))).toBe(true)
+  })
+  it('identifies the physical dial and reveals recovery only after a silent grace period', () => {
+    expect(diagnosticFlightSteps[0].instruction).toContain('top-right rotary dial')
+    expect(diagnosticFlightSteps[0].instruction).toContain('Bluetooth host selector')
+    expect(diagnosticFlightSteps.find((step) => step.label === 'Agent 1')?.instruction).toContain('white joystick')
+    expect(diagnosticFlightSteps.find((step) => step.label === 'Agent 2')?.instruction).toContain('black dial')
+    const startedAt = '2026-09-01T18:00:00.000Z'
+    expect(noSignalRecoveryNeeded(true, startedAt, [], Date.parse(startedAt) + 11_999)).toBe(false)
+    expect(noSignalRecoveryNeeded(true, startedAt, [], Date.parse(startedAt) + 12_000)).toBe(true)
+    expect(noSignalRecoveryNeeded(true, startedAt, [event('dialLeft', ['dialLeft'], 1)], Date.parse(startedAt) + 30_000)).toBe(false)
+    expect(noSignalRecoveryNeeded(false, startedAt, [], Date.parse(startedAt) + 30_000)).toBe(false)
+    expect(noSignalRecoveryNeeded(true, 'not-a-timestamp', [], Date.parse(startedAt) + 30_000)).toBe(false)
   })
   it('accepts both diagnostic Mic halves only inside the paired window', () => {
     const step = diagnosticFlightSteps.find((candidate) => candidate.label === 'Mic cap')!

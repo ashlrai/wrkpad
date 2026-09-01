@@ -24,6 +24,7 @@ versions from colliding.
 From a clean checkout:
 
 ```bash
+cd wrkpad/app
 npm install
 npm test
 npm run lint

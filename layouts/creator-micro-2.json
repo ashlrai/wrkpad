@@ -17,7 +17,7 @@
     {"vid": "574C", "pid": "E6E3", "classification": "legacy_micro_v1", "evidence": "official_qmk", "writes": false}
   ],
   "matrix": [
-    ["ENCODER", "AG00", "AG01", "JOYSTICK"],
+    ["JOYSTICK", "AG00", "AG01", "ENCODER"],
     ["AG02", "AG03", "AG04", "AG05"],
     ["ACT06", "ACT07", "ACT08", "ACT09"],
     ["TOUCH", "ACT10", "ACT11", "ACT12"]
@@ -36,7 +36,7 @@
     {"id": "ACT10", "kind": "switch", "private_keycode": "KV_OAI_AG10", "cap": "wide_mic_left"},
     {"id": "ACT11", "kind": "switch", "private_keycode": "KV_OAI_AG11", "cap": "wide_mic_right"},
     {"id": "ACT12", "kind": "switch", "private_keycode": "KV_OAI_AG12", "cap": "black_opaque"},
-    {"id": "ENCODER", "kind": "rotary_encoder", "signals": ["counter_clockwise", "clockwise", "press"]},
+    {"id": "ENCODER", "kind": "rotary_encoder", "signals": ["counter_clockwise", "clockwise", "press"], "input_serialization_order": ["clockwise", "counter_clockwise", "press"]},
     {"id": "JOYSTICK", "kind": "planar_joystick", "signals": ["up", "right", "down", "left"]},
     {"id": "TOUCH", "kind": "firmware_owned_touch_selector", "status_leds": 3}
   ],

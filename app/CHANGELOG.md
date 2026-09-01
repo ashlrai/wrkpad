@@ -29,6 +29,12 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
   `v.oai.rgbcfg` firmware RPC 404 instead of reporting a generic connection
   failure.
 - A black-opaque Creator Micro 2 screen twin and route-aware readiness copy.
+- A fail-closed Input profile transformer with verified clockwise,
+  counterclockwise, press encoder serialization.
+- A timed zero-signal recovery panel that distinguishes the rotary dial,
+  joystick, and firmware-owned Bluetooth host selector.
+- A bounded, read-only Input cache receipt that identifies the active profile,
+  layer, and known reversed encoder mapping without exposing macros or paths.
 
 ### Changed
 
@@ -39,6 +45,8 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 - Keep operator safety notices visible even when Fleet evidence is unavailable.
 - Separate USB detection, native firmware compatibility, route declaration,
   desktop endpoint registration, and physical acceptance in Setup and doctor.
+- Correct the screen twin and canonical layout to place the white joystick at
+  top-left and the black rotary dial at top-right.
 
 ### Security
 

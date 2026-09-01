@@ -11,11 +11,12 @@ import {
 import { agentProviderLabel, agentStateClassName, agentStateLabels, agentStateLegendOrder, agentVisibleStateLabel } from './agent-accessibility'
 import AttentionDeck from './components/AttentionDeck'
 import FleetBrief from './components/FleetBrief'
-import { expectedSignalsAfter, flightAcceptance, flightStepComplete, stepsForVariant, type FlightEvent, type FlightVariant } from './flight-check'
+import { expectedSignalsAfter, flightAcceptance, flightStepComplete, noSignalRecoveryNeeded, stepsForVariant, type FlightEvent, type FlightVariant } from './flight-check'
 import './App.css'
 
 const initialStatus: SystemStatus = {
   boardConnected: false, inputInstalled: false, inputMonitoring: 'unverified',
+  inputProfile: { cacheStatus: 'missing', activeProfile: null, activeLayer: null, encoderDirection: 'unavailable' },
   codex: false, claude: false, ashlr: false,
   nativeCodexMicro: { status: 'not_observed', observedAt: null, detail: 'No recent native Codex Creator Micro connection evidence was found.' },
   boardRoute: 'unknown',
@@ -510,10 +511,10 @@ function App() {
                   <span className="cable-arrow">↑</span>
                   <span className="case-screw tl" /><span className="case-screw tr" /><span className="case-screw bl" /><span className="case-screw br" />
                   <div className="hardware-grid">
-                    <Dial active={activeControl} onSelect={selectControl} showIds={showIds} />
+                    <Joystick active={activeControl} onSelect={selectControl} showIds={showIds} />
                     <BoardKey control="agent1" action={actions[profile.mapping.agent1]} agent={mission.agents[0]} active={activeControl === 'agent1'} onSelect={selectControl} kind="agent" showIds={showIds} />
                     <BoardKey control="agent2" action={actions[profile.mapping.agent2]} agent={mission.agents[1]} active={activeControl === 'agent2'} onSelect={selectControl} kind="agent" showIds={showIds} />
-                    <Joystick active={activeControl} onSelect={selectControl} showIds={showIds} />
+                    <Dial active={activeControl} onSelect={selectControl} showIds={showIds} />
                     {(['agent3', 'agent4', 'agent5', 'agent6'] as ControlId[]).map((control, index) => <BoardKey key={control} control={control} action={actions[profile.mapping[control]]} agent={mission.agents[index + 2]} active={activeControl === control} onSelect={selectControl} kind="agent" showIds={showIds} />)}
                     <BoardKey control="cmd1" action={actions[profile.mapping.cmd1]} active={activeControl === 'cmd1'} onSelect={selectControl} kind="action" factoryIcon={<Zap />} showIds={showIds} />
                     <BoardKey control="cmd2" action={actions[profile.mapping.cmd2]} active={activeControl === 'cmd2'} onSelect={selectControl} kind="action" factoryIcon={<CircleCheck />} showIds={showIds} />
@@ -731,6 +732,12 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
   phase: 'inactive' | 'arming' | 'active' | 'disarming' | 'error'
   onStart: (variant: 'daily' | 'diagnostic') => void; onStop: () => void; onRestart: () => void; onExport: () => void; onSetup: () => void; onOperate: () => void
 }) {
+  const [clock, setClock] = useState(0)
+  useEffect(() => {
+    if (!active || events.length > 0) return
+    const timer = window.setInterval(() => setClock(Date.now()), 1_000)
+    return () => window.clearInterval(timer)
+  }, [active, events.length, startedAt])
   const selectedSteps = stepsForVariant(variant)
   const expectedSignals = variant === 'diagnostic' ? 20 : 19
   const completedGestures = selectedSteps.filter((step) => flightStepComplete(step, events)).length
@@ -746,6 +753,7 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
   const runCannotPass = problems.length > 0
   const phaseLabel = active ? 'ACTIONS SUPPRESSED' : phase === 'arming' ? 'ARMING INTERLOCK' : phase === 'disarming' ? 'RELEASING INTERLOCK' : phase === 'error' ? 'INTERLOCK UNVERIFIED' : 'ACTIONS ENABLED'
   const blockedCompletion = routesComplete && !complete
+  const showNoSignalRecovery = noSignalRecoveryNeeded(active, startedAt, events, clock)
   return <section className="flight-view">
     <div className="flight-hero">
       <div><span className="eyebrow">HARDWARE ACCEPTANCE / {phaseLabel}</span><h2>{nativeRoute ? 'Flight Check belongs to Ashlr Layer.' : complete ? 'Every signal is accounted for.' : blockedCompletion ? 'Acceptance is blocked by evidence.' : active ? 'Prove the physical path.' : phase === 'arming' ? 'Establishing the safety barrier…' : 'Run a safe Flight Check.'}</h2><p>{nativeRoute ? 'This receipt validates Work Louder Input shortcuts, not Codex’s native keys or lighting. Choose Ashlr Layer to run it; verify Codex Native in Codex Settings → Creator Micro.' : 'Press the real board controls only after the app confirms Actions Suppressed. The board twin and mouse clicks do not count; ordinary keyboard use can generate the same shortcuts, so keep your hands on the board during acceptance.'}</p></div>
@@ -783,12 +791,18 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
           <div><dt>Shortcuts</dt><dd className={status.shortcutCount === hardware.bindableSignals ? 'ready' : ''}>{status.shortcutCount}/20</dd></div>
           <div><dt>Started</dt><dd>{startedAt ? formatClock(new Date(startedAt)) : 'Not started'}</dd></div>
           <div><dt>Actions</dt><dd className={active ? 'safe' : phase === 'error' ? 'problem' : ''}>{active ? 'Suppressed' : phase === 'arming' ? 'Arming' : phase === 'disarming' ? 'Releasing' : phase === 'error' ? 'Unverified' : 'Enabled'}</dd></div>
+          <div><dt>Raw receipts</dt><dd className={events.length ? 'ready' : ''}>{events.length}</dd></div>
           <div><dt>Misroutes</dt><dd className={problems.length ? 'problem' : 'ready'}>{problems.length}</dd></div>
         </dl>
         <div className="event-stream">
           <span className="eyebrow">LATEST RAW SIGNALS</span>
-          {events.length ? [...events].reverse().slice(0, 8).map((event, index) => <div className={event.matched ? '' : 'misroute'} key={`${event.receivedAt}-${index}`}><code>{hardwareIds[event.signal]}</code><span>{event.matched ? controls.hotkeys[event.signal] : `Expected ${event.expectedSignals.map((signal) => hardwareIds[signal]).join(' + ')}`}</span><time>{formatClock(new Date(event.receivedAt))}</time></div>) : <p>No shortcut signals received yet.</p>}
+          {events.length ? [...events].reverse().slice(0, 8).map((event, index) => <div className={event.matched ? '' : 'misroute'} key={`${event.receivedAt}-${index}`}><code>{hardwareIds[event.signal]}</code><span>{event.matched ? controls.hotkeys[event.signal] : `Expected ${event.expectedSignals.map((signal) => hardwareIds[signal]).join(' + ')}`}</span><time>{formatClock(new Date(event.receivedAt))}</time></div>) : <p>{active ? '0 raw desktop receipts since Flight Check started.' : 'No shortcut signals received yet.'}</p>}
         </div>
+        {showNoSignalRecovery && <div className="no-signal-recovery" role="status">
+          <strong>No physical shortcut arrived</strong>
+          <p>Use the top-right rotary dial—not the bottom-left Bluetooth host selector. In Work Louder Input, set <b>Ashlr Agent Board</b> as the current keyboard profile and verify <b>Ashlr Daily</b>. If the board still emits nothing, stop this check and qualify the vendor firmware with Codex and every other board controller fully quit.</p>
+          <button type="button" onClick={onSetup}>Open recovery checklist</button>
+        </div>}
         {exportPath && <div className="exported-receipt"><Check size={14} /><span>Receipt saved</span><code title={exportPath}>{exportPath}</code></div>}
         {!status.boardConnected && <button type="button" className="flight-secondary" onClick={onSetup}>Open connection setup</button>}
         {complete && <button type="button" className="flight-secondary" onClick={onOperate}>Start operating</button>}
@@ -800,12 +814,24 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
 
 function SetupView({ status, routeSaving, routeError, onRouteChange, onOperate, onFlightCheck }: { status: SystemStatus; routeSaving: boolean; routeError: string | null; onRouteChange: (route: BoardRoute) => void; onOperate: () => void; onFlightCheck: () => void }) {
   const nativeCodexMicro = status.nativeCodexMicro ?? initialStatus.nativeCodexMicro
+  const inputProfile = status.inputProfile ?? initialStatus.inputProfile
+  const observedInputProfile = inputProfile.activeProfile && inputProfile.activeLayer
+    ? `${inputProfile.activeProfile} · ${inputProfile.activeLayer}`
+    : inputProfile.activeProfile
+  const profileState = inputProfile.encoderDirection === 'correct'
+    ? `${observedInputProfile ?? 'Input profile'} · dial directions ready for physical check`
+    : inputProfile.encoderDirection === 'reversed'
+      ? `${observedInputProfile ?? 'Input profile'} · dial directions reversed`
+      : observedInputProfile
+        ? `${observedInputProfile} · dial mapping unverified`
+        : 'Current keyboard profile requires physical verification'
   const steps = [
     { number: '01', title: 'Connect the board', detail: 'USB-C is the best commissioning path. Bluetooth keyboard and trackpad can remain connected.', state: status.boardConnected ? 'Detected as Creator Micro 2' : 'Waiting for USB device', ready: status.boardConnected },
     { number: '02', title: 'Declare the expected board route', detail: 'Codex Native and the Ashlr shortcut layer are separate operating contracts. The declaration never changes the device.', state: status.boardRoute === 'codex_native' ? 'Codex Native declared · not detected' : status.boardRoute === 'ashlr_layer' ? 'Ashlr Layer declared · not detected' : 'No route selected', ready: status.boardRoute !== 'unknown' },
     { number: '03', title: 'Install Work Louder Input', detail: 'The signed vendor app owns profiles, layers, shortcuts, firmware updates, and the radial menu.', state: status.inputInstalled ? 'Input.app installed' : 'Input.app not found', ready: status.inputInstalled },
     { number: '04', title: 'Verify Input Monitoring', detail: 'In System Settings → Privacy & Security → Input Monitoring, allow the app that should receive board events. Only you can grant this.', state: 'Human verification required', ready: false },
-    { number: '05', title: 'Verify the declared physical route', detail: status.boardRoute === 'codex_native' ? 'Codex Native requires its own connection and operator verification; Agent Board does not infer native RGB or thread ownership.' : 'Map 19 daily gestures in Input. The desktop can register endpoints, but only a physical Flight Check verifies the active board layer.', state: status.boardRoute === 'codex_native' ? (nativeCodexMicro.status === 'firmware_rpc_missing' ? `Qualification required: v.oai.rgbcfg returned RPC 404${nativeCodexMicro.fresh ? ' recently' : ' in historical evidence'}` : nativeCodexMicro.status === 'connected' && nativeCodexMicro.fresh ? 'Recent native connection evidence found' : 'Native board state unverified') : `${status.shortcutCount}/${hardware.bindableSignals} desktop endpoints registered · physical layer unverified`, ready: status.boardRoute === 'codex_native' && nativeCodexMicro.status === 'connected' && nativeCodexMicro.fresh === true },
+    { number: '05', title: 'Set the live keyboard profile', detail: status.boardRoute === 'codex_native' ? 'Codex Native requires its own connection and operator verification; Agent Board does not infer native RGB or thread ownership.' : inputProfile.encoderDirection === 'reversed' ? 'The read-only Input cache shows the known clockwise/counterclockwise inversion. Import and activate the corrected profile through Input before restarting Flight Check.' : 'In Input, choose Ashlr Agent Board, use its link control to set it as the current keyboard profile, and verify Ashlr Daily. Merely viewing or importing a profile does not activate it; cache observation does not prove the board write or physical route.', state: status.boardRoute === 'codex_native' ? (nativeCodexMicro.status === 'firmware_rpc_missing' ? `Qualification required: v.oai.rgbcfg returned RPC 404${nativeCodexMicro.fresh ? ' recently' : ' in historical evidence'}` : nativeCodexMicro.status === 'connected' && nativeCodexMicro.fresh ? 'Recent native connection evidence found' : 'Native board state unverified') : profileState, ready: status.boardRoute === 'ashlr_layer' && inputProfile.encoderDirection === 'correct' },
+    { number: '06', title: 'Verify the declared physical route', detail: status.boardRoute === 'codex_native' ? 'Verify Codex Native in Codex Settings → Creator Micro after Input is fully quit.' : 'Run all 19 daily gestures. The first gesture uses the top-right rotary dial; the bottom-left circle only selects a Bluetooth host.', state: status.boardRoute === 'codex_native' ? 'Manual Codex verification required' : `${status.shortcutCount}/${hardware.bindableSignals} desktop endpoints registered · physical layer unverified`, ready: false },
   ]
   return <section className="setup-view">
     <div className="setup-intro"><span className="eyebrow">COMMISSIONING / TRUTHFUL READINESS</span><h2>Make every layer observable.</h2><p>USB presence, macOS authority, Input configuration, and native Codex integration are separate states. This checklist keeps them separate so “connected” never means more than we proved.</p></div>

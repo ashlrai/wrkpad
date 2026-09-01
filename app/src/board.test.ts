@@ -22,8 +22,8 @@ describe('board contract', () => {
   it('matches the verified 4x4 physical geometry', () => {
     expect(hardware.mechanicalSwitches).toBe(13)
     expect(hardware.controls.filter((control) => control.kind === 'agent')).toHaveLength(6)
-    expect(hardware.controls.find((control) => control.id === 'dialPress')).toMatchObject({ row: 1, column: 1, hardwareId: 'ENC_CLK' })
-    expect(hardware.controls.find((control) => control.id === 'joyUp')).toMatchObject({ row: 1, column: 4, hardwareId: 'JOY_UP' })
+    expect(hardware.controls.find((control) => control.id === 'joyUp')).toMatchObject({ row: 1, column: 1, hardwareId: 'JOY_UP' })
+    expect(hardware.controls.find((control) => control.id === 'dialPress')).toMatchObject({ row: 1, column: 4, hardwareId: 'ENC_CLK' })
     expect(hardware.controls.find((control) => control.id === 'cmd5')).toMatchObject({ row: 4, column: 2, span: 2, hardwareId: 'ACT10 + ACT11' })
     expect(hardware.firmwareControls[0]).toMatchObject({ row: 4, column: 1, bindable: false, leds: 3 })
   })

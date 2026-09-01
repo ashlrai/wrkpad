@@ -17,7 +17,8 @@ The roadmap is evidence-gated and ordered by reliable daily value.
 - Use verified Codex app-server capabilities for richer identity where supported.
 - Correlate Claude Code sessions with cmux panes only when cmux exposes a stable, permissioned locator.
 - Add user-controlled slot pinning and overflow without exposing raw session IDs.
-- Add a secret-free setup exporter/importer.
+- Add a guarded, reversible Input import/activation assistant. The current
+  secret-free transformer only creates a private offline profile artifact.
 - Add menu-bar presence and clear observer-health notifications.
 
 ## Later: qualified hardware feedback

@@ -72,6 +72,7 @@ export interface WorkspaceSnapshot {
 export interface SystemStatus {
   boardConnected: boolean
   inputInstalled: boolean
+  inputProfile: InputProfileStatus
   inputMonitoring: 'unverified'
   codex: boolean
   nativeCodexMicro: CodexNativeMicroStatus
@@ -82,6 +83,13 @@ export interface SystemStatus {
   shortcutCount: number
   shortcutRegistrations: ShortcutRegistration[]
   workspaceSnapshot: WorkspaceSnapshot | null
+}
+
+export interface InputProfileStatus {
+  cacheStatus: 'available' | 'missing' | 'invalid' | 'unsafe'
+  activeProfile: string | null
+  activeLayer: string | null
+  encoderDirection: 'correct' | 'reversed' | 'unrecognized' | 'unavailable'
 }
 
 export interface CodexNativeMicroStatus {
@@ -230,10 +238,10 @@ export const hardware = {
     { id: 'touchProfile', label: 'Bluetooth host profile', row: 4, column: 1, bindable: false, leds: 3 },
   ],
   controls: [
-    { id: 'dialPress', hardwareId: 'ENC_CLK', kind: 'dial', row: 1, column: 1 },
+    { id: 'joyUp', hardwareId: 'JOY_UP', kind: 'joystick', row: 1, column: 1 },
     { id: 'agent1', hardwareId: 'AG00', kind: 'agent', row: 1, column: 2 },
     { id: 'agent2', hardwareId: 'AG01', kind: 'agent', row: 1, column: 3 },
-    { id: 'joyUp', hardwareId: 'JOY_UP', kind: 'joystick', row: 1, column: 4 },
+    { id: 'dialPress', hardwareId: 'ENC_CLK', kind: 'dial', row: 1, column: 4 },
     { id: 'agent3', hardwareId: 'AG02', kind: 'agent', row: 2, column: 1 },
     { id: 'agent4', hardwareId: 'AG03', kind: 'agent', row: 2, column: 2 },
     { id: 'agent5', hardwareId: 'AG04', kind: 'agent', row: 2, column: 3 },

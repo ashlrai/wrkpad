@@ -12,7 +12,7 @@ Ashlr Agent Board gives opaque black keycaps a complete on-screen legend, keeps 
 The Creator Micro 2 has six Agent keys but black keycaps cannot communicate state by themselves. Agent Board mirrors their exact `2 + 4` geometry:
 
 ```text
-DIAL | AG00 | AG01 | STICK
+STICK | AG00 | AG01 | DIAL
       AG02 | AG03 | AG04 | AG05
 ```
 
@@ -63,6 +63,11 @@ npm run dev
 `npm run doctor` performs read-only local probes and reports anything that still needs human verification.
 
 Before pressing physical controls, follow [setup and Flight Check](docs/setup.md). Work Louder Input must emit the exact shortcuts expected by the app, and macOS Input Monitoring must be granted by the user.
+
+To populate the six slots with live Codex and Claude Code state, also complete
+the guarded [`wrkpad` service and hook setup](../docs/hook-setup.md). A configured
+hook, a trusted hook, a received lifecycle event, and a physical board signal
+are separate gates.
 
 ## Develop and package
 

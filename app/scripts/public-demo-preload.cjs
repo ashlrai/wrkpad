@@ -5,6 +5,7 @@ const clone = (value) => JSON.parse(JSON.stringify(value))
 const status = {
   boardConnected: false,
   inputInstalled: false,
+  inputProfile: { cacheStatus: 'missing', activeProfile: null, activeLayer: null, encoderDirection: 'unavailable' },
   inputMonitoring: 'unverified',
   codex: false,
   claude: false,

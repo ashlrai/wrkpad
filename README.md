@@ -21,7 +21,7 @@ provider receipt, and Fleet authority remain unverified. See
 [architecture and trust boundaries](app/docs/architecture.md)._
 
 ```text
-DIAL | AG00 | AG01 | JOYSTICK
+STICK | AG00 | AG01 | DIAL
        AG02 | AG03 | AG04 | AG05
 ```
 
@@ -167,7 +167,7 @@ Discovery recognizes these identities and reports the one actually observed:
 
 | VID:PID | Classification | Evidence boundary |
 | --- | --- | --- |
-| `303A:8297` | Creator Micro 2 candidate | Community and user-supplied evidence; never sufficient for writes |
+| `303A:8297` | Creator Micro 2 candidate | Recognized for read-only presence; community and user-supplied evidence; never sufficient for writes |
 | `303A:8298` | Creator Micro 2 | Reverified on the tested desk unit on August 31, 2026 |
 | `303A:8360` | Codex Micro | Repeated community hardware evidence |
 | `574C:E6E3` | Legacy Work Louder Micro v1 | QMK explanation only; current-generation protocol is forbidden |

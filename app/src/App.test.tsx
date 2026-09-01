@@ -102,6 +102,15 @@ describe('operator interface', () => {
     expect(screen.getByText(/Screen is authoritative now/i)).toBeTruthy()
   })
 
+  it('renders the physical top row as white joystick, two agent keys, then black dial', () => {
+    render(<App />)
+    const topRow = document.querySelector('.hardware-grid')?.children
+    expect(topRow?.[0].classList.contains('joystick-module')).toBe(true)
+    expect(topRow?.[1].getAttribute('aria-label')).toMatch(/^AG00:/)
+    expect(topRow?.[2].getAttribute('aria-label')).toMatch(/^AG01:/)
+    expect(topRow?.[3].classList.contains('dial-module')).toBe(true)
+  })
+
   it('selects the paired Mic cap as one logical control', () => {
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: /Pair.*CLAUDE \+ CODEX/i }))
@@ -138,7 +147,77 @@ describe('operator interface', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
     const state = await screen.findByText('20/20 desktop endpoints registered · physical layer unverified')
     expect(state.closest('article')?.classList.contains('ready')).toBe(false)
-    expect(screen.getByText(/only a physical Flight Check verifies the active board layer/i)).toBeTruthy()
+    const profileState = screen.getByText('Current keyboard profile requires physical verification')
+    expect(profileState.closest('article')?.classList.contains('ready')).toBe(false)
+    expect(screen.getByText(/Merely viewing or importing a profile does not activate it/i)).toBeTruthy()
+  })
+
+  it('surfaces the sanitized active Input profile and blocks a reversed dial mapping', async () => {
+    window.agentBoard = {
+      getStatus: vi.fn().mockResolvedValue({
+        boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
+        inputProfile: { cacheStatus: 'available', activeProfile: 'Ashlr Agent Board', activeLayer: 'Ashlr Daily', encoderDirection: 'reversed' },
+        codex: true, claude: true, ashlr: true, boardRoute: 'ashlr_layer', workspace: '/tmp', shortcutCount: 20,
+        shortcutRegistrations: [], workspaceSnapshot: null,
+      }),
+      getMissionControl: vi.fn().mockResolvedValue({
+        schemaVersion: 1, observedAt: new Date().toISOString(), agentSource: 'unavailable', fleetSource: 'unavailable',
+        agents: Array.from({ length: 6 }, (_, index) => ({ slot: index + 1, provider: null, state: 'off' as const, title: 'Available slot', updatedAt: null })),
+        fleet: null, unassignedActiveSessions: 0, operatorNotices: [],
+      }),
+      focusAgentSlot: vi.fn(), setProfile: vi.fn(), setFlightCheck: vi.fn(),
+      requestAction: vi.fn(), confirmAction: vi.fn(), beginHold: vi.fn(), cancelHold: vi.fn(),
+      chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(), onControl: vi.fn(() => () => {}),
+    } as unknown as NonNullable<typeof window.agentBoard>
+
+    render(<App />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
+    const state = await screen.findByText('Ashlr Agent Board · Ashlr Daily · dial directions reversed')
+    expect(state.closest('article')?.classList.contains('ready')).toBe(false)
+    expect(screen.getByText(/known clockwise\/counterclockwise inversion/i)).toBeTruthy()
+  })
+
+  it('reveals zero-signal recovery after 12 seconds and disarms before opening Setup', async () => {
+    const startedAt = '2026-09-01T18:00:00.000Z'
+    const setFlightCheck = vi.fn().mockImplementation(async (enabled: boolean) => enabled
+      ? { acknowledged: true, active: true, startedAt }
+      : { acknowledged: true, active: false, startedAt: null })
+    window.agentBoard = {
+      getStatus: vi.fn().mockResolvedValue({
+        boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
+        codex: true, claude: true, ashlr: true, boardRoute: 'ashlr_layer', workspace: '/tmp', shortcutCount: 20,
+        shortcutRegistrations: [], workspaceSnapshot: null,
+      }),
+      getMissionControl: vi.fn().mockResolvedValue({
+        schemaVersion: 1, observedAt: startedAt, agentSource: 'unavailable', fleetSource: 'unavailable',
+        agents: Array.from({ length: 6 }, (_, index) => ({ slot: index + 1, provider: null, state: 'off' as const, title: 'Available slot', updatedAt: null })),
+        fleet: null, unassignedActiveSessions: 0, operatorNotices: [],
+      }),
+      focusAgentSlot: vi.fn(), setProfile: vi.fn(), setFlightCheck,
+      requestAction: vi.fn(), confirmAction: vi.fn(), beginHold: vi.fn(), cancelHold: vi.fn(),
+      chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(), onControl: vi.fn(() => () => {}),
+    } as unknown as NonNullable<typeof window.agentBoard>
+
+    render(<App />)
+    expect(await screen.findByText('USB linked')).toBeTruthy()
+    fireEvent.click(screen.getByRole('tab', { name: 'Flight Check' }))
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(startedAt))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Daily profile' }))
+      await Promise.resolve()
+    })
+    expect(screen.getByText('0 raw desktop receipts since Flight Check started.')).toBeTruthy()
+    expect(screen.queryByText('No physical shortcut arrived')).toBeNull()
+    act(() => vi.advanceTimersByTime(12_000))
+    expect(screen.getByText('No physical shortcut arrived')).toBeTruthy()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Open recovery checklist' }))
+      await Promise.resolve()
+    })
+    expect(setFlightCheck.mock.calls).toEqual([[true], [false]])
+    expect(screen.getByRole('heading', { name: 'Make every layer observable.' })).toBeTruthy()
   })
 
   it('uses canonical black-cap labels and freezes firmware during acceptance', () => {

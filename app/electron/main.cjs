@@ -5,6 +5,7 @@ const { existsSync, renameSync, writeFileSync } = require('node:fs')
 const path = require('node:path')
 const { ACTION_SPECS, executeSpec } = require('./action-registry.cjs')
 const { inspectCodexMicroLogs } = require('./codex-micro-diagnostics.cjs')
+const { inspectInputProfile } = require('./input-profile-diagnostics.cjs')
 const { holdSatisfied } = require('./approval-guard.cjs')
 const { evaluateFlightSignals } = require('./flight-receipt.cjs')
 const { createFlightSession } = require('./flight-session.cjs')
@@ -134,6 +135,7 @@ ipcMain.handle('board:getStatus', trustedIpc(async () => {
   return {
     boardConnected: board,
     inputInstalled: existsSync('/Applications/Input.app'),
+    inputProfile: inspectInputProfile(home),
     inputMonitoring: 'unverified',
     codex,
     nativeCodexMicro: inspectCodexMicroLogs(home),
