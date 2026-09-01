@@ -112,6 +112,34 @@ test('Ashlr Layer exposes recent unresolved Input evidence as a bounded advisory
   assert.match(runtime.reason, /may predate the current cache/)
 })
 
+test('Ashlr Layer warns when bounded Input runtime evidence is unsafe', () => {
+  const result = buildPreflight({
+    route: 'ashlr_layer', source, stable: null,
+    appDoctorRaw: { ...appDoctor, inputRuntime: { status: 'log_unsafe', profileIndex: null, layerIndex: null, observedAt: null, fresh: false } },
+    developmentBinary: '/missing/development/binary', runCommand: commandFixture,
+    observedAt: '2026-09-01T20:00:00.000Z',
+  })
+  const runtime = result.checks.find((item) => item.id === 'input_runtime')
+  assert.equal(runtime.status, 'warn')
+  assert.match(runtime.reason, /do not infer an error-free Input session/)
+})
+
+test('hostile Input runtime projection fails closed without exposing private fields', () => {
+  const result = buildPreflight({
+    route: 'ashlr_layer', source, stable: null,
+    appDoctorRaw: {
+      ...appDoctor,
+      inputRuntime: { status: '/Users/example/private', profileIndex: 999, layerIndex: -1, observedAt: 'secret', fresh: true },
+    },
+    developmentBinary: '/missing/development/binary', runCommand: commandFixture,
+    observedAt: '2026-09-01T20:00:00.000Z',
+  })
+  const runtime = result.checks.find((item) => item.id === 'input_runtime')
+  assert.equal(runtime.status, 'warn')
+  assert.equal(runtime.evidence, 'reason=invalid; bounded Input runtime evidence unavailable')
+  assert.doesNotMatch(JSON.stringify(result), /Users|private|secret|999/)
+})
+
 test('preflight output never publishes executable firmware or permission steps', () => {
   for (const route of ['ashlr_layer', 'codex_native']) {
     const result = buildPreflight({

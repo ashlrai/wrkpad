@@ -152,10 +152,11 @@ node tools/agent-preflight.mjs inspect --route ashlr_layer --json
 node tools/agent-preflight.mjs inspect --route codex_native --json
 ```
 
-Agents should read `requested_route` and `declared_route`, then inspect the
-`input_profile`, `input_runtime`, and `route_readiness` check entries plus each
-next step's actor, safety, and `does_not_prove`. Follow the linked recovery
-procedure rather than inventing a device or permission claim.
+Agents should read `requested_route`, `declared_route`, and `route_readiness`.
+On `ashlr_layer`, also inspect the `input_profile` and `input_runtime` check
+entries. Read each next step's actor, safety, and `does_not_prove`, then follow
+the linked recovery procedure rather than inventing a device or permission
+claim.
 
 See the [agent operations runbook](docs/agent-operations.md) for the daily
 Codex/Claude workflow and human handoff gates.

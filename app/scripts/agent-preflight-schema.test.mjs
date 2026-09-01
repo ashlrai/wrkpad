@@ -33,6 +33,8 @@ const appDoctorRaw = {
     codexNative: { status: 'blocked', reason: 'firmware_rpc_missing' },
     ashlrLayer: { status: 'manual', reason: 'physical_acceptance_required' },
   },
+  inputProfile: { cacheStatus: 'available', dailyProfileMatch: true, dailyLayerMatch: true, encoderDirection: 'correct', dailyProfileReady: true },
+  inputRuntime: { status: 'not_observed', profileIndex: null, layerIndex: null, observedAt: null, fresh: false },
 }
 
 test('agent preflight output conforms to its public schema for both routes', () => {

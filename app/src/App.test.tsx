@@ -246,9 +246,10 @@ describe('operator interface', () => {
 
     render(<App />)
     fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
-    expect(await screen.findByText('Input recently logged an unresolved combination.')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Create corrected Input profile' })).toBeNull()
-    expect(document.querySelectorAll('.input-reconciliation')).toHaveLength(1)
+    expect(await screen.findByRole('button', { name: 'Create corrected Input profile' })).toBeTruthy()
+    expect(screen.getByText(/Input also logged profile 2 \/ layer 1 as unresolved recently/i)).toBeTruthy()
+    expect(screen.queryByText('Input recently logged an unresolved combination.')).toBeNull()
+    expect(document.querySelectorAll('.profile-repair')).toHaveLength(1)
   })
 
   it('surfaces the sanitized active Input profile and blocks a reversed dial mapping', async () => {

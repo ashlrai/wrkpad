@@ -12,6 +12,12 @@ const REPO_ROOT = resolve(HERE, '..')
 const APP_DOCTOR = join(REPO_ROOT, 'app', 'scripts', 'doctor.mjs')
 const MAX_OUTPUT_BYTES = 256 * 1024
 const ROUTES = new Set(['ashlr_layer', 'codex_native'])
+const INPUT_RUNTIME_STATUSES = new Set(['unresolved_profile_layer', 'not_observed', 'log_missing', 'log_unsafe', 'log_unavailable'])
+const boundedIsoTimestamp = (value) => {
+  if (typeof value !== 'string' || value.length > 40 || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) return null
+  const parsed = new Date(value)
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString() === value ? value : null
+}
 
 function run(executable, args, cwd = REPO_ROOT, options = {}) {
   try {
@@ -148,6 +154,11 @@ function projectAppDoctor(raw) {
   const required = Array.isArray(raw.checks)
     ? raw.checks.filter((item) => item.category === 'required')
     : []
+  const rawRuntime = raw.inputRuntime && typeof raw.inputRuntime === 'object' ? raw.inputRuntime : null
+  const runtimeStatus = rawRuntime && INPUT_RUNTIME_STATUSES.has(rawRuntime.status) ? rawRuntime.status : rawRuntime ? 'invalid' : null
+  const runtimeProfileIndex = Number.isInteger(rawRuntime?.profileIndex) && rawRuntime.profileIndex >= 0 && rawRuntime.profileIndex <= 31 ? rawRuntime.profileIndex : null
+  const runtimeLayerIndex = Number.isInteger(rawRuntime?.layerIndex) && rawRuntime.layerIndex >= 0 && rawRuntime.layerIndex <= 15 ? rawRuntime.layerIndex : null
+  const runtimeObservedAt = boundedIsoTimestamp(rawRuntime?.observedAt)
   return {
     declaredRoute: ['ashlr_layer', 'codex_native'].includes(raw.route) ? raw.route : 'unknown',
     inputProfile: raw.inputProfile && typeof raw.inputProfile === 'object' ? {
@@ -157,12 +168,12 @@ function projectAppDoctor(raw) {
       encoderDirection: raw.inputProfile.encoderDirection ?? 'unavailable',
       dailyProfileReady: raw.inputProfile.dailyProfileReady === true,
     } : null,
-    inputRuntime: raw.inputRuntime && typeof raw.inputRuntime === 'object' ? {
-      status: raw.inputRuntime.status ?? 'not_observed',
-      profileIndex: Number.isInteger(raw.inputRuntime.profileIndex) ? raw.inputRuntime.profileIndex : null,
-      layerIndex: Number.isInteger(raw.inputRuntime.layerIndex) ? raw.inputRuntime.layerIndex : null,
-      observedAt: typeof raw.inputRuntime.observedAt === 'string' ? raw.inputRuntime.observedAt : null,
-      fresh: raw.inputRuntime.fresh === true,
+    inputRuntime: rawRuntime ? {
+      status: runtimeStatus,
+      profileIndex: runtimeProfileIndex,
+      layerIndex: runtimeLayerIndex,
+      observedAt: runtimeObservedAt,
+      fresh: runtimeStatus === 'unresolved_profile_layer' && rawRuntime.fresh === true && runtimeProfileIndex !== null && runtimeLayerIndex !== null && runtimeObservedAt !== null,
     } : null,
     requiredReady: required.length > 0 && required.every((item) => item.ok === true),
     nativeStatus: raw.readiness?.codexNative?.status ?? 'unknown',
@@ -274,6 +285,7 @@ export function buildPreflight({
   if (route === 'ashlr_layer') {
     const profile = appDoctor?.inputProfile
     const runtime = appDoctor?.inputRuntime
+    const runtimeUnavailable = ['log_missing', 'log_unsafe', 'log_unavailable', 'invalid'].includes(runtime?.status)
     checks.push(check(
       'input_profile',
       profile?.dailyProfileReady ? 'pass' : profile?.encoderDirection === 'reversed' ? 'blocked' : 'warn',
@@ -284,13 +296,13 @@ export function buildPreflight({
     ))
     checks.push(check(
       'input_runtime',
-      runtime?.status === 'unresolved_profile_layer' && runtime.fresh ? 'warn' : runtime ? 'pass' : 'warn',
+      runtime?.status === 'unresolved_profile_layer' && runtime.fresh || runtimeUnavailable ? 'warn' : runtime ? 'pass' : 'warn',
       runtime?.status === 'unresolved_profile_layer'
         ? `reason=unresolved_profile_layer; profile_index=${runtime.profileIndex ?? 'unknown'}; layer_index=${runtime.layerIndex ?? 'unknown'}; fresh=${runtime.fresh}`
-        : runtime ? `reason=${runtime.status}; no recent unresolved combination projected` : 'bounded Input runtime evidence unavailable',
+        : runtimeUnavailable ? `reason=${runtime.status}; bounded Input runtime evidence unavailable` : runtime ? `reason=${runtime.status}; no recent unresolved combination projected` : 'bounded Input runtime evidence unavailable',
       runtime?.status === 'unresolved_profile_layer' && runtime.fresh
         ? 'Input recently logged an unresolved index combination; it may predate the current cache and does not prove current device state'
-        : 'no recent unresolved Input profile/layer event requires an advisory',
+        : runtimeUnavailable ? 'runtime evidence is unavailable or unsafe; do not infer an error-free Input session' : runtime ? 'no recent unresolved Input profile/layer event requires an advisory' : 'run the desktop doctor directly for bounded Input runtime evidence',
     ))
     checks.push(check(
       'route_readiness',

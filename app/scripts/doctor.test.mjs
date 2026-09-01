@@ -182,3 +182,28 @@ test('doctor projects recent unresolved Input evidence without raw logs or a cur
   assert.match(result.modeGuidance.ashlrLayer, /may predate the current cache/)
   assert.doesNotMatch(JSON.stringify(result), /private log text/)
 })
+
+test('deterministic cache repair outranks advisory log evidence', () => {
+  const result = evaluateDoctor({
+    ...requiredProbes,
+    ...missingOptionalProbes,
+    boardRoute: 'ashlr_layer',
+    inputProfile: { cacheStatus: 'available', activeProfile: 'Default', activeLayer: 'Layer 1', encoderDirection: 'reversed' },
+    inputRuntime: { status: 'unresolved_profile_layer', profileIndex: 2, layerIndex: 1, observedAt: '2026-09-01T19:33:00.000Z', fresh: true },
+  })
+  assert.equal(result.readiness.ashlrLayer.reason, 'encoder_direction_reversed')
+  assert.match(result.nextAction, /Create and activate the corrected Input profile/)
+})
+
+test('malformed Input timestamps cannot become fresh advisories', () => {
+  const result = evaluateDoctor({
+    ...requiredProbes,
+    ...missingOptionalProbes,
+    boardRoute: 'ashlr_layer',
+    inputRuntime: { status: 'unresolved_profile_layer', profileIndex: 2, layerIndex: 1, observedAt: 'private/path', fresh: true },
+  })
+  assert.equal(result.inputRuntime.observedAt, null)
+  assert.equal(result.inputRuntime.fresh, false)
+  assert.equal(result.readiness.ashlrLayer.reason, 'physical_acceptance_required')
+  assert.doesNotMatch(JSON.stringify(result), /private\/path/)
+})

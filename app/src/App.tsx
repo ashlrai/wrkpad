@@ -850,11 +850,9 @@ function SetupView({ status, routeSaving, routeError, onRouteChange, onOperate, 
   const correctedProfileObserved = correctedInputProfileObserved(inputProfile)
   const inputRecoveryState = status.boardRoute !== 'ashlr_layer'
     ? 'none'
-    : recentRuntimeEvidence
-      ? 'runtime_log_advisory'
-      : correctedProfileObserved
-        ? 'cache_observed'
-        : 'profile_repair'
+    : correctedProfileObserved
+      ? recentRuntimeEvidence ? 'runtime_log_advisory' : 'cache_observed'
+      : 'profile_repair'
   const steps: Array<{ number: string; title: string; detail: string; state: string; ready: boolean; observed?: boolean }> = [
     { number: '01', title: 'Connect the board', detail: 'USB-C is the best commissioning path. Bluetooth keyboard and trackpad can remain connected.', state: status.boardConnected ? 'Detected as Creator Micro 2' : 'Waiting for USB device', ready: status.boardConnected },
     { number: '02', title: 'Declare the expected board route', detail: 'Codex Native and the Ashlr shortcut layer are separate operating contracts. The declaration never changes the device.', state: status.boardRoute === 'codex_native' ? 'Codex Native declared · not detected' : status.boardRoute === 'ashlr_layer' ? 'Ashlr Layer declared · not detected' : 'No route selected', ready: status.boardRoute !== 'unknown' },
@@ -891,6 +889,7 @@ function SetupView({ status, routeSaving, routeError, onRouteChange, onOperate, 
         {repairNeeded && <section className="profile-repair" aria-labelledby="profile-repair-title">
           <div><span className="eyebrow">OFFLINE REPAIR / NO DEVICE WRITE</span><h3 id="profile-repair-title">Create the corrected profile here.</h3></div>
           <p>Select an ordinary US Creator Micro 2 profile exported from Work Louder Input. Agent Board will validate it and save a new <b>Ashlr Daily</b> import with the clockwise/counterclockwise order corrected. It never opens Input, edits Input's cache, or writes to the board.</p>
+          {recentRuntimeEvidence && <p><b>Advisory:</b> Input also logged profile {inputRuntime.profileIndex} / layer {inputRuntime.layerIndex} as unresolved recently. That event may predate the cache and does not replace this deterministic profile repair.</p>}
           <button type="button" onClick={() => void createRepairProfile()} disabled={repairBusy}><Download size={14} />{repairBusy ? 'Creating…' : 'Create corrected Input profile'}</button>
           {repairResult?.status === 'saved' && <div className="profile-repair-result saved" role="status">
             <strong>Repair artifact ready—nothing activated yet.</strong>

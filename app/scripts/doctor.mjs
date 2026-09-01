@@ -53,6 +53,11 @@ const MANUAL_CHECKS = [
   },
 ]
 const INPUT_RUNTIME_STATUSES = new Set(['unresolved_profile_layer', 'not_observed', 'log_missing', 'log_unsafe', 'log_unavailable'])
+const boundedIsoTimestamp = (value) => {
+  if (typeof value !== 'string' || value.length > 40 || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) return null
+  const parsed = new Date(value)
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString() === value ? value : null
+}
 
 const makeCheck = (definition, probe, category) => ({
   name: definition.name,
@@ -90,15 +95,18 @@ export function evaluateDoctor(probes, options = {}) {
   const inputRuntimeStatus = INPUT_RUNTIME_STATUSES.has(rawInputRuntime.status) ? rawInputRuntime.status : 'not_observed'
   const runtimeProfileIndex = Number.isInteger(rawInputRuntime.profileIndex) && rawInputRuntime.profileIndex >= 0 && rawInputRuntime.profileIndex <= 31 ? rawInputRuntime.profileIndex : null
   const runtimeLayerIndex = Number.isInteger(rawInputRuntime.layerIndex) && rawInputRuntime.layerIndex >= 0 && rawInputRuntime.layerIndex <= 15 ? rawInputRuntime.layerIndex : null
+  const runtimeObservedAt = boundedIsoTimestamp(rawInputRuntime.observedAt)
   const unresolvedRuntimeObserved = inputRuntimeStatus === 'unresolved_profile_layer'
-    && rawInputRuntime.fresh === true && runtimeProfileIndex !== null && runtimeLayerIndex !== null
+    && rawInputRuntime.fresh === true && runtimeProfileIndex !== null && runtimeLayerIndex !== null && runtimeObservedAt !== null
   const ashlrReason = failedRequiredIndex !== -1
     ? 'required_prerequisite_missing'
-    : unresolvedRuntimeObserved
-      ? 'recent_unresolved_profile_layer_observed'
-      : inputProfile.encoderDirection === 'reversed'
+    : inputProfile.encoderDirection === 'reversed'
       ? 'encoder_direction_reversed'
-      : dailyProfileReady ? 'physical_acceptance_required' : 'input_profile_requires_activation'
+      : !dailyProfileReady
+        ? 'input_profile_requires_activation'
+        : unresolvedRuntimeObserved
+          ? 'recent_unresolved_profile_layer_observed'
+          : 'physical_acceptance_required'
   const manualChecks = MANUAL_CHECKS.map((check) => ({
     ...check,
     category: 'manual',
@@ -124,7 +132,7 @@ export function evaluateDoctor(probes, options = {}) {
       status: inputRuntimeStatus,
       profileIndex: runtimeProfileIndex,
       layerIndex: runtimeLayerIndex,
-      observedAt: typeof rawInputRuntime.observedAt === 'string' && rawInputRuntime.observedAt.length <= 40 ? rawInputRuntime.observedAt : null,
+      observedAt: runtimeObservedAt,
       fresh: unresolvedRuntimeObserved,
     },
     manualChecks,
@@ -154,9 +162,13 @@ export function evaluateDoctor(probes, options = {}) {
       failedRequiredIndex === -1
         ? nativeFirmwareMissing && nativeRouteSelected
           ? 'For the declared Codex Native route, back up the Input profile and plan a guarded vendor firmware qualification with Codex fully quit.'
-          : unresolvedRuntimeObserved && route === 'ashlr_layer'
-            ? 'Review the recent unresolved Input profile/layer event. If the board remains silent, complete the Input-only reconciliation before firmware qualification.'
-            : manualChecks[0].detail
+          : route === 'ashlr_layer' && inputProfile.encoderDirection === 'reversed'
+            ? 'Create and activate the corrected Input profile before Flight Check.'
+            : route === 'ashlr_layer' && !dailyProfileReady
+              ? 'Use Set as current profile for Ashlr Agent Board Corrected and verify Ashlr Daily before Flight Check.'
+              : unresolvedRuntimeObserved && route === 'ashlr_layer'
+                ? 'Review the recent unresolved Input profile/layer event. If the board remains silent, complete the Input-only reconciliation before firmware qualification.'
+                : manualChecks[0].detail
         : REQUIRED_CHECKS[failedRequiredIndex].nextAction,
   }
 }
