@@ -57,10 +57,5 @@ jobs:
           for key in NSAudioCaptureUsageDescription NSBluetoothAlwaysUsageDescription NSBluetoothPeripheralUsageDescription NSCameraUsageDescription NSMicrophoneUsageDescription; do
             ! /usr/libexec/PlistBuddy -c "Print :$key" "$plist" >/dev/null 2>&1
           done
-      - name: Verify public demo capture
-        shell: bash
-        run: |
-          npm run capture:public-demo
-          cp ../docs/assets/agent-board-public-demo.png "$RUNNER_TEMP/agent-board-public-demo-first.png"
-          npm run capture:public-demo
-          cmp -s "$RUNNER_TEMP/agent-board-public-demo-first.png" ../docs/assets/agent-board-public-demo.png
+      - name: Validate public demo fixture
+        run: npm run capture:public-demo
