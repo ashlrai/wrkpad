@@ -100,13 +100,17 @@ async function capture() {
     throw new Error(`Public fixture grew to ${finalContentHeight}px after layout and would be truncated at ${captureHeight}px`)
   }
   const image = await window.webContents.capturePage()
+  const imageSize = image.getSize()
+  if (imageSize.width !== width || imageSize.height !== captureHeight) {
+    throw new Error(`Public fixture captured at ${imageSize.width}x${imageSize.height}; expected ${width}x${captureHeight}`)
+  }
   await mkdir(path.dirname(outputPath), { recursive: true })
   const existingImage = nativeImage.createFromPath(outputPath)
   const comparison = existingImage.isEmpty() ? null : compareImages(image, existingImage)
   const updated = comparison === null || !comparison.equivalent
   if (updated) await writeFile(outputPath, image.toPNG())
   window.destroy()
-  return { outputPath, width: image.getSize().width, height: image.getSize().height, updated, comparison }
+  return { outputPath, width: imageSize.width, height: imageSize.height, updated, comparison }
 }
 
 app.whenReady().then(async () => {

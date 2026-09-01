@@ -76,9 +76,12 @@ npm run capture:public-demo # privacy-safe screenshot from the real renderer
 npm run package:mac  # unsigned, unpacked macOS app
 ```
 
-The public-demo capture uses a deterministic, action-disabled synthetic bridge
+The public-demo capture uses a fixed-data, action-disabled synthetic bridge
 and writes `../docs/assets/agent-board-public-demo.png`. Its banner and fixture
 data make clear that it is not live provider, hardware, RGB, or Fleet evidence.
+CI validates the fixture and two-capture repeatability on one macOS runner;
+cross-machine font and color raster differences keep screenshot refreshes under
+human visual review.
 
 `npm run package:mac` writes an architecture-specific app under `release/`. It does not sign, notarize, publish, install, or prove physical acceptance.
 

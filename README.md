@@ -15,7 +15,7 @@ or firmware lighting.
 
 ![Synthetic Ashlr Agent Board documentation view showing six text-labeled agent states, the black-cap legend, and the accurate Creator Micro 2 control geometry](docs/assets/agent-board-public-demo.png)
 
-_Captured from the real renderer with the repository's deterministic public
+_Captured from the real renderer with the repository's fixed-data public
 fixture. It contains no live sessions or personal paths; USB, physical RGB,
 provider receipt, and Fleet authority remain unverified. See
 [architecture and trust boundaries](app/docs/architecture.md)._
