@@ -77,7 +77,15 @@ jobs:
           python-version: '3.13'
       - run: python -m pip install semgrep==1.176.0
       - run: semgrep scan --config .semgrep.yml --error --metrics off
-      - uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf # main
-        with:
-          tool: gitleaks@8.30.1
+      - name: Install pinned Gitleaks
+        run: |
+          archive="$RUNNER_TEMP/gitleaks_8.30.1_linux_x64.tar.gz"
+          destination="$RUNNER_TEMP/gitleaks-bin"
+          curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
+            --output "$archive" \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  $archive" | sha256sum --check --strict
+          mkdir -p "$destination"
+          tar -xzf "$archive" -C "$destination" gitleaks
+          echo "$destination" >> "$GITHUB_PATH"
       - run: gitleaks git --redact --verbose

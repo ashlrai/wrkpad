@@ -17,10 +17,16 @@ function markdownFiles(root) {
 }
 
 export function githubSlug(value) {
-  return value
+  let visible = ''
+  let insideTag = false
+  for (const character of value) {
+    if (character === '<') insideTag = true
+    else if (character === '>') insideTag = false
+    else if (!insideTag) visible += character
+  }
+  return visible
     .trim()
     .toLowerCase()
-    .replace(/<[^>]+>/g, '')
     .replace(/[^\p{L}\p{N}\s_-]/gu, '')
     .replace(/\s+/g, '-')
 }

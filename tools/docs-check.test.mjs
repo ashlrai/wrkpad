@@ -8,6 +8,8 @@ import { githubSlug, localLinks, markdownAnchors, validateMarkdown } from './doc
 
 test('GitHub-style heading anchors are stable and deduplicated', () => {
   assert.equal(githubSlug('Run the read-only preflight'), 'run-the-read-only-preflight')
+  assert.equal(githubSlug('Safe <span>agent</span> operations'), 'safe-agent-operations')
+  assert.equal(githubSlug('Safe <script>alert(1)</script> operations'), 'safe-alert1-operations')
   assert.deepEqual(
     [...markdownAnchors('# Setup\n## Flight check\n## Flight check\n')],
     ['setup', 'flight-check', 'flight-check-1'],
