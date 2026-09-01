@@ -45,6 +45,11 @@ find release -maxdepth 3 -type d -name '*.app' -print
 
 Record an `app.asar` checksum and the exact source SHA. The command creates a directory target only; it does not create a DMG, sign, notarize, staple, upload, or update users.
 
+The manual unsigned-preview workflow uploads the archive with a companion
+manifest containing its SHA-256, exact source SHA, and explicit
+`signed=false`/`notarized=false` declarations. The manifest improves preview
+traceability; it is not a signature, notarization receipt, or release provenance.
+
 ## Public distribution gate
 
 Before publishing a macOS artifact, verify:

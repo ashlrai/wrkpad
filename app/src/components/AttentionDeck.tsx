@@ -84,9 +84,9 @@ export default function AttentionDeck({ agents, selectedSlot, source, onSelect, 
       <span><i className="error" />Error</span>
       <span><i className="needs-input" />Needs you</span>
       <span><i className="working" />Working</span>
-      <span><i className="unread" />Review</span>
+      <span><i className="unread" />Ready to review</span>
       <span><i className="idle" />Idle</span>
-      <span><i className="off" />Open</span>
+      <span><i className="off" />Available</span>
       <small>Screen is authoritative now; edge lighting follows only after hardware qualification.</small>
     </div>
   </section>

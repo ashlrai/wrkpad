@@ -7,6 +7,9 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 ### Added
 
 - Public project documentation, contribution guidance, support boundaries, and release criteria.
+- Source-SHA and SHA-256 manifest for explicitly unsigned preview artifacts.
+- Deterministic, action-disabled public screenshot harness with synthetic agent
+  states and no local paths, device claims, or remote authority.
 
 ## [0.1.0] - Unreleased
 

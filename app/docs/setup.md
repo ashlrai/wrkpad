@@ -20,6 +20,8 @@ Install the signed vendor application from [Work Louder](https://worklouder.cc/i
 
 Do not use QMK/VIA instructions intended for the legacy Creator Micro v1.
 
+If Input offers a firmware update during commissioning, defer it. Firmware availability is not firmware qualification, and changing firmware invalidates the configuration baseline you are trying to test. Plan an update as a separate operation with the active profile backed up, an explicit rollback path, and a fresh Flight Check afterward.
+
 ## 3. Grant Input Monitoring
 
 Open **System Settings → Privacy & Security → Input Monitoring** and enable the application that receives the board's shortcuts. Only the logged-in user can grant this macOS permission. Agent Board does not inspect or modify the protected TCC database.
@@ -29,6 +31,8 @@ Open **System Settings → Privacy & Security → Input Monitoring** and enable 
 Map the physical controls to [the canonical shortcuts](controls.md#action-switches-and-motion-controls).
 
 The daily layer has 19 gestures: six Agent keys, six visible action caps, four joystick directions, and dial left/right/press. The desktop reserves 20 shortcut endpoints because the Mic cap covers two switches. Assign the Mic shortcut to ACT10 and set ACT11 to `None` for daily use. Never give the two hidden halves different daily actions.
+
+The Setup screen's `20/20 desktop endpoints claimed` result proves only that Electron registered all expected global shortcuts. It does not inspect Input's active profile, prove that the mapping reached the board, or complete this setup step. The ordered physical Flight Check is the acceptance gate for the active layer.
 
 ## 5. Start the app
 

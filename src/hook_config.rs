@@ -119,6 +119,12 @@ pub fn plan(
             "Codex trust remains unknown until the exact definition is reviewed in /hooks"
                 .to_owned(),
         );
+        if inventory.unrelated > 0 {
+            warnings.push(format!(
+                "Codex trust is per hook definition; {} unrelated handler(s) share this file. Never choose `Trust all and continue`; review and trust only commands ending `--managed-by dev.wrkpad.hook-v1`",
+                inventory.unrelated
+            ));
+        }
         if has_inline_codex_hooks(&target)? {
             warnings.push(
                 "the adjacent config.toml contains inline hooks; review mixed hook sources"
@@ -880,6 +886,10 @@ mod tests {
             &executable,
         )?;
         assert_eq!(uninstall.outcome, "not_configured");
+        assert!(uninstall.warnings.iter().any(|warning| {
+            warning.contains("Never choose `Trust all and continue`")
+                && warning.contains("1 unrelated handler(s)")
+        }));
         apply(
             HookProvider::Codex,
             HookScope::User,

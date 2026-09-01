@@ -27,10 +27,24 @@ jobs:
       - run: npm run package:mac
       - name: Preserve executable bits
         run: tar -czf ashlr-agent-board-macos-unsigned.tgz -C release .
+      - name: Write source and checksum manifest
+        shell: bash
+        run: |
+          archive="ashlr-agent-board-macos-unsigned.tgz"
+          checksum="$(shasum -a 256 "$archive" | awk '{print $1}')"
+          {
+            printf 'artifact=%s\n' "$archive"
+            printf 'sha256=%s\n' "$checksum"
+            printf 'source_sha=%s\n' "$GITHUB_SHA"
+            printf 'signed=false\n'
+            printf 'notarized=false\n'
+          } > ashlr-agent-board-macos-unsigned.manifest.txt
       - name: Upload explicitly unsigned preview
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ashlr-agent-board-macos-unsigned
-          path: app/ashlr-agent-board-macos-unsigned.tgz
+          path: |
+            app/ashlr-agent-board-macos-unsigned.tgz
+            app/ashlr-agent-board-macos-unsigned.manifest.txt
           if-no-files-found: error
           retention-days: 14

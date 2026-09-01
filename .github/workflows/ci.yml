@@ -8,8 +8,13 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -29,8 +34,24 @@ jobs:
       - run: cargo test --all-targets
       - run: cargo build --release
 
+  msrv:
+    name: MSRV (Rust 1.88)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: 1.88.0
+      - run: sudo apt-get update && sudo apt-get install -y libudev-dev
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: msrv-1.88
+      - run: cargo test --locked --all-targets
+
   audit:
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master

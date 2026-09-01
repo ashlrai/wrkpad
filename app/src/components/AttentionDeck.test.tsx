@@ -23,7 +23,7 @@ describe('black-cap attention runway', () => {
     expect(screen.getByRole('button', { name: /Agent 2, AG01, Claude Code, ashlr-hub, Needs you/i }).getAttribute('aria-pressed')).toBe('true')
     expect(screen.getByRole('button', { name: /Agent 4.*Ready to review/i })).toBeTruthy()
     expect(screen.getByRole('button', { name: /Agent 5.*Local agent.*Idle/i })).toBeTruthy()
-    expect(screen.getByLabelText('Agent state legend for opaque keycaps').textContent).toContain('ErrorNeeds youWorkingReviewIdleOpen')
+    expect(screen.getByLabelText('Agent state legend for opaque keycaps').textContent).toContain('ErrorNeeds youWorkingReady to reviewIdleAvailable')
   })
 
   it('selects an empty key without inventing a focus target', () => {

@@ -33,6 +33,7 @@
     "dev:web": "vite --host 127.0.0.1",
     "doctor": "node scripts/doctor.mjs",
     "build": "tsc -b && vite build",
+    "capture:public-demo": "npm run build && electron scripts/capture-public-demo.cjs",
     "lint": "oxlint src electron scripts vite.config.ts vitest.config.ts",
     "test": "vitest run && node --test electron/*.test.cjs",
     "preview": "vite preview",

@@ -3,8 +3,12 @@ name = "wrkpad"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.88"
-description = "Local-first agent status and safe lighting control plane for Work Louder Micro hardware"
+description = "Observe-only agent status control plane and lighting model for Work Louder Micro hardware"
 license = "MIT"
+publish = false
+readme = "README.md"
+repository = "https://github.com/ashlrai/wrkpad"
+homepage = "https://ashlr.ai"
 keywords = ["agents", "hid", "tui", "codex", "claude"]
 categories = ["command-line-utilities", "hardware-support"]
 

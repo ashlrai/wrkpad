@@ -13,6 +13,13 @@ model. Ashlr Agent Board mirrors the physical `2 + 4` Agent-key geometry on
 screen, so opaque black keycaps remain understandable without replacement caps
 or firmware lighting.
 
+![Synthetic Ashlr Agent Board documentation view showing six text-labeled agent states, the black-cap legend, and the accurate Creator Micro 2 control geometry](docs/assets/agent-board-public-demo.png)
+
+_Captured from the real renderer with the repository's deterministic public
+fixture. It contains no live sessions or personal paths; USB, physical RGB,
+provider receipt, and Fleet authority remain unverified. See
+[architecture and trust boundaries](app/docs/architecture.md)._
+
 ```text
 DIAL | AG00 | AG01 | JOYSTICK
        AG02 | AG03 | AG04 | AG05
@@ -62,8 +69,8 @@ marks missing observers and optional CLIs as unavailable.
 - No prompt submission from an Agent slot.
 - No claim that a planned color is visible through opaque black keycaps; the
   screen is the authoritative legend.
-- No signed or notarized public macOS binary yet. CI's preview artifact is
-  explicitly unsigned and is not a release.
+- No signed or notarized public macOS binary yet. CI's preview artifact includes
+  a source-SHA/checksum manifest, is explicitly unsigned, and is not a release.
 
 See [device interoperability](protocol/device-interoperability.md), [ownership
 and recovery](docs/ownership-and-recovery.md), and [release readiness](docs/release.md).

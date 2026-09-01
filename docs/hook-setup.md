@@ -50,13 +50,15 @@ The managed Codex set contains eight handlers: `SessionStart`, `UserPromptSubmit
 
 Subagents use `parent session + agent_id` as distinct private identities. Start maps to working and stop maps to unread, so parallel subagents can occupy distinct sticky slots and reach the normal six-slot overflow policy.
 
-After any install or repair, open Codex `/hooks`, inspect the full command and source, and explicitly trust the exact definition. `wrkpad hooks status` reports trust as `untrusted_or_unknown`; it cannot inspect or change Codex trust. Do not normalize `--dangerously-bypass-hook-trust` into setup instructions.
+After any install or repair, open Codex `/hooks`, inspect the full command and source, and explicitly trust each exact wrkpad definition. Codex records trust per normalized hook definition and current hash, not once for the entire JSON file. If `wrkpad hooks status` reports unrelated handlers, choose **Review hooks** and trust only the eight commands ending `--managed-by dev.wrkpad.hook-v1`, one at a time. Never choose **Trust all and continue** in that state; leave every unrelated handler untrusted. `wrkpad hooks status` reports trust as `untrusted_or_unknown`; it cannot inspect or change Codex trust. Do not normalize `--dangerously-bypass-hook-trust` into setup instructions.
+
+Project-scoped hooks are additive and do not suppress user-scoped hooks, so copying wrkpad into `.codex/hooks.json` is not an isolation mechanism. Keep the stable user-scoped definitions and use Codex's per-hook review boundary.
 
 `PermissionRequest` is the lifecycle hook for an imminent approval prompt. `approval-requested` is a TUI notification selector, `agent-turn-complete` is the legacy external `notify` payload, and `approval-required` is not the managed lifecycle event.
 
 ## Existing local timeout warning
 
-The August 31 audit found an unrelated shared `SessionStart` hook configured with `"timeout": 15000` on this Mac. Both providers interpret timeout as seconds, so that is about 4.2 hours rather than 15 seconds. wrkpad preserves it. Review it independently.
+The August 31 audit found an unrelated shared `SessionStart` hook configured as `bash ~/.claude/scripts/auto-sync.sh` with `"timeout": 15000` on this Mac. Both providers interpret timeout as seconds, so that is about 4.2 hours rather than 15 seconds. The script can run `git pull --ff-only` in a clean repository or `git fetch` in a dirty one. wrkpad preserves it and does not authorize it. Leave that hook untrusted unless an operator separately reviews and approves its repository mutation behavior.
 
 ## Runtime verification
 
@@ -67,3 +69,5 @@ wrkpad status --json
 ```
 
 Verify a slot changes and that prompt text, assistant content, tool commands and arguments, transcripts, credentials, and approval decisions are absent from stdout and the state file. A configured and trusted hook still does not prove the provider invoked it; an ingested event still does not prove the board was painted.
+
+For the lowest-risk Codex receipt check, first record the current revision and slot timestamps, then start Codex from an existing non-Git directory such as `/tmp`. In `/hooks`, trust only the eight exact wrkpad definitions and leave the unrelated auto-sync handler untrusted. Exit and start one fresh disposable session from `/tmp`, then compare `wrkpad status --json` with the baseline. This prevents the foreign Git hook from receiving trust and gives it no repository to mutate. Starting a provider session can still create provider-local session metadata and consume service quota, so it remains an explicit operator acceptance step rather than an unattended installer action.

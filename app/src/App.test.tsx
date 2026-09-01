@@ -54,6 +54,40 @@ describe('operator interface', () => {
     expect(screen.getByText(/Only you can grant this/i)).toBeTruthy()
   })
 
+  it('keeps the physical Input layer unresolved when all desktop shortcuts register', async () => {
+    window.agentBoard = {
+      getStatus: vi.fn().mockResolvedValue({
+        boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
+        codex: true, claude: true, ashlr: true, workspace: '/tmp', shortcutCount: 20,
+        shortcutRegistrations: [], workspaceSnapshot: null,
+      }),
+      getMissionControl: vi.fn().mockResolvedValue({
+        schemaVersion: 1, observedAt: new Date().toISOString(), agentSource: 'unavailable', fleetSource: 'unavailable',
+        agents: Array.from({ length: 6 }, (_, index) => ({ slot: index + 1, provider: null, state: 'off' as const, title: 'Available slot', updatedAt: null })),
+        fleet: null, unassignedActiveSessions: 0, operatorNotices: [],
+      }),
+      focusAgentSlot: vi.fn(), setProfile: vi.fn(), setFlightCheck: vi.fn(),
+      requestAction: vi.fn(), confirmAction: vi.fn(), beginHold: vi.fn(), cancelHold: vi.fn(),
+      chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(), onControl: vi.fn(() => () => {}),
+    } as unknown as NonNullable<typeof window.agentBoard>
+
+    render(<App />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
+    const state = await screen.findByText('20/20 desktop endpoints claimed · physical layer unverified')
+    expect(state.closest('article')?.classList.contains('ready')).toBe(false)
+    expect(screen.getByText(/only a physical Flight Check verifies the active board layer/i)).toBeTruthy()
+  })
+
+  it('uses canonical black-cap labels and freezes firmware during acceptance', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
+    const legend = screen.getByLabelText('Black-opaque state language')
+    expect(legend.textContent).toContain('Error Needs you Working Ready to review Idle Available')
+    expect(legend.textContent).not.toContain('Completed')
+    expect(screen.getByText(/Freeze firmware during acceptance/i)).toBeTruthy()
+    expect(screen.getByText(/defer it until the active profile is backed up/i)).toBeTruthy()
+  })
+
   it('requires one continuous keyboard hold and ignores key repeat', async () => {
     vi.useFakeTimers()
     const beginHold = vi.fn().mockResolvedValue(true)

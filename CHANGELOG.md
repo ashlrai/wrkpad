@@ -24,6 +24,15 @@ All notable changes will be documented here. The project follows semantic versio
 - Opt-in per-user macOS LaunchAgent lifecycle with fixed argv, executable/content confirmation, authenticated health, and rollback.
 - Distinct Codex subagent slot identities and explicit `wrkpad forget AG` recovery.
 
+### Changed
+
+- Verify the declared Rust 1.88 minimum in CI, bound core workflow runtime, and
+  keep the unreleased crate out of package registries by default.
+- Attach exact source and SHA-256 evidence to explicitly unsigned Agent Board
+  preview artifacts.
+- Document the black-keycap experience with a privacy-safe capture from the
+  real renderer and link its existing architecture and trust model.
+
 ### Fixed
 
 - Keep macOS USB parsers and Unix durability helpers out of unsupported platform
