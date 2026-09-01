@@ -5,12 +5,21 @@ const { tmpdir } = require('node:os')
 const path = require('node:path')
 const {
   MAX_SETTINGS_BYTES,
+  appSettingsPath,
   readWorkspaceSettings,
   saveBoardRouteSettings,
   saveWorkspaceSettings,
   validBoardRoute,
   validWorkspace,
 } = require('./settings.cjs')
+
+test('settings path matches the packaged Electron application data directory', () => {
+  assert.equal(
+    appSettingsPath('/Users/example/Library/Application Support'),
+    '/Users/example/Library/Application Support/ashlr-agent-board/settings.json',
+  )
+  assert.throws(() => appSettingsPath('Library/Application Support'), /absolute local path/)
+})
 
 test('workspace settings accept only bounded absolute paths', () => {
   assert.equal(validWorkspace('/Users/example/project'), true)

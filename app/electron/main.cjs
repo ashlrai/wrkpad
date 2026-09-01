@@ -14,7 +14,7 @@ const { createFlightSession } = require('./flight-session.cjs')
 const { inspectWorkspace } = require('./workspace-inspector.cjs')
 const { appForProvider, collectMissionControl } = require('./mission-control.cjs')
 const { configuredRendererUrl, trustedRendererUrl } = require('./renderer-trust.cjs')
-const { readWorkspaceSettings, saveBoardRouteSettings, saveWorkspaceSettings, validBoardRoute } = require('./settings.cjs')
+const { appSettingsPath, readWorkspaceSettings, saveBoardRouteSettings, saveWorkspaceSettings, validBoardRoute } = require('./settings.cjs')
 const { resolveTool } = require('./tool-resolver.cjs')
 
 const PROFILE_IDS = new Set(['codex', 'claude', 'fleet', 'ship', 'emergency'])
@@ -29,7 +29,7 @@ let missionCache = null; let missionCacheAt = 0; let missionInFlight = null
 const approvals = new Map()
 const flightSession = createFlightSession()
 
-function settingsPath() { return path.join(app.getPath('userData'), 'settings.json') }
+function settingsPath() { return appSettingsPath(app.getPath('appData')) }
 function readSettings() { return readWorkspaceSettings(settingsPath(), app.getPath('home')) }
 function saveWorkspace(workspace) { saveWorkspaceSettings(settingsPath(), workspace, app.getPath('home')) }
 function saveBoardRoute(boardRoute) { saveBoardRouteSettings(settingsPath(), boardRoute, app.getPath('home')) }

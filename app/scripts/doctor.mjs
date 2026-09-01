@@ -9,7 +9,7 @@ const require = createRequire(import.meta.url)
 const { detectCreatorMicro2 } = require('../electron/creator-micro-identity.cjs')
 const { inspectCodexMicroLogs } = require('../electron/codex-micro-diagnostics.cjs')
 const { inspectInputProfile } = require('../electron/input-profile-diagnostics.cjs')
-const { readAppSettings } = require('../electron/settings.cjs')
+const { appSettingsPath, readAppSettings } = require('../electron/settings.cjs')
 const { resolveTool } = require('../electron/tool-resolver.cjs')
 
 const REQUIRED_CHECKS = [
@@ -164,10 +164,7 @@ export function collectProbes() {
   const inputInstalled = existsSync('/Applications/Input.app')
   const logitechOwner = run('/usr/bin/pgrep', ['-fl', 'logioptionsplus_agent'])
   const nativeCodex = inspectCodexMicroLogs(home)
-  const settings = readAppSettings(
-    join(home, 'Library', 'Application Support', 'Ashlr Agent Board', 'settings.json'),
-    home,
-  )
+  const settings = readAppSettings(appSettingsPath(join(home, 'Library', 'Application Support')), home)
 
   return {
     board: { ok: Boolean(boardIdentity), detail: boardIdentity ? `Work Louder ${boardIdentity.vidPid}${boardIdentity.evidence === 'candidate' ? ' candidate' : ''}` : 'not detected' },
