@@ -20,18 +20,65 @@ function finiteCount(value) {
   return Number.isSafeInteger(value) && value >= 0 ? value : 0
 }
 
+function valid() {
+  return { ok: true, code: 'ok', message: 'Payload matches the supported contract.' }
+}
+
+function invalid(code, message) {
+  return { ok: false, code, message }
+}
+
+function validateAgentPayload(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return invalid('invalid_payload', 'wrkpad status must return a JSON object.')
+  }
+  if (raw.schema !== 'dev.wrkpad.hasp.state/v1') {
+    return invalid('unsupported_schema', 'Expected wrkpad schema dev.wrkpad.hasp.state/v1.')
+  }
+  if (!Array.isArray(raw.slots)) {
+    return invalid('invalid_slots', 'Expected wrkpad field slots to be an array.')
+  }
+  return valid()
+}
+
+function validateFleetPayload(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return invalid('invalid_payload', 'Ashlr Fleet status must return a JSON object.')
+  }
+  const fields = [
+    ['generatedAt', 'invalid_generated_at', raw.generatedAt, timestampField],
+    ['daemon.running', 'invalid_daemon_running', raw.daemon?.running, (value) => typeof value === 'boolean'],
+    ['daemon.activity.phase', 'invalid_daemon_phase', raw.daemon?.activity?.phase, (value) => typeof value === 'string'],
+    ['queue.backlogItems', 'invalid_queue_backlog_items', raw.queue?.backlogItems, finiteCountField],
+    ['queue.eligibleBacklogItems', 'invalid_queue_eligible_items', raw.queue?.eligibleBacklogItems, finiteCountField],
+    ['queue.repairControlBlockedItems', 'invalid_queue_repair_blocked_items', raw.queue?.repairControlBlockedItems, finiteCountField],
+    ['proposals.pending', 'invalid_pending_proposals', raw.proposals?.pending, finiteCountField],
+    ['goalFocus.activeGoalCount', 'invalid_active_goal_count', raw.goalFocus?.activeGoalCount, finiteCountField],
+    ['missionBrief.operatingMode', 'invalid_operating_mode', raw.missionBrief?.operatingMode, (value) => typeof value === 'string'],
+    ['missionBrief.directive', 'invalid_mission_directive', raw.missionBrief?.directive, (value) => typeof value === 'string'],
+  ]
+  for (const [field, code, value, accepts] of fields) {
+    if (!accepts(value)) {
+      return invalid(code, `Expected Ashlr Fleet field ${field} to match the adapter contract.`)
+    }
+  }
+  return valid()
+}
+
+function finiteCountField(value) {
+  return Number.isSafeInteger(value) && value >= 0
+}
+
+function timestampField(value) {
+  return typeof value === 'string' && value.length <= 64 && Number.isFinite(Date.parse(value))
+}
+
 function isValidAgentPayload(raw) {
-  return raw?.schema === 'dev.wrkpad.hasp.state/v1' && Array.isArray(raw.slots)
+  return validateAgentPayload(raw).ok
 }
 
 function isValidFleetPayload(raw) {
-  return typeof raw?.generatedAt === 'string'
-    && typeof raw?.daemon?.running === 'boolean'
-    && typeof raw?.daemon?.activity?.phase === 'string'
-    && [raw?.queue?.backlogItems, raw?.queue?.eligibleBacklogItems, raw?.queue?.repairControlBlockedItems, raw?.proposals?.pending, raw?.goalFocus?.activeGoalCount]
-      .every((value) => Number.isSafeInteger(value) && value >= 0)
-    && typeof raw?.missionBrief?.operatingMode === 'string'
-    && typeof raw?.missionBrief?.directive === 'string'
+  return validateFleetPayload(raw).ok
 }
 
 function summarizeAgentSnapshot(raw) {
@@ -157,4 +204,14 @@ function appForProvider(provider) {
   return null
 }
 
-module.exports = { appForProvider, collectMissionControl, detectClaudeHookHazards, isValidAgentPayload, isValidFleetPayload, summarizeAgentSnapshot, summarizeFleetStatus }
+module.exports = {
+  appForProvider,
+  collectMissionControl,
+  detectClaudeHookHazards,
+  isValidAgentPayload,
+  isValidFleetPayload,
+  summarizeAgentSnapshot,
+  summarizeFleetStatus,
+  validateAgentPayload,
+  validateFleetPayload,
+}

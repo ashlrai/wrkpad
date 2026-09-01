@@ -18,6 +18,12 @@ function createFlightSession(now = () => new Date().toISOString()) {
       interlock.set(true)
       return this.snapshot()
     },
+    restart() {
+      if (!interlock.isActive()) return this.snapshot()
+      rawEvents = []
+      startedAt = now()
+      return this.snapshot()
+    },
     stop() {
       clear()
       return this.snapshot()

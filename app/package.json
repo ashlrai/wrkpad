@@ -35,7 +35,7 @@
     "build": "tsc -b && vite build",
     "capture:public-demo": "npm run build && electron scripts/capture-public-demo.cjs",
     "lint": "oxlint src electron scripts vite.config.ts vitest.config.ts",
-    "test": "vitest run && node --test electron/*.test.cjs",
+    "test": "vitest run && node --test electron/*.test.cjs scripts/*.test.mjs",
     "preview": "vite preview",
     "start": "electron .",
     "package:mac": "npm run build && electron-builder --mac dir"

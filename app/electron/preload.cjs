@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('agentBoard', {
   focusAgentSlot: (slot) => ipcRenderer.invoke('board:focusAgentSlot', slot),
   setProfile: (profile) => ipcRenderer.invoke('board:setProfile', profile),
   setFlightCheck: (active) => ipcRenderer.invoke('board:setFlightCheck', active),
+  restartFlightCheck: () => ipcRenderer.invoke('board:restartFlightCheck'),
   requestAction: (actionId) => ipcRenderer.invoke('board:requestAction', actionId),
   confirmAction: (actionId, token) => ipcRenderer.invoke('board:confirmAction', actionId, token),
   beginHold: (actionId, token) => ipcRenderer.invoke('board:beginHold', actionId, token),

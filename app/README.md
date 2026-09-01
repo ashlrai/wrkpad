@@ -90,6 +90,7 @@ one runner, so screenshot refreshes remain under human visual review.
 - [Setup and Flight Check](docs/setup.md)
 - [Controls and state model](docs/controls.md)
 - [Architecture and trust boundaries](docs/architecture.md)
+- [Provider compatibility contracts](docs/provider-contracts.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Release and readiness](docs/release-readiness.md)
 - [Roadmap](docs/roadmap.md)

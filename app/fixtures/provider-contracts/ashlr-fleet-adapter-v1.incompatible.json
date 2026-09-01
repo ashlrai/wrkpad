@@ -1,0 +1,18 @@
+{
+  "generatedAt": "2026-08-31T12:00:00Z",
+  "daemon": {
+    "running": false,
+    "activity": { "phase": "offline" }
+  },
+  "killed": false,
+  "queue": {
+    "backlogItems": 0,
+    "eligibleBacklogItems": 0,
+    "repairControlBlockedItems": 0
+  },
+  "proposals": { "pending": 0 },
+  "goalFocus": { "activeGoalCount": 0 },
+  "missionBrief": {
+    "operatingMode": "observe-only"
+  }
+}

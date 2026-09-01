@@ -1,17 +1,15 @@
-const { spawn } = require('node:child_process')
 const { existsSync, readFileSync, statSync } = require('node:fs')
 const path = require('node:path')
+const { runGit } = require('./git-runner.cjs')
 
-function run(executable, args, cwd, timeoutMs = 2500) {
-  return new Promise((resolve) => {
-    const child = spawn(executable, args, { cwd, env: process.env, stdio: ['ignore', 'pipe', 'pipe'] })
-    let stdout = ''; let settled = false
-    const finish = (value) => { if (!settled) { settled = true; resolve(value) } }
-    const timer = setTimeout(() => { child.kill('SIGTERM'); finish(null) }, timeoutMs)
-    child.stdout.on('data', (chunk) => { stdout += chunk.toString(); if (stdout.length > 20_000) stdout = stdout.slice(-20_000) })
-    child.on('error', () => { clearTimeout(timer); finish(null) })
-    child.on('close', (code) => { clearTimeout(timer); finish(code === 0 ? stdout.trim() : null) })
+async function run(args, cwd, options = {}) {
+  const result = await runGit(args, {
+    cwd,
+    timeoutMs: options.timeoutMs ?? 2500,
+    stdoutLimit: 20_000,
+    stderrLimit: 8_000,
   })
+  return result.ok ? result.stdout : null
 }
 
 function packageFacts(root) {
@@ -47,19 +45,22 @@ function parseStatus(output) {
   return { statusKnown: true, dirtyFiles: rows.length, stagedFiles: staged, unstagedFiles: unstaged, untrackedFiles: untracked, conflictedFiles: conflicted }
 }
 
-async function inspectWorkspace(workspace) {
+async function inspectWorkspace(workspace, options = {}) {
   const unavailable = { available: false, projectName: path.basename(workspace || '') || 'No workspace', root: workspace || '', isGit: false, branch: null, detached: false, statusKnown: false, dirtyFiles: null, stagedFiles: null, unstagedFiles: null, untrackedFiles: null, conflictedFiles: null, headShort: null, headSubject: null, headDate: null, upstream: null, ahead: null, behind: null, packageManager: null, testCommand: null }
   try {
     if (!workspace || !existsSync(workspace) || !statSync(workspace).isDirectory()) return unavailable
   } catch { return unavailable }
-  const root = await run('/usr/bin/git', ['-C', workspace, 'rev-parse', '--show-toplevel'], workspace)
-  if (!root) return { ...unavailable, available: true, ...packageFacts(workspace), projectName: packageFacts(workspace).packageName, root: workspace }
+  const root = await run(['rev-parse', '--show-toplevel'], workspace, options)
+  if (!root) {
+    const packages = packageFacts(workspace)
+    return { ...unavailable, available: true, ...packages, projectName: packages.packageName, root: workspace }
+  }
   const [branchName, status, head, upstream, divergence] = await Promise.all([
-    run('/usr/bin/git', ['-C', root, 'symbolic-ref', '--quiet', '--short', 'HEAD'], root),
-    run('/usr/bin/git', ['-C', root, 'status', '--porcelain=v1', '--untracked-files=normal'], root),
-    run('/usr/bin/git', ['-C', root, 'log', '-1', '--format=%h%x00%s%x00%aI'], root),
-    run('/usr/bin/git', ['-C', root, 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'], root),
-    run('/usr/bin/git', ['-C', root, 'rev-list', '--left-right', '--count', '@{upstream}...HEAD'], root),
+    run(['symbolic-ref', '--quiet', '--short', 'HEAD'], root, options),
+    run(['status', '--porcelain=v1', '--untracked-files=normal'], root, options),
+    run(['log', '-1', '--format=%h%x00%s%x00%aI'], root, options),
+    run(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'], root, options),
+    run(['rev-list', '--left-right', '--count', '@{upstream}...HEAD'], root, options),
   ])
   const [headShort = null, headSubject = null, headDate = null] = head ? head.split('\0') : []
   const [behindText, aheadText] = divergence ? divergence.split(/\s+/) : []

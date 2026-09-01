@@ -39,6 +39,11 @@ Actions resolve through `electron/action-registry.cjs`; unknown IDs fail closed.
 
 Each response is limited to 2 MiB. Agent data must use `dev.wrkpad.hasp.state/v1`. Fleet data must contain valid timestamp, daemon, queue, proposal, goal, and mission-brief fields. Timeout, nonzero exit, oversized output, malformed JSON, and schema failure become unavailable or invalid states.
 
+The exact supported shapes, synthetic fixtures, structured validation reasons,
+and upgrade policy are documented in [provider compatibility
+contracts](provider-contracts.md). Ashlr's Fleet adapter version describes this
+app's bounded projection; it is not an upstream schema or authority claim.
+
 Mission snapshots expose only six bounded slot summaries, bounded Fleet facts, source-state labels, and recognized operator notices. Workspace Pulse is a distinct feature and intentionally displays the user-selected workspace path and bounded Git/toolchain facts.
 
 ## Provider integration

@@ -23,3 +23,17 @@ test('window-close reset cannot leave a hidden interlock or stale receipt', () =
   assert.equal(session.record({ signalId: 'agent2' }), false)
   assert.deepEqual(session.snapshot(), { active: false, startedAt: null, rawEvents: [] })
 })
+
+test('restarting clears evidence without releasing the interlock', () => {
+  const times = ['2026-08-31T18:00:00.000Z', '2026-08-31T18:01:00.000Z']
+  const session = createFlightSession(() => times.shift())
+  session.start()
+  session.record({ signalId: 'joyUp' })
+
+  assert.deepEqual(session.restart(), {
+    active: true,
+    startedAt: '2026-08-31T18:01:00.000Z',
+    rawEvents: [],
+  })
+  assert.equal(session.isActive(), true)
+})

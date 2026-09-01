@@ -5,12 +5,18 @@ function plural(count: number, singular: string, pluralForm = `${singular}s`) {
   return `${count} ${count === 1 ? singular : pluralForm}`
 }
 
+function OperatorNotices({ notices }: { notices: MissionControlSnapshot['operatorNotices'] }) {
+  return <div className="operator-notices" role="status" aria-live="polite">
+    {notices.map((notice) => <div className={`operator-notice ${notice.severity}`} key={notice.code}><CircleAlert size={14} /><div><strong>{notice.label}</strong><p>{notice.detail}</p></div></div>)}
+  </div>
+}
+
 export default function FleetBrief({ fleet, source, notices }: {
   fleet: FleetBriefModel | null
   source: MissionControlSnapshot['fleetSource']
   notices: MissionControlSnapshot['operatorNotices']
 }) {
-  if (!fleet) return <aside className="fleet-brief unavailable"><span className="eyebrow">OPERATOR BRIEF</span><h2>{source === 'invalid' ? 'Fleet returned invalid evidence.' : 'Fleet evidence unavailable.'}</h2><p>The board is not inferring health or zero counts from an installed CLI.</p></aside>
+  if (!fleet) return <aside className="fleet-brief unavailable"><span className="eyebrow">OPERATOR BRIEF</span><h2>{source === 'invalid' ? 'Fleet returned invalid evidence.' : 'Fleet evidence unavailable.'}</h2><p>The board is not inferring health or zero counts from an installed CLI.</p><OperatorNotices notices={notices} /></aside>
   const needsYou = fleet.blocker?.label ?? (fleet.pendingProposals ? `Review ${plural(fleet.pendingProposals, 'proposal')}` : 'No urgent fleet decision')
   const autonomous = fleet.killed ? 'Fleet is paused' : fleet.eligibleItems > 0 ? `${plural(fleet.eligibleItems, 'item')} eligible now` : 'No work is eligible now'
   return <aside className="fleet-brief">
@@ -21,6 +27,6 @@ export default function FleetBrief({ fleet, source, notices }: {
       <section><ShieldCheck size={17} /><span>PROOF GATE</span><strong>{fleet.operatingMode}</strong><p>{fleet.directive}. {plural(fleet.pendingProposals, 'proposal')} pending; no board approval action.</p></section>
     </div>
     {fleet.nextAction && <div className="next-safe-action"><ShieldCheck size={13} /><span>NEXT SAFE ACTION</span><strong>{fleet.nextAction}</strong><em>{fleet.nextActionSafety ?? 'unknown'}</em></div>}
-    {notices.map((notice) => <div className={`operator-notice ${notice.severity}`} key={notice.code}><CircleAlert size={14} /><div><strong>{notice.label}</strong><p>{notice.detail}</p></div></div>)}
+    <OperatorNotices notices={notices} />
   </aside>
 }

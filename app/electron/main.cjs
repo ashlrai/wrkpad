@@ -164,6 +164,11 @@ ipcMain.handle('board:setFlightCheck', trustedIpc((_event, active) => {
   if (state.active) approvals.clear()
   return { acknowledged: true, active: state.active, startedAt: state.startedAt }
 }))
+ipcMain.handle('board:restartFlightCheck', trustedIpc(() => {
+  const state = flightSession.restart()
+  if (state.active) approvals.clear()
+  return { acknowledged: state.active, active: state.active, startedAt: state.startedAt }
+}))
 ipcMain.handle('board:chooseWorkspace', trustedIpc(async () => {
   const result = await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory', 'createDirectory'], title: 'Choose the Agent Board working directory' })
   if (result.canceled || !result.filePaths[0]) return null
