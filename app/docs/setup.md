@@ -56,6 +56,13 @@ compatible minimum for PID `303A:8298` or the installed Codex build. Updating
 remains an explicit vendor operation and the post-update checks below are the
 acceptance gate:
 
+The reviewed candidate asset is `firmware_0.6.2_merged.bin`, 2,086,848 bytes,
+SHA-256
+`1edbcdec89d049b3bb0691ba58b7de332e4612fef870354e1f5027b8849c6fb1`.
+These values were verified on September 1, 2026. Stop if Input offers a
+different tag, channel, asset, size, or digest; re-review the vendor release
+rather than treating this pinned candidate as perpetually current.
+
 1. Export or back up the Input profile.
 2. Use direct USB and stable power.
 3. Fully quit ChatGPT/Codex Desktop, Ashlr Agent Board, and every other HID or

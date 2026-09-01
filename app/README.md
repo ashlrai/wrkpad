@@ -56,11 +56,15 @@ git clone https://github.com/ashlrai/wrkpad.git
 cd wrkpad/app
 npm install
 npm run doctor
+npm run agent:preflight
 npm test
 npm run dev
 ```
 
 `npm run doctor` performs read-only local probes and reports anything that still needs human verification.
+`npm run agent:preflight` adds stable-binary, hook, service, source, and
+route-specific evidence using the shared repository contract. Append
+`-- --route codex_native` only for the separate native qualification route.
 
 Before pressing physical controls, follow [setup and Flight Check](docs/setup.md). Work Louder Input must emit the exact shortcuts expected by the app, and macOS Input Monitoring must be granted by the user.
 
@@ -74,6 +78,7 @@ are separate gates.
 ```bash
 npm run dev          # Vite renderer plus Electron
 npm run dev:web      # renderer only; actions are simulated
+npm run agent:preflight # read-only shared Ashlr Layer readiness
 npm test             # Vitest plus Electron main-process tests
 npm run lint         # oxlint
 npm run build        # TypeScript and production renderer

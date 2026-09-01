@@ -42,10 +42,16 @@ function appleScriptQuote(value) { return String(value).replaceAll('\\', '\\\\')
 
 function testCommand(workspace) {
   const prefix = `cd ${shellQuote(workspace)} && `
-  if (existsSync(path.join(workspace, 'pnpm-lock.yaml'))) return `${prefix}pnpm test`
-  if (existsSync(path.join(workspace, 'bun.lock')) || existsSync(path.join(workspace, 'bun.lockb'))) return `${prefix}bun test`
-  if (existsSync(path.join(workspace, 'yarn.lock'))) return `${prefix}yarn test`
-  return `${prefix}npm test`
+  const candidates = []
+  if (existsSync(path.join(workspace, 'package.json'))) {
+    if (existsSync(path.join(workspace, 'pnpm-lock.yaml'))) candidates.push(`${prefix}pnpm test`)
+    else if (existsSync(path.join(workspace, 'bun.lock')) || existsSync(path.join(workspace, 'bun.lockb'))) candidates.push(`${prefix}bun test`)
+    else if (existsSync(path.join(workspace, 'yarn.lock'))) candidates.push(`${prefix}yarn test`)
+    else if (existsSync(path.join(workspace, 'package-lock.json'))) candidates.push(`${prefix}npm test`)
+  }
+  if (existsSync(path.join(workspace, 'Cargo.toml'))) candidates.push(`${prefix}cargo test --all-targets`)
+  if (existsSync(path.join(workspace, 'go.mod'))) candidates.push(`${prefix}go test ./...`)
+  return candidates.length === 1 ? candidates[0] : null
 }
 
 function runProcess(executable, args, options = {}) {
@@ -106,6 +112,7 @@ async function executeSpec(id, workspace, electron) {
   }
   if (spec.kind === 'terminal') {
     const command = spec.command(workspace)
+    if (!command) return outcome(false, 'Test command unavailable', 'No single supported test command was detected. Choose the intended package or component explicitly.')
     const script = `tell application "Terminal"\nactivate\ndo script "${appleScriptQuote(command)}"\nend tell`
     const result = await runProcess('/usr/bin/osascript', ['-e', script])
     return result.ok ? outcome(true, 'Terminal session started', 'The allowlisted command is running in a new Terminal session.') : outcome(false, 'Could not start Terminal session', result.error)

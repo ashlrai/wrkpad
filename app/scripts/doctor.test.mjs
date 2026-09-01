@@ -6,6 +6,12 @@ import { detectCreatorMicro2, evaluateDoctor } from './doctor.mjs'
 const requiredProbes = {
   board: { ok: true, detail: 'Work Louder 303A:8298' },
   input: { ok: true, detail: 'installed' },
+  inputProfile: {
+    cacheStatus: 'available',
+    activeProfile: 'Ashlr Agent Board Corrected',
+    activeLayer: 'Ashlr Daily',
+    encoderDirection: 'correct',
+  },
 }
 
 const missingOptionalProbes = {
@@ -26,8 +32,17 @@ test('recognizes both documented Creator Micro 2 identities without broad USB ma
 })
 
 test('missing optional integrations do not fail required doctor checks', () => {
-  const result = evaluateDoctor({ ...requiredProbes, ...missingOptionalProbes })
+  const result = evaluateDoctor(
+    { ...requiredProbes, ...missingOptionalProbes },
+    { observedAt: '2026-09-01T20:00:00.000Z' },
+  )
 
+  assert.equal(result.schema, 'ai.ashlr.agent-board.doctor/v1')
+  assert.equal(result.observedAt, '2026-09-01T20:00:00.000Z')
+  assert.equal(result.readOnly, true)
+  assert.equal(result.route, 'unknown')
+  assert.equal(result.inputProfile.dailyProfileReady, true)
+  assert.equal('activeProfile' in result.inputProfile, false)
   assert.equal(result.ok, true)
   assert.equal(result.checks.filter((check) => check.category === 'required').every((check) => check.ok), true)
   assert.equal(
@@ -97,6 +112,12 @@ test('native firmware RPC failure receives specific nonblocking recovery guidanc
   })
 
   assert.equal(result.ok, true)
+  assert.deepEqual(result.readiness.codexNative, {
+    status: 'blocked',
+    reason: 'firmware_rpc_missing',
+  })
+  assert.equal(result.readiness.ashlrLayer.status, 'manual')
+  assert.equal(result.route, 'codex_native')
   assert.match(result.nextAction, /guarded vendor firmware qualification/)
   assert.match(result.modeGuidance.codexNative, /RPC 404/)
   assert.match(result.modeGuidance.ashlrLayer, /independently commissionable/)
@@ -113,4 +134,30 @@ test('Ashlr Layer never promotes an optional native firmware operation', () => {
   assert.match(result.nextAction, /Input Monitoring/)
   assert.match(result.modeGuidance.codexNative, /firmware candidate/)
   assert.match(result.modeGuidance.ashlrLayer, /independently commissionable/)
+  assert.equal(result.route, 'ashlr_layer')
+  assert.equal(result.readiness.codexNative.status, 'blocked')
+  assert.equal(result.readiness.ashlrLayer.status, 'manual')
+})
+
+test('doctor identifies the known reversed dial without exposing profile labels', () => {
+  const result = evaluateDoctor({
+    ...requiredProbes,
+    ...missingOptionalProbes,
+    boardRoute: 'ashlr_layer',
+    inputProfile: {
+      cacheStatus: 'available',
+      activeProfile: 'Private operator profile',
+      activeLayer: 'Private layer',
+      encoderDirection: 'reversed',
+    },
+  })
+
+  assert.equal(result.readiness.ashlrLayer.reason, 'encoder_direction_reversed')
+  assert.deepEqual(result.inputProfile, {
+    cacheStatus: 'available',
+    dailyProfileMatch: false,
+    dailyLayerMatch: false,
+    encoderDirection: 'reversed',
+    dailyProfileReady: false,
+  })
 })

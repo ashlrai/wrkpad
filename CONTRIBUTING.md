@@ -18,6 +18,7 @@ cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-targets
 cargo build --release
+cargo deny check
 ```
 
 Desktop changes:
@@ -29,6 +30,13 @@ npm run lint
 npm test
 npm run build
 npm audit --audit-level=high
+```
+
+Repository contracts and documentation:
+
+```bash
+node --test tools/*.test.mjs
+node tools/docs-check.mjs
 ```
 
 Add tests for every reducer transition, parser edge case, protocol frame, or safety gate you change. A hardware change also needs a fake-transport fixture; physical success alone is not reproducible evidence.
@@ -44,7 +52,12 @@ Add tests for every reducer transition, parser edge case, protocol frame, or saf
 
 ## Commit policy
 
-Use concise imperative commit messages. Sign off commits with `git commit -s` to certify the Developer Certificate of Origin 1.1. Files outside `app/` are MIT; files inside `app/` are Apache-2.0 and must retain `app/NOTICE`. The project does not require a contributor license agreement. Desktop contributors should also read [app/CONTRIBUTING.md](app/CONTRIBUTING.md).
+Use concise imperative commit messages. Sign off commits with `git commit -s`
+to certify the [Developer Certificate of Origin 1.1](DCO). CI verifies that the
+sign-off name and email match each commit author. Files outside `app/` are MIT;
+files inside `app/` are Apache-2.0 and must retain `app/NOTICE`. The project does
+not require a contributor license agreement. Desktop contributors should also
+read [app/CONTRIBUTING.md](app/CONTRIBUTING.md).
 
 Entire session capture is optional developer tooling and is not required to
 build or run either component. Checked-in Claude hooks no-op when Entire is not

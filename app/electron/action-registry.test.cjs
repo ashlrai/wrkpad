@@ -1,5 +1,7 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
+const { mkdtempSync, rmSync, writeFileSync } = require('node:fs')
+const { tmpdir } = require('node:os')
 const path = require('node:path')
 const { ACTION_SPECS, shellQuote, testCommand } = require('./action-registry.cjs')
 
@@ -24,4 +26,23 @@ test('shellQuote safely preserves apostrophes', () => {
 test('test command selects package manager from lockfile', () => {
   const command = testCommand(path.resolve(__dirname, '..'))
   assert.match(command, /npm test$/)
+})
+test('test command recognizes a Cargo workspace without guessing npm', (t) => {
+  const root = mkdtempSync(path.join(tmpdir(), 'agent-board-cargo-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  writeFileSync(path.join(root, 'Cargo.toml'), '[package]\nname="demo"\nversion="0.1.0"\n')
+  assert.match(testCommand(root), /cargo test --all-targets$/)
+})
+test('test command fails closed for an ambiguous polyglot root', (t) => {
+  const root = mkdtempSync(path.join(tmpdir(), 'agent-board-polyglot-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  writeFileSync(path.join(root, 'Cargo.toml'), '[workspace]\n')
+  writeFileSync(path.join(root, 'package.json'), '{}\n')
+  writeFileSync(path.join(root, 'package-lock.json'), '{}\n')
+  assert.equal(testCommand(root), null)
+})
+test('test command fails closed when no supported manifest exists', (t) => {
+  const root = mkdtempSync(path.join(tmpdir(), 'agent-board-unknown-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  assert.equal(testCommand(root), null)
 })

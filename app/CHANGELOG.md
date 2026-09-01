@@ -6,6 +6,9 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 
 ### Added
 
+- Route-aware doctor metadata for agents, including a stable schema, timestamp,
+  declared route, read-only marker, and separate prerequisite, native, and
+  Ashlr Layer readiness.
 - Public project documentation, contribution guidance, support boundaries, and release criteria.
 - Source-SHA and SHA-256 manifest for explicitly unsigned preview artifacts.
 - Fixed-data, action-disabled public screenshot harness with synthetic agent
@@ -43,6 +46,8 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 
 ### Changed
 
+- Fail closed instead of guessing `npm test` for Cargo, Go, ambiguous polyglot,
+  or unsupported workspaces.
 - Label CLI presence, observer receipts, and desktop shortcut registration as
   separate readiness evidence.
 - Block Flight Check until USB and all desktop endpoints are ready, stop a

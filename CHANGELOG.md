@@ -8,6 +8,11 @@ All notable changes will be documented here. The project follows semantic versio
 
 ### Added
 
+- Shared Codex/Claude repository instructions, a route-aware read-only agent
+  preflight with a versioned JSON Schema, and a canonical cross-provider agent
+  operations runbook.
+- Automated agent-contract, documentation-link, DCO, Cargo Deny, Semgrep, and
+  Gitleaks checks for public pull requests.
 - Ashlr Agent Board as the Apache-2.0 `app/` desktop companion, with independent
   `agent-board-v*` release tags and source/package/security gates.
 
@@ -45,7 +50,10 @@ All notable changes will be documented here. The project follows semantic versio
 
 ### Safety boundary
 
-- HID writes, keymap changes, profile changes, firmware operations, and automatic process termination are intentionally unavailable.
+- HID writes, keymap or active-profile changes, firmware operations, and
+  automatic process termination are intentionally unavailable. Offline profile
+  generation writes only a new private operator-selected artifact; it does not
+  mutate Input or the device.
 
 ### Security
 

@@ -4,7 +4,10 @@ Hooks are optional local observers. They never approve, deny, block, continue, o
 
 ## Prerequisites
 
-1. Install or copy a stable `wrkpad` release binary. Do not configure hooks from `target/release`, because `cargo clean` can invalidate that path.
+1. Install or copy a stable `wrkpad` binary. From a reviewed source checkout,
+   run `cargo install --path . --locked --root "$HOME/.local"`. Do not configure
+   hooks from `target/release`: `cargo clean` can invalidate that path, and
+   ownership is bound to the exact executable path and SHA-256.
 2. Run `wrkpad init` and keep HASP available with the guarded macOS [background service](macos-service.md) or a foreground `wrkpad serve`. Hooks fail open and drop the status event within the 200 ms network deadline when HASP is unavailable.
 3. Review the target reported by `wrkpad hooks status`. Project scope resolves to the enclosing Git root and contains a machine-specific absolute executable path; never commit it.
 

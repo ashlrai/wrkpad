@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url'
 const require = createRequire(import.meta.url)
 const { detectCreatorMicro2 } = require('../electron/creator-micro-identity.cjs')
 const { inspectCodexMicroLogs } = require('../electron/codex-micro-diagnostics.cjs')
+const { inspectInputProfile } = require('../electron/input-profile-diagnostics.cjs')
 const { readAppSettings } = require('../electron/settings.cjs')
 const { resolveTool } = require('../electron/tool-resolver.cjs')
 
@@ -61,7 +62,7 @@ const makeCheck = (definition, probe, category) => ({
   ...(typeof probe?.code === 'string' ? { code: probe.code } : {}),
 })
 
-export function evaluateDoctor(probes) {
+export function evaluateDoctor(probes, options = {}) {
   const requiredChecks = REQUIRED_CHECKS.map((definition) =>
     makeCheck(definition, probes[definition.key], 'required'),
   )
@@ -71,6 +72,23 @@ export function evaluateDoctor(probes) {
   const failedRequiredIndex = requiredChecks.findIndex((check) => !check.ok)
   const nativeFirmwareMissing = probes.nativeCodex?.code === 'firmware_rpc_missing'
   const nativeRouteSelected = probes.boardRoute === 'codex_native'
+  const route = ['codex_native', 'ashlr_layer'].includes(probes.boardRoute)
+    ? probes.boardRoute
+    : 'unknown'
+  const inputProfile = probes.inputProfile ?? {
+    cacheStatus: 'missing',
+    activeProfile: null,
+    activeLayer: null,
+    encoderDirection: 'unavailable',
+  }
+  const dailyProfileReady = inputProfile.activeProfile === 'Ashlr Agent Board Corrected'
+    && inputProfile.activeLayer === 'Ashlr Daily'
+    && inputProfile.encoderDirection === 'correct'
+  const ashlrReason = failedRequiredIndex !== -1
+    ? 'required_prerequisite_missing'
+    : inputProfile.encoderDirection === 'reversed'
+      ? 'encoder_direction_reversed'
+      : dailyProfileReady ? 'physical_acceptance_required' : 'input_profile_requires_activation'
   const manualChecks = MANUAL_CHECKS.map((check) => ({
     ...check,
     category: 'manual',
@@ -79,9 +97,34 @@ export function evaluateDoctor(probes) {
   }))
 
   return {
+    schema: 'ai.ashlr.agent-board.doctor/v1',
+    observedAt: options.observedAt ?? new Date().toISOString(),
+    readOnly: true,
+    route,
     ok: failedRequiredIndex === -1,
     checks: [...requiredChecks, ...optionalChecks],
+    inputProfile: {
+      cacheStatus: inputProfile.cacheStatus,
+      dailyProfileMatch: inputProfile.activeProfile === 'Ashlr Agent Board Corrected',
+      dailyLayerMatch: inputProfile.activeLayer === 'Ashlr Daily',
+      encoderDirection: inputProfile.encoderDirection,
+      dailyProfileReady,
+    },
     manualChecks,
+    readiness: {
+      prerequisites: {
+        status: failedRequiredIndex === -1 ? 'pass' : 'blocked',
+        reason: failedRequiredIndex === -1 ? 'required_checks_passed' : `required_check_failed:${REQUIRED_CHECKS[failedRequiredIndex].key}`,
+      },
+      codexNative: {
+        status: nativeFirmwareMissing ? 'blocked' : probes.nativeCodex?.ok ? 'pass' : 'manual',
+        reason: nativeFirmwareMissing ? 'firmware_rpc_missing' : probes.nativeCodex?.ok ? 'recent_native_connection_observed' : 'native_connection_requires_verification',
+      },
+      ashlrLayer: {
+        status: failedRequiredIndex === -1 ? 'manual' : 'blocked',
+        reason: ashlrReason,
+      },
+    },
     modeGuidance: {
       codexNative: nativeFirmwareMissing
         ? 'Codex observed v.oai.rgbcfg RPC 404. Back up Input profiles, then qualify a stable vendor firmware candidate with Codex fully quit; release strings alone do not prove compatibility.'
@@ -113,16 +156,17 @@ const toolProbe = (tool) => {
 
 export { detectCreatorMicro2 }
 
-function collectProbes() {
+export function collectProbes() {
+  const home = homedir()
   const usb = run('/usr/sbin/ioreg', ['-p', 'IOUSB', '-n', 'Creator Micro 2', '-r', '-l'])
   const boardIdentity = detectCreatorMicro2(usb)
   const chatgptInstalled = existsSync('/Applications/ChatGPT.app')
   const inputInstalled = existsSync('/Applications/Input.app')
   const logitechOwner = run('/usr/bin/pgrep', ['-fl', 'logioptionsplus_agent'])
-  const nativeCodex = inspectCodexMicroLogs(homedir())
+  const nativeCodex = inspectCodexMicroLogs(home)
   const settings = readAppSettings(
-    join(homedir(), 'Library', 'Application Support', 'Ashlr Agent Board', 'settings.json'),
-    homedir(),
+    join(home, 'Library', 'Application Support', 'Ashlr Agent Board', 'settings.json'),
+    home,
   )
 
   return {
@@ -138,11 +182,12 @@ function collectProbes() {
         : nativeCodex.detail,
     },
     boardRoute: settings.boardRoute,
+    inputProfile: inspectInputProfile(home, boardIdentity?.storageId),
     claude: toolProbe('claude'),
     ashlr: toolProbe('ashlr'),
     logitech: {
       ok: !logitechOwner,
-      detail: logitechOwner ? 'running; may interfere with the Micro' : 'not running',
+      detail: logitechOwner ? 'running; generic HID-manager caution only' : 'not running',
     },
   }
 }
@@ -161,6 +206,7 @@ function printHuman(result) {
   console.log('Manual verification:')
   for (const check of result.manualChecks) console.log(`  • ${check.name}: ${check.detail}`)
   console.log(`\n${result.ok ? 'Doctor passed required checks.' : 'Doctor failed required checks.'}`)
+  console.log(`Declared route: ${result.route}`)
   console.log(`Next: ${result.nextAction}`)
 }
 

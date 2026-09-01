@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ashlrai/wrkpad/blob/main/schemas/agent-preflight-v1.schema.json",
+  "title": "wrkpad agent preflight v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "observed_at", "requested_route", "declared_route", "read_only", "source", "binary", "checks", "next_steps", "overall"],
+  "properties": {
+    "schema": { "const": "dev.wrkpad.agent-preflight/v1" },
+    "observed_at": { "type": "string", "format": "date-time" },
+    "requested_route": { "enum": ["ashlr_layer", "codex_native"] },
+    "declared_route": { "enum": ["ashlr_layer", "codex_native", "unknown"] },
+    "read_only": { "const": true },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sha", "dirty", "dirty_file_count", "inspection_limited_by_git_filters"],
+      "properties": {
+        "sha": { "type": ["string", "null"], "pattern": "^[0-9a-f]{40}$" },
+        "dirty": { "type": ["boolean", "null"] },
+        "dirty_file_count": { "type": ["integer", "null"], "minimum": 0 },
+        "inspection_limited_by_git_filters": { "type": "boolean" }
+      }
+    },
+    "binary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["available", "path_class", "sha256", "development_binary_mismatch", "local_build_available", "matches_local_build"],
+      "properties": {
+        "available": { "type": "boolean" },
+        "path_class": { "enum": ["stable_user_install", "stable_system_install", "unavailable"] },
+        "sha256": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+        "development_binary_mismatch": { "type": "boolean" },
+        "local_build_available": { "type": "boolean" },
+        "matches_local_build": { "type": "boolean" }
+      }
+    },
+    "checks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/check" }
+    },
+    "next_steps": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/nextStep" }
+    },
+    "overall": { "enum": ["ready", "manual", "blocked"] }
+  },
+  "$defs": {
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "status", "actor", "safety", "evidence", "reason"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+        "status": { "enum": ["pass", "warn", "blocked", "manual"] },
+        "actor": { "enum": ["agent", "human"] },
+        "safety": { "enum": ["read", "local_write", "planned_mutation", "permission", "device_write", "firmware", "consequential"] },
+        "evidence": { "type": "string", "maxLength": 1000 },
+        "reason": { "type": "string", "maxLength": 1000 }
+      }
+    },
+    "nextStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "actor", "safety", "requires", "proves", "does_not_prove"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+        "actor": { "enum": ["agent", "human"] },
+        "safety": { "enum": ["read", "local_write", "planned_mutation", "permission", "device_write", "firmware", "consequential"] },
+        "command": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["executable", "args", "cwd"],
+          "properties": {
+            "executable": { "type": "string", "minLength": 1 },
+            "args": { "type": "array", "items": { "type": "string" } },
+            "cwd": { "const": "$REPO_ROOT" }
+          }
+        },
+        "requires": { "type": "array", "items": { "type": "string" } },
+        "proves": { "type": "string" },
+        "does_not_prove": { "type": "string" }
+      }
+    }
+  }
+}

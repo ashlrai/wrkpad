@@ -3,7 +3,7 @@
 [![Core CI](https://github.com/ashlrai/wrkpad/actions/workflows/ci.yml/badge.svg)](https://github.com/ashlrai/wrkpad/actions/workflows/ci.yml)
 [![Agent Board CI](https://github.com/ashlrai/wrkpad/actions/workflows/agent-board-ci.yml/badge.svg)](https://github.com/ashlrai/wrkpad/actions/workflows/agent-board-ci.yml)
 [![Security](https://github.com/ashlrai/wrkpad/actions/workflows/security.yml/badge.svg)](https://github.com/ashlrai/wrkpad/actions/workflows/security.yml)
-[![License: MIT + Apache-2.0](https://img.shields.io/badge/license-MIT%20%2B%20Apache--2.0-2f6feb)](#license)
+[![Licenses: MIT core and Apache-2.0 app](https://img.shields.io/badge/licenses-MIT%20core%20%7C%20Apache--2.0%20app-2f6feb)](#license)
 
 **A local-first control plane and on-screen mission control for Work Louder
 Creator Micro 2, Codex, Claude Code, and agentic engineering fleets.**
@@ -12,6 +12,11 @@ Creator Micro 2, Codex, Claude Code, and agentic engineering fleets.**
 model. Ashlr Agent Board mirrors the physical `2 + 4` Agent-key geometry on
 screen, so opaque black keycaps remain understandable without replacement caps
 or firmware lighting.
+
+> [!NOTE]
+> **Developer preview:** source, CI, and unsigned local packaging are available.
+> There is not yet a signed, notarized, immutable public macOS release. See the
+> [release evidence layers](docs/release.md) before making distribution claims.
 
 ![Synthetic Ashlr Agent Board documentation view showing six text-labeled agent states, the black-cap legend, and the accurate Creator Micro 2 control geometry](docs/assets/agent-board-public-demo.png)
 
@@ -66,8 +71,9 @@ marks missing observers and optional CLIs as unavailable.
 
 ## Deliberate boundaries
 
-- No HID lighting, keymap, layer, profile, firmware, bootloader, or
-  device-filesystem writes.
+- No mutation of Work Louder Input's cache/database, active profile, keymap,
+  firmware, bootloader, or device filesystem. The app can create a new private
+  offline profile export for an operator to review and import manually.
 - No automatic quitting or killing of ChatGPT Desktop, Work Louder Input,
   Logitech, Karabiner, or provider processes.
 - No exact Codex task or cmux pane focus.
@@ -82,24 +88,31 @@ and recovery](docs/ownership-and-recovery.md), and [release readiness](docs/rele
 
 ## Quick start: core
 
-Prerequisites: Rust 1.88 or newer and a supported desktop OS.
+Prerequisites: Rust 1.88 or newer and a supported desktop OS. Linux builds also
+need `pkg-config` and the libudev development package (for example,
+`sudo apt-get install pkg-config libudev-dev` on Ubuntu). macOS requires the
+Xcode Command Line Tools; Windows requires the Visual Studio C++ build tools.
 
 ```bash
 git clone https://github.com/ashlrai/wrkpad.git
 cd wrkpad
-cargo build --release
-./target/release/wrkpad init
-./target/release/wrkpad doctor
-./target/release/wrkpad demo
-./target/release/wrkpad serve
+cargo install --path . --locked --root "$HOME/.local"
+~/.local/bin/wrkpad init
+~/.local/bin/wrkpad doctor
+~/.local/bin/wrkpad demo
+~/.local/bin/wrkpad serve
 ```
 
 In another terminal:
 
 ```bash
-./target/release/wrkpad status
-./target/release/wrkpad tui
+~/.local/bin/wrkpad status
+~/.local/bin/wrkpad tui
 ```
+
+The explicit `~/.local` install is intentional. Hook and service ownership is
+bound to the executable path and SHA-256; never configure them from
+`target/release`, which can be replaced by a later build or `cargo clean`.
 
 On macOS, follow the guarded [background-service lifecycle](docs/macos-service.md)
 before relying on hooks after a terminal closes. Hook installation remains an
@@ -125,6 +138,19 @@ local directory build; it does not install, sign, notarize, or publish anything.
 
 ## Development
 
+AI agents should read [`AGENTS.md`](AGENTS.md); Claude Code loads the same
+contract through [`CLAUDE.md`](CLAUDE.md). A dependency-free composite preflight
+reports source, stable-binary, hook, service, hardware, and route evidence
+without applying changes:
+
+```bash
+node tools/agent-preflight.mjs inspect --route ashlr_layer --json
+node tools/agent-preflight.mjs inspect --route codex_native --json
+```
+
+See the [agent operations runbook](docs/agent-operations.md) for the daily
+Codex/Claude workflow and human handoff gates.
+
 Core gates:
 
 ```bash
@@ -132,6 +158,7 @@ cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-targets
 cargo build --release
+cargo deny check
 ```
 
 Desktop gates:
@@ -143,6 +170,14 @@ npm run lint
 npm test
 npm run build
 npm audit --audit-level=high
+```
+
+Repository contract and documentation gates:
+
+```bash
+node --test tools/*.test.mjs
+node tools/docs-check.mjs
+git diff --check
 ```
 
 Repository map:
@@ -157,6 +192,8 @@ Repository map:
 - [`app/docs/`](app/docs/) — desktop controls, setup, architecture, troubleshooting,
   roadmap, and release gates.
 - [`docs/architecture.md`](docs/architecture.md) — core components and trust boundaries.
+- [`docs/agent-operations.md`](docs/agent-operations.md) — shared Codex, Claude,
+  hardware, and release workflow for humans and agents.
 - [`SECURITY.md`](SECURITY.md), [`CONTRIBUTING.md`](CONTRIBUTING.md),
   [`SUPPORT.md`](SUPPORT.md), and [`CHANGELOG.md`](CHANGELOG.md) — canonical
   repository policies and project history.
