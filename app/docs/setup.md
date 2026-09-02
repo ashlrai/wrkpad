@@ -74,16 +74,18 @@ signature`, `known resource mutation`, `Gatekeeper rejected`, `unsafe`,
 The fixed-path probe uses Work Louder's official lowercase `input.app` bundle
 name; it does not scan Applications folders or relax canonical-path checks.
 
-On this desk, Input 0.18.4 later showed an exact sealed `window-info` helper
-change while it was running; which process caused the change is unproven. A
-`known resource mutation` result recognizes only that exact shape, while a fresh
-[official Input 0.18.4 release](https://github.com/worklouder/input-releases/releases/tag/v0.18.4)
-verified before launch. The installed copy remains untrusted and unverified.
-Fully quit Input, make the
-backup while Input remains stopped, reinstall the official 0.18.4 DMG, and
-verify the fresh installation before launching it. If the profile is already
-correct, leave Input closed during commissioning. This state never authorizes
-firmware work.
+On September 1, 2026, this desk's Input 0.18.4 installation showed an exact
+sealed `window-info` helper change while it was running; which process caused
+the change remains unproven. A `known resource mutation` result recognizes only
+that exact shape. On September 2, with Input stopped, its local profile and
+preference state was backed up; the app bundle was then replaced from the
+[official Input 0.18.4 release](https://github.com/worklouder/input-releases/releases/tag/v0.18.4);
+the replacement then passed publisher, strict signature, and Gatekeeper checks.
+That recovery receipt does not waive future verification. If Setup again
+reports `known resource mutation`, fully quit Input, preserve a stopped-state
+backup, replace it from the official release, and require a fresh verified
+result before launching it. If the profile is already correct, leave Input
+closed during commissioning. Neither result authorizes firmware work.
 
 If verification does not pass, stop configuration and firmware work. Fully quit
 Input manually, download a fresh installer from the official page, replace the

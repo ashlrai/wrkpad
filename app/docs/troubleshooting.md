@@ -39,15 +39,18 @@ The official DMG installs lowercase `input.app`; the detector probes that exact
 fixed name and still rejects symlinks, alternate locations, and noncanonical
 ancestors.
 
-On this desk, Input 0.18.4 later showed an exact sealed `window-info` helper
-change while it was running; which process caused the change is unproven. The
-bounded `known resource mutation` result identifies only that exact shape, while
-a fresh [official Input 0.18.4 release](https://github.com/worklouder/input-releases/releases/tag/v0.18.4)
-verified before launch. It does not trust or verify the installed copy. Fully
-quit Input, make a backup while it remains stopped, reinstall the official 0.18.4
-DMG, and verify the fresh installation before launching it. If the current
-profile is already correct, leave Input closed during commissioning. This
-result never authorizes firmware work.
+On September 1, 2026, this desk's Input 0.18.4 installation showed an exact
+sealed `window-info` helper change while it was running; which process caused
+the change remains unproven. The bounded `known resource mutation` result
+identifies only that exact shape. On September 2, with Input stopped, its local
+profile and preference state was backed up; the app bundle was then replaced
+from the
+[official Input 0.18.4 release](https://github.com/worklouder/input-releases/releases/tag/v0.18.4);
+the replacement passed publisher, strict signature, and Gatekeeper checks. If
+the current profile is already correct, leave Input closed during
+commissioning. This recovery does not prove profile state, device sync,
+firmware compatibility, or physical acceptance and never authorizes firmware
+work.
 
 For any result other than verified:
 

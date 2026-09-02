@@ -4,6 +4,11 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 
 ## [Unreleased]
 
+### Fixed
+
+- Recognize Work Louder's official lowercase `input.app` installation name
+  without weakening fixed-path, canonical-path, or bundle-integrity checks.
+
 ### Added
 
 - Route-aware doctor metadata for agents, including a stable schema, timestamp,
