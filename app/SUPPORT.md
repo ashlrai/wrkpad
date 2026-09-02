@@ -5,7 +5,7 @@ For repository-wide routing and core `wrkpad` support, see the root
 
 ## Start here
 
-1. Run `npm run doctor` from the repository root.
+1. Run `npm --prefix app run doctor` from the repository root.
 2. Follow [setup and Flight Check](docs/setup.md).
 3. Check [troubleshooting](docs/troubleshooting.md).
 4. Search existing GitHub Issues and Discussions.

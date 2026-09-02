@@ -3,7 +3,7 @@
 [![Core CI](https://github.com/ashlrai/wrkpad/actions/workflows/ci.yml/badge.svg)](https://github.com/ashlrai/wrkpad/actions/workflows/ci.yml)
 [![Agent Board CI](https://github.com/ashlrai/wrkpad/actions/workflows/agent-board-ci.yml/badge.svg)](https://github.com/ashlrai/wrkpad/actions/workflows/agent-board-ci.yml)
 [![Security](https://github.com/ashlrai/wrkpad/actions/workflows/security.yml/badge.svg)](https://github.com/ashlrai/wrkpad/actions/workflows/security.yml)
-[![License: MIT + Apache-2.0](https://img.shields.io/badge/license-MIT%20%2B%20Apache--2.0-2f6feb)](#license)
+[![Licenses: MIT core and Apache-2.0 app](https://img.shields.io/badge/licenses-MIT%20core%20%7C%20Apache--2.0%20app-2f6feb)](#license)
 
 **A local-first control plane and on-screen mission control for Work Louder
 Creator Micro 2, Codex, Claude Code, and agentic engineering fleets.**
@@ -13,6 +13,11 @@ model. Ashlr Agent Board mirrors the physical `2 + 4` Agent-key geometry on
 screen, so opaque black keycaps remain understandable without replacement caps
 or firmware lighting.
 
+> [!NOTE]
+> **Developer preview:** source, CI, and unsigned local packaging are available.
+> There is not yet a signed, notarized, immutable public macOS release. See the
+> [release evidence layers](docs/release.md) before making distribution claims.
+
 ![Synthetic Ashlr Agent Board documentation view showing six text-labeled agent states, the black-cap legend, and the accurate Creator Micro 2 control geometry](docs/assets/agent-board-public-demo.png)
 
 _Captured from the real renderer with the repository's fixed-data public
@@ -21,7 +26,7 @@ provider receipt, and Fleet authority remain unverified. See
 [architecture and trust boundaries](app/docs/architecture.md)._
 
 ```text
-DIAL | AG00 | AG01 | JOYSTICK
+STICK | AG00 | AG01 | DIAL
        AG02 | AG03 | AG04 | AG05
 ```
 
@@ -58,48 +63,64 @@ marks missing observers and optional CLIs as unavailable.
   actions, and exports a hashed operator-guided Flight Check receipt.
 - Agent Board keeps Codex Native and the cross-provider Ashlr Layer as explicit,
   local-only route declarations; neither is inferred or applied to the board.
-- A privacy-bounded native diagnostic maps fresh versus historical
-  `v.oai.rgbcfg` RPC 404 evidence to a route-scoped qualification warning while
-  leaving the shortcut route independently usable.
+- A privacy-bounded native diagnostic distinguishes historical RPC failures
+  from a fresh, inferred initialization sequence while keeping the manual
+  Settings connection and physical acceptance separate from the shortcut route.
+- Privacy-bounded Input cache/runtime diagnostics report the cache-current
+  profile, a uniquely observable single layer, encoder order, and exact
+  unresolved-index reason codes without exposing raw logs or claiming current
+  device state.
+- Agent Board distinguishes **USB present** from a working shortcut route,
+  verifies only sanitized Work Louder Input publisher/signature/Gatekeeper
+  results, and disables shortcut ownership when more than one Agent Board
+  receiver is running.
 - Both components sanitize private provider content and distinguish source,
   package, integration, provider, physical, and user acceptance.
 
 ## Deliberate boundaries
 
-- No HID lighting, keymap, layer, profile, firmware, bootloader, or
-  device-filesystem writes.
+- No mutation of Work Louder Input's cache/database, active profile, keymap,
+  firmware, bootloader, or device filesystem. The app can create a new private
+  offline profile export for an operator to review and import manually.
 - No automatic quitting or killing of ChatGPT Desktop, Work Louder Input,
   Logitech, Karabiner, or provider processes.
 - No exact Codex task or cmux pane focus.
 - No prompt submission from an Agent slot.
 - No claim that a planned color is visible through opaque black keycaps; the
   screen is the authoritative legend.
-- No signed or notarized public macOS binary yet. CI's preview artifact includes
-  a source-SHA/checksum manifest, is explicitly unsigned, and is not a release.
+- No Developer ID-signed or notarized public macOS binary yet. CI builds and
+  validates an expected-unsigned package without uploading or publishing it.
 
 See [device interoperability](protocol/device-interoperability.md), [ownership
 and recovery](docs/ownership-and-recovery.md), and [release readiness](docs/release.md).
 
 ## Quick start: core
 
-Prerequisites: Rust 1.88 or newer and a supported desktop OS.
+Prerequisites: Rust 1.88 or newer and a supported desktop OS. Linux builds also
+need `pkg-config` and the libudev development package (for example,
+`sudo apt-get install pkg-config libudev-dev` on Ubuntu). macOS requires the
+Xcode Command Line Tools; Windows requires the Visual Studio C++ build tools.
 
 ```bash
 git clone https://github.com/ashlrai/wrkpad.git
 cd wrkpad
-cargo build --release
-./target/release/wrkpad init
-./target/release/wrkpad doctor
-./target/release/wrkpad demo
-./target/release/wrkpad serve
+cargo install --path . --locked --root "$HOME/.local"
+~/.local/bin/wrkpad init
+~/.local/bin/wrkpad doctor
+~/.local/bin/wrkpad demo
+~/.local/bin/wrkpad serve
 ```
 
 In another terminal:
 
 ```bash
-./target/release/wrkpad status
-./target/release/wrkpad tui
+~/.local/bin/wrkpad status
+~/.local/bin/wrkpad tui
 ```
+
+The explicit `~/.local` install is intentional. Hook and service ownership is
+bound to the executable path and SHA-256; never configure them from
+`target/release`, which can be replaced by a later build or `cargo clean`.
 
 On macOS, follow the guarded [background-service lifecycle](docs/macos-service.md)
 before relying on hooks after a terminal closes. Hook installation remains an
@@ -122,8 +143,36 @@ npm run dev
 Follow the [desktop setup and Flight Check](app/docs/setup.md) before using the
 physical controls. `npm run package:mac` creates an unsigned, architecture-specific
 local directory build; it does not install, sign, notarize, or publish anything.
+For a Creator Micro 2 Pro, commission in wired mode: the current
+[Codex Micro guide](https://learn.chatgpt.com/docs/features/codex-micro) says a
+USB cable only charges while Bluetooth remains selected, so open the connection
+selector and choose the fourth channel until the underglow is white. The general
+[Creator Micro 2 setup](https://worklouder.cc/micro-setup) documents that fourth
+channel but conflicts about automatic USB switching; use the explicit selector
+for Codex commissioning. White underglow confirms only the board's
+firmware-selected wired mode. It does not prove macOS enumeration, Input
+integrity, receiver exclusivity, native Codex connection, or a physical receipt.
 
 ## Development
+
+AI agents should read [`AGENTS.md`](AGENTS.md); Claude Code loads the same
+contract through [`CLAUDE.md`](CLAUDE.md). A dependency-free composite preflight
+reports source, stable-binary, hook, service, hardware, and route evidence
+without applying changes:
+
+```bash
+node tools/agent-preflight.mjs inspect --route ashlr_layer --json
+node tools/agent-preflight.mjs inspect --route codex_native --json
+```
+
+Agents should read `requested_route`, `declared_route`, and `route_readiness`.
+On `ashlr_layer`, also inspect the `input_profile` and `input_runtime` check
+entries. Read each next step's actor, safety, and `does_not_prove`, then follow
+the [Input-only reconciliation](app/docs/troubleshooting.md#input-only-reconciliation)
+rather than inventing a device or permission claim.
+
+See the [agent operations runbook](docs/agent-operations.md) for the daily
+Codex/Claude workflow and human handoff gates.
 
 Core gates:
 
@@ -132,6 +181,7 @@ cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-targets
 cargo build --release
+cargo deny check
 ```
 
 Desktop gates:
@@ -143,6 +193,14 @@ npm run lint
 npm test
 npm run build
 npm audit --audit-level=high
+```
+
+Repository contract and documentation gates:
+
+```bash
+node --test tools/*.test.mjs
+node tools/docs-check.mjs
+git diff --check
 ```
 
 Repository map:
@@ -157,6 +215,10 @@ Repository map:
 - [`app/docs/`](app/docs/) — desktop controls, setup, architecture, troubleshooting,
   roadmap, and release gates.
 - [`docs/architecture.md`](docs/architecture.md) — core components and trust boundaries.
+- [`docs/agent-operations.md`](docs/agent-operations.md) — shared Codex, Claude,
+  hardware, and release workflow for humans and agents.
+- [`docs/creator-micro-2-post-flash-2026-09-02.md`](docs/creator-micro-2-post-flash-2026-09-02.md) —
+  canonical dated desk evidence and remaining acceptance gates.
 - [`SECURITY.md`](SECURITY.md), [`CONTRIBUTING.md`](CONTRIBUTING.md),
   [`SUPPORT.md`](SUPPORT.md), and [`CHANGELOG.md`](CHANGELOG.md) — canonical
   repository policies and project history.
@@ -167,8 +229,8 @@ Discovery recognizes these identities and reports the one actually observed:
 
 | VID:PID | Classification | Evidence boundary |
 | --- | --- | --- |
-| `303A:8297` | Creator Micro 2 candidate | Community and user-supplied evidence; never sufficient for writes |
-| `303A:8298` | Creator Micro 2 | Reverified on the tested desk unit on August 31, 2026 |
+| `303A:8297` | Creator Micro 2 candidate | Recognized for read-only presence; community and user-supplied evidence; never sufficient for writes |
+| `303A:8298` | Creator Micro 2 | Reverified over wired USB after the September 2, 2026 firmware update |
 | `303A:8360` | Codex Micro | Repeated community hardware evidence |
 | `574C:E6E3` | Legacy Work Louder Micro v1 | QMK explanation only; current-generation protocol is forbidden |
 
@@ -178,12 +240,16 @@ layer, accepted capabilities, visible result, and a release path.
 
 ## Current evidence
 
-The August 31, 2026 desk audit enumerated a Creator Micro 2 `303A:8298` over USB
-with six HID collections. The operating-system registry descriptor is 275 bytes
-with SHA-256 `9257d7361f9c784e0fc0b260bbac0feadd49bf79cbb6202d6c41560cbae96fb6`;
-serial data is discarded. The current Input log reports firmware `v0.1.50`, while
-`device.status` and `v.oai.rgbcfg` return `Method not found`, so that unit is not
-lighting-qualified. Bluetooth keyboard and trackpad traffic is unrelated.
+On September 2, 2026, the tested Creator Micro 2 `303A:8298` was updated from
+firmware `v0.1.50` to `0.6.2`, re-enumerated over wired USB, and returned
+successful results for both required Codex RPC methods. Input then repeated its
+known single sealed-resource mutation and is unverified for another
+Input-controlled operation. At the recorded post-update snapshot, Input and
+Agent Board were stopped; native Codex connection, visible lighting, post-update
+Flight Check, provider receipt, and operator acceptance remained unproven. See
+the canonical
+[post-flash evidence record](docs/creator-micro-2-post-flash-2026-09-02.md) for
+timestamps, descriptor hashes, topology, and evidence boundaries.
 
 Automated source checks and local package creation do not prove installed hooks,
 provider receipt, physical gesture completion, RGB support, signed distribution,

@@ -54,6 +54,17 @@ For an Agent Board candidate, also run the checks in
 does not imply a desktop release, and neither tag may be reused for the other
 component.
 
+An Agent Board hardware record must also keep four commissioning facts
+independent: the human-observed Creator Micro 2 Pro **WIRED** channel with white
+underglow, sanitized Work Louder Input publisher/signature/Gatekeeper
+verification, one exclusive Agent Board shortcut receiver, and a fresh physical
+Flight Check. The first is only firmware-selected mode evidence; the second is
+only app-integrity evidence; the third is only bounded process-count evidence;
+none proves USB enumeration, Input Monitoring, device synchronization, native
+Codex RPC success, or the fourth. Receiver contention is recovered by a human
+fully quitting every Agent Board copy and reopening one intended build. Release
+automation must never kill those processes.
+
 For each intended provider and scope, also record the read-only hook status, content-bound plan, applied target and private backup, preservation of unrelated hooks, provider trust result, and one disposable fired-event receipt. Inspect both stdout and persisted state to confirm prompts, assistant content, tool data, transcript paths, credentials, and approval decisions are absent.
 
 A foreground `wrkpad serve` test proves only that process lifetime. Separately record the content-bound service plan, stable executable SHA-256, owned plist, loaded status, and authenticated health after the originating terminal closes. Hook installation alone does not keep HASP running.
@@ -66,13 +77,13 @@ Unknown devices remain observe-only.
 
 ## Connected desk snapshot
 
-The August 31, 2026 desk snapshot proves discovery, not lighting support:
-
-- Work Louder Creator Micro 2 `303A:8298`, USB, six HID collections;
-- IORegistry descriptor: 275 bytes, SHA-256 `9257d7361f9c784e0fc0b260bbac0feadd49bf79cbb6202d6c41560cbae96fb6`;
-- descriptor source was the macOS registry; no HID handle was opened and no report was sent;
-- raw USB device version `0x39C0` is retained only as a non-semantic value;
-- current Input log firmware response: `v0.1.50`;
-- `device.status` and `v.oai.rgbcfg`: `Method not found`.
-
-Re-capture every item after an official firmware update. Never reuse this descriptor or firmware evidence as acceptance for a different desk, device, or release.
+The September 2, 2026 post-flash snapshot verifies firmware `0.6.2`, wired USB
+enumeration for Creator Micro 2 `303A:8298`, a changed 207-byte HID descriptor,
+and successful board responses to `v.oai.rgbcfg` followed by
+`v.oai.thstatus`. It does not prove that Codex consumed those responses or that
+native keys or lighting work. The installed Input copy repeated its known
+single sealed-resource mutation after the foreground update and is not trusted
+for another Input-controlled operation. Native and Ashlr Layer physical
+acceptance remain pending. Use the canonical
+[post-flash evidence record](creator-micro-2-post-flash-2026-09-02.md); never
+reuse that desk receipt as acceptance for another device or release.

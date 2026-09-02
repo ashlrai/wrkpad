@@ -1,28 +1,168 @@
 # Troubleshooting
 
-Run commands from the repository root.
+Run desktop commands from the app directory:
+
+```bash
+cd wrkpad/app
+```
 
 ## USB device is not detected
 
 If the app says **USB absent** or the doctor reports `not detected`:
 
 1. Connect the board directly by USB-C and confirm it is powered.
-2. Try a known data-capable cable and another port.
-3. Quit and reopen Agent Board after reconnecting.
-4. Run `npm run doctor` again.
+2. On a Pro model, hold the bottom-left touch sensor for three seconds, then tap
+   through the three Bluetooth channels to the fourth **WIRED** channel. The
+   underglow turns white. Let communication mode exit after five seconds.
+3. Try a known data-capable cable and another port.
+4. Fully quit and reopen Agent Board after reconnecting.
+5. Run `npm run doctor` again.
 
-Bluetooth keyboard and trackpad traffic is separate. USB presence still does not prove Input Monitoring, routing, firmware compatibility, or RGB.
+The general [Creator Micro 2 setup](https://worklouder.cc/micro-setup) says USB
+insertion switches a Pro to wired mode, but the current
+[Codex Micro guide](https://learn.chatgpt.com/docs/features/codex-micro) says it
+only charges while Bluetooth remains selected. For Codex troubleshooting,
+explicitly select the white wired channel rather than relying on cable insertion.
+White underglow is human-visible mode evidence only; it is not a USB receipt.
+Bluetooth keyboard and Apple trackpad traffic is separate and does not need to
+be disconnected. USB presence still does not prove Input Monitoring, routing,
+firmware compatibility, or RGB.
+
+## Work Louder Input is installed but not verified
+
+Setup accepts Input only when it says **publisher, signature, and Gatekeeper
+verified**. The app deliberately shows a sanitized reason such as `invalid
+signature`, `publisher unrecognized`, `Gatekeeper rejected`, `multiple
+installations`, `unsafe`, `known resource mutation`, or `probe unavailable`; it
+does not display raw signing output, a local app path, or publisher identifiers.
+The official DMG installs lowercase `input.app`; the detector probes that exact
+fixed name and still rejects symlinks, alternate locations, and noncanonical
+ancestors.
+
+On the tested desk, the official Input 0.18.4 replacement passed all three
+checks before the approved September 2 update, then repeated the same single
+sealed `window-info` helper mutation during that session. The installed copy is
+currently unverified for another Input-controlled operation. Input can remain
+closed for native Codex qualification. See the canonical
+[post-flash evidence record](../../docs/creator-micro-2-post-flash-2026-09-02.md).
+This bounded diagnosis does not identify the writer or authorize a signature
+exception.
+
+For any result other than verified:
+
+1. Stop Flight Check and do not open a firmware updater.
+2. Use Command-Q to fully quit Input. Agent Board will not quit it for you.
+3. Download a fresh Input installer from the official
+   [Work Louder page](https://worklouder.cc/input/).
+4. Replace the unverified installation in Finder. If Input exists in both
+   `/Applications` and the user's Applications folder, keep one intended
+   official installation and resolve the duplicate manually.
+5. Refresh Setup while Input remains closed and require the verified status
+   before launching Input, importing a profile, or synchronizing the device.
+
+Do not bypass Gatekeeper, strip quarantine metadata, ad-hoc sign Input, or let
+an agent remove application bundles. A verified installation proves publisher,
+signature, and Gatekeeper assessment for that copy only; it does not prove
+permission, current profile, device synchronization, firmware compatibility, or
+physical acceptance.
+
+## Multiple Agent Board receivers are running
+
+Setup says **One receiver · shortcut ownership available** only when one exact
+Ashlr Agent Board main process is observed. If it reports multiple receivers or
+Flight Check says **Receiver · Contended**, the app disables shortcut ownership
+so two copies cannot silently divide the 20 registrations.
+
+Use Command-Q to fully quit every Ashlr Agent Board copy, including development
+and packaged builds; closing a window is not enough. Reopen exactly one intended
+build and refresh Setup. Do not use an agent or shell command to kill processes.
+Packaged copies produce bounded instance/build counts and hashes; a development
+copy fails closed when a packaged peer is present. Neither mode exposes process
+IDs, command lines, app paths, or raw process output.
+**Exclusive** proves only the observed receiver count, not Input Monitoring,
+shortcut receipt, USB ownership, or physical acceptance.
 
 ## Shortcuts are missing or controls do nothing
 
 1. Confirm Work Louder Input is installed and open.
-2. Verify the active Input layer matches [the canonical shortcuts](controls.md).
-3. Verify the receiving app under **System Settings → Privacy & Security → Input Monitoring**.
-4. Check the shortcut count in Agent Board.
-5. Look for another app that already owns the same global shortcut.
-6. Restart Agent Board after permission or ownership changes.
+2. In Input's profile chooser, set **Ashlr Agent Board Corrected** as the current keyboard
+   profile and verify **Ashlr Daily**. The profile shown for editing is not proof
+   of the current keyboard profile.
+3. Verify the active Input layer matches [the canonical shortcuts](controls.md).
+4. Verify the receiving app under **System Settings → Privacy & Security → Input Monitoring**.
+5. Check the shortcut count in Agent Board.
+6. Look for another app that already owns the same global shortcut.
+7. Restart Agent Board after permission or ownership changes.
 
 All 20 desktop shortcuts must register even though daily use emits 19 signals; ACT11 remains `None` on the daily layer.
+
+## Input-only reconciliation
+
+Input exposes three different states: the profile shown in the editor, the
+profile marked current through **Set as current profile**, and the profile/layer
+actually emitting from the board. They are not interchangeable. A successful
+import or `layout updated` message proves neither current-profile activation nor
+physical emission.
+
+Use this single recovery procedure when the physical check remains silent, the
+cache is wrong, or Agent Board shows recent unresolved-index log evidence:
+
+1. Stop Flight Check so the action interlock returns to a known state.
+2. In Input's profile chooser, hover an ordinary Creator Micro 2 profile and
+   choose **Export Profile**. Keep it as rollback. If Setup reports reversed or
+   unverified dial directions, return to Agent Board and use **Create corrected
+   Input profile** with that export. The artifact does not activate itself or
+   write to the device. A resumed handoff re-verifies the exact bounded artifact
+   by SHA-256 before reveal; the copied checklist includes its filename and
+   checksum but omits the full local path. Dismissing that handoff removes only
+   the startup reminder and proves no recovery step. Use **Reveal artifact in
+   Finder** or **Copy recovery checklist** before quitting the instruction
+   surfaces.
+3. Use Command-Q to fully quit Agent Board, Codex/ChatGPT, Claude, and every
+   other board controller; closing a window is not enough. Power-cycle the board.
+4. Open Input alone, choose **Import Profile**, and select the corrected
+   artifact. If **Import Profile** is absent, Input already has six profiles:
+   export a backup and remove only an unused ordinary profile. Never delete or
+   transform a protected `KV_OAI_*` profile or layer.
+5. Avoid ambiguous same-name copies: export and remove only an older ordinary
+   **Ashlr Agent Board Corrected** profile before importing its replacement. On
+   the imported row choose **Set as current profile**, then select **Ashlr
+   Daily**.
+6. Wait for Input to finish. `layout updated` is not acceptance. If Input says
+   `update error, retry`, keep Input as the only board controller and retry; do
+   not continue from an error.
+7. Use Command-Q to fully quit Input and relaunch it alone. Confirm **Ashlr Agent
+   Board Corrected** is still current with **Ashlr Daily** selected.
+8. Reopen Agent Board, choose **Open Input Monitoring settings**, and manually
+   verify the exact receiver build shown in Setup is enabled. Agent Board keeps
+   this permission labeled human-unverified because it cannot read the protected
+   macOS permission database.
+9. Run a fresh physical Flight Check without simulating shortcuts from the
+   keyboard.
+
+Recent unresolved-index evidence may predate the current cache, so it is an
+advisory rather than proof of the current board state. Do not reset, delete or
+transform a protected `KV_OAI_*` layer, or flash firmware from that evidence.
+
+If Setup reports recurring Codex-protocol responses reaching Input, treat that
+as current controller co-presence only. It does not identify HID ownership or
+prove why a shortcut was silent, but it does mean the Input-only reconciliation
+window is not exclusive. End Flight Check and establish the human-guided
+Input-only window above; Agent Board does not quit applications automatically.
+
+If Flight Check receives zero raw signals, use the top-right black rotary dial.
+The top-left white control is the joystick. The bottom-left circle is the
+layer/communication-mode touch sensor, not the dial and not a Flight Check
+gesture. If the correct control still emits nothing, do not
+simulate the shortcut from the keyboard. Complete the Input-only reconciliation
+above, then confirm the fresh check still records `0` raw receipts.
+
+Only after a fresh second check still receives zero signals should firmware
+qualification be considered for a device that is actually outdated. The tested
+desk already runs `0.6.2`; do not reflash it merely because a physical receipt
+is missing. Its current post-flash state and remaining acceptance gates are in
+the canonical
+[evidence record](../../docs/creator-micro-2-post-flash-2026-09-02.md).
 
 ## Codex finds Creator Micro but native connection fails
 
@@ -33,13 +173,13 @@ the first Codex control-plane method; Bluetooth keyboard/trackpad traffic and
 Agent Board's global shortcuts are not the cause.
 
 Do not repeatedly reconnect, grant more permissions, or quit Logitech just to
-clear this error. Follow the [separate firmware qualification
-workflow](setup.md#3-install-work-louder-input). The currently published vendor
-release is only a qualification candidate until this exact desk path passes.
-After updating, test Codex with
+clear a confirmed 404. Follow the [separate firmware qualification
+workflow](setup.md#3-verify-work-louder-input). After updating, test Codex with
 Input fully quit. Codex must receive successful `v.oai.rgbcfg` and then
 `v.oai.thstatus` responses before native keys or lighting are described as
-connected.
+connected. On the tested desk, the updated firmware accepted both methods, but
+Codex consumption and physical behavior remain unproven; see the
+[post-flash evidence](../../docs/creator-micro-2-post-flash-2026-09-02.md).
 
 If those calls succeed but Codex still fails, verify Input Monitoring and test
 Codex as the only open board controller. Codex and Input can hold nonexclusive
@@ -86,7 +226,7 @@ The focus contract is narrow: Codex opens ChatGPT, Claude Code opens cmux, and u
 
 Runtime discovery checks `~/.local/bin`, `~/.npm-global/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, and `/usr/bin`. It intentionally ignores inherited `PATH` entries. The file must be executable. Install or symlink the CLI into a supported directory, then restart the app.
 
-The doctor treats ChatGPT, Codex CLI, native Codex control, Claude Code, and Ashlr Hub as optional integrations. A missing or firmware-incompatible optional integration produces a warning but does not fail the required board and Work Louder Input checks. In JSON output, `nextAction` prioritizes a failed required check, the declared Codex Native route's guarded qualification, or the next manual physical gate. Ashlr Layer never promotes a native firmware operation.
+The doctor evaluates prerequisites for the requested route. **Ashlr Layer** requires the board and a verified Work Louder Input installation. **Codex Native** requires the board and ChatGPT Desktop; Input must remain quit, so its integrity result is advisory for a read-only native retry and blocking again only before a later Input-controlled profile or firmware operation. Codex CLI, Claude Code, and Ashlr Hub remain optional integrations. In JSON output, `nextAction` prioritizes a failed route prerequisite, the declared Codex Native route's guarded qualification, or the next manual physical gate. Ashlr Layer never promotes a native firmware operation.
 
 ## A confirmation expires
 

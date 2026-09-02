@@ -12,7 +12,7 @@ Ashlr Agent Board gives opaque black keycaps a complete on-screen legend, keeps 
 The Creator Micro 2 has six Agent keys but black keycaps cannot communicate state by themselves. Agent Board mirrors their exact `2 + 4` geometry:
 
 ```text
-DIAL | AG00 | AG01 | STICK
+STICK | AG00 | AG01 | DIAL
       AG02 | AG03 | AG04 | AG05
 ```
 
@@ -56,19 +56,29 @@ git clone https://github.com/ashlrai/wrkpad.git
 cd wrkpad/app
 npm install
 npm run doctor
+npm run agent:preflight
 npm test
 npm run dev
 ```
 
 `npm run doctor` performs read-only local probes and reports anything that still needs human verification.
+`npm run agent:preflight` adds stable-binary, hook, service, source, and
+route-specific evidence using the shared repository contract. Append
+`-- --route codex_native` only for the separate native qualification route.
 
-Before pressing physical controls, follow [setup and Flight Check](docs/setup.md). Work Louder Input must emit the exact shortcuts expected by the app, and macOS Input Monitoring must be granted by the user.
+Before pressing physical controls, follow [setup and Flight Check](docs/setup.md). Work Louder Input must emit the exact shortcuts expected by the app, and macOS Input Monitoring must be granted by the user. Input's header is the edit target, not proof of the current keyboard profile; use **Set as current profile**, then require the read-only receipt and physical Flight Check.
+
+To populate the six slots with live Codex and Claude Code state, also complete
+the guarded [`wrkpad` service and hook setup](../docs/hook-setup.md). A configured
+hook, a trusted hook, a received lifecycle event, and a physical board signal
+are separate gates.
 
 ## Develop and package
 
 ```bash
 npm run dev          # Vite renderer plus Electron
 npm run dev:web      # renderer only; actions are simulated
+npm run agent:preflight # read-only shared Ashlr Layer readiness
 npm test             # Vitest plus Electron main-process tests
 npm run lint         # oxlint
 npm run build        # TypeScript and production renderer

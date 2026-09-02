@@ -1,0 +1,15 @@
+rules:
+  - id: wrkpad-node-shell-mode
+    message: Shell-mode process execution is forbidden; use a fixed executable and an argument array.
+    severity: ERROR
+    languages: [javascript, typescript]
+    patterns:
+      - pattern: '$FUNCTION(..., { ..., shell: true, ... })'
+
+  - id: wrkpad-dynamic-code-execution
+    message: Dynamic JavaScript evaluation is forbidden in the desktop application and repository tools.
+    severity: ERROR
+    languages: [javascript, typescript]
+    pattern-either:
+      - pattern: 'eval(...)'
+      - pattern: 'new Function(...)'

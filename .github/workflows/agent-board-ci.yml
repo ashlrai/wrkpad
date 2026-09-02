@@ -25,7 +25,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
-          node-version: 22
+          node-version-file: .node-version
           cache: npm
           cache-dependency-path: app/package-lock.json
       - run: npm ci
@@ -42,7 +42,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
-          node-version: 22
+          node-version-file: .node-version
           cache: npm
           cache-dependency-path: app/package-lock.json
       - run: npm ci
@@ -50,12 +50,38 @@ jobs:
       - name: Verify hardened unsigned package
         shell: bash
         run: |
+          set -euo pipefail
           bundle="$(find release -type d -name 'Ashlr Agent Board.app' -print -quit)"
           test -n "$bundle"
           plist="$bundle/Contents/Info.plist"
+          executable="$bundle/Contents/MacOS/Ashlr Agent Board"
+          expected_version="$(node -p "require('./package.json').version")"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist")" = "ai.ashlr.agent-board"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")" = "$expected_version"
+          architectures="$(lipo -archs "$executable")"
+          [[ "$architectures" =~ ^(arm64|x86_64)(\ (arm64|x86_64))*$ ]]
           test "$(/usr/libexec/PlistBuddy -c 'Print :NSAppTransportSecurity:NSAllowsArbitraryLoads' "$plist")" = false
           for key in NSAudioCaptureUsageDescription NSBluetoothAlwaysUsageDescription NSBluetoothPeripheralUsageDescription NSCameraUsageDescription NSMicrophoneUsageDescription; do
             ! /usr/libexec/PlistBuddy -c "Print :$key" "$plist" >/dev/null 2>&1
           done
+          signature_info="$(codesign -dvvv "$bundle" 2>&1 || true)"
+          if grep -q '^Authority=Developer ID Application:' <<<"$signature_info"; then
+            echo "PR package unexpectedly contains a Developer ID Application authority." >&2
+            exit 1
+          fi
+          team_id="$(sed -n 's/^TeamIdentifier=//p' <<<"$signature_info" | head -1)"
+          if [[ -n "$team_id" && "$team_id" != "not set" ]]; then
+            echo "PR package unexpectedly contains a signing team identifier." >&2
+            exit 1
+          fi
+          if ! { grep -q '^Signature=adhoc$' <<<"$signature_info" && grep -q '^TeamIdentifier=not set$' <<<"$signature_info"; } \
+            && ! grep -q 'code object is not signed at all' <<<"$signature_info"; then
+            echo "PR package signature state was empty or unrecognized; refusing to classify it as expected-unsigned." >&2
+            exit 1
+          fi
+          if spctl --assess --type execute "$bundle" >/dev/null 2>&1; then
+            echo "Expected Gatekeeper to reject the non-distribution PR package." >&2
+            exit 1
+          fi
       - name: Validate public demo fixture
         run: npm run capture:public-demo

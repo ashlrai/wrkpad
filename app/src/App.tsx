@@ -5,27 +5,94 @@ import {
   Mic2, Play, RotateCcw, ShieldCheck, Sparkles, Split, TerminalSquare, Waypoints, X, Zap,
 } from 'lucide-react'
 import {
-  actions, controls, effortLevels, hardware, profileOrder, profiles,
-  type ActionDefinition, type AgentSlotSummary, type BoardRoute, type ControlId, type ExecutionResult, type MissionControlSnapshot, type PhysicalSignalEnvelope, type ProfileId, type SystemStatus, type WorkspaceSnapshot,
+  actions, controls, correctedInputProfileObserved, correctedInputProfileObservedForVariant, effortLevels, hardware, profileOrder, profiles,
+  type ActionDefinition, type AgentSlotSummary, type BoardRoute, type ControlId, type ExecutionResult, type InputInstallationStatus, type MissionControlSnapshot, type PhysicalSignalEnvelope, type ProfileId, type ProfileRepairResult, type ReceiverRuntimeStatus, type SystemStatus, type WorkspaceSnapshot,
 } from './board'
 import { agentProviderLabel, agentStateClassName, agentStateLabels, agentStateLegendOrder, agentVisibleStateLabel } from './agent-accessibility'
 import AttentionDeck from './components/AttentionDeck'
 import FleetBrief from './components/FleetBrief'
-import { expectedSignalsAfter, flightAcceptance, flightStepComplete, stepsForVariant, type FlightEvent, type FlightVariant } from './flight-check'
+import { expectedSignalsAfter, flightAcceptance, flightStepComplete, noSignalRecoveryNeeded, stepsForVariant, type FlightEvent, type FlightVariant } from './flight-check'
 import './App.css'
 
 const initialStatus: SystemStatus = {
   boardConnected: false, inputInstalled: false, inputMonitoring: 'unverified',
+  inputInstallation: { status: 'probe_unavailable', version: null },
+  inputProfile: { cacheStatus: 'missing', activeProfile: null, activeLayer: null, encoderDirection: 'unavailable' },
+  inputRuntime: { status: 'not_observed', profileIndex: null, layerIndex: null, observedAt: null, fresh: false },
   codex: false, claude: false, ashlr: false,
   nativeCodexMicro: { status: 'not_observed', observedAt: null, detail: 'No recent native Codex Creator Micro connection evidence was found.' },
   boardRoute: 'unknown',
-  workspace: '/Choose a working directory', shortcutCount: 0, shortcutRegistrations: [], workspaceSnapshot: null,
+  workspace: '/Choose a working directory', shortcutCount: 0, shortcutRegistrations: [], workspaceSnapshot: null, receiverIdentity: null,
+  receiverRuntime: { status: 'unavailable', instanceCount: 0, distinctBuildCount: 0, currentAsarSha256: null, candidateAsarSha256: null, candidateMatchesCurrent: null },
 }
 const initialMission: MissionControlSnapshot = {
   schemaVersion: 1, observedAt: new Date(0).toISOString(), agentSource: 'unavailable', fleetSource: 'unavailable',
   agents: Array.from({ length: 6 }, (_, index) => ({ slot: index + 1, provider: null, state: 'off', title: 'Available slot', updatedAt: null })),
   fleet: null, unassignedActiveSessions: 0, operatorNotices: [],
 }
+
+function describeInputInstallation(input: InputInstallationStatus): { state: string; guidance: string } {
+  const version = input.version ? ` ${input.version}` : ''
+  switch (input.status) {
+    case 'verified':
+      return {
+        state: `Input${version} · publisher, signature, and Gatekeeper verified`,
+        guidance: 'This verifies the installed app copy only. Profile state, device synchronization, permission, and physical routing remain separate gates.',
+      }
+    case 'missing':
+      return {
+        state: 'Input.app not found · shortcuts disabled',
+        guidance: 'Install Work Louder Input from the official release, reopen Agent Board, and require a verified result before profile or firmware work.',
+      }
+    case 'multiple_installations':
+      return {
+        state: `Input${version} · multiple installations · shortcuts disabled`,
+        guidance: 'Use Finder to keep one intended official Input installation, remove the duplicate manually, then reopen Agent Board. No application was changed automatically.',
+      }
+    case 'unsafe':
+      return {
+        state: `Input${version} · unsafe installation path · shortcuts disabled`,
+        guidance: 'Replace the unsafe copy through Finder with the official Work Louder release. Do not follow symlinks, bypass Gatekeeper, or let an agent delete the app.',
+      }
+    case 'invalid_metadata':
+      return {
+        state: `Input${version} · invalid application metadata · shortcuts disabled`,
+        guidance: 'Replace this copy with the official Work Louder release; its bundle metadata could not be verified. Do not continue to profile or firmware work.',
+      }
+    case 'publisher_unrecognized':
+      return {
+        state: `Input${version} · publisher unrecognized · shortcuts disabled`,
+        guidance: 'Replace this copy with the official Work Louder release. Do not approve or work around an unexpected publisher.',
+      }
+    case 'invalid_signature':
+      return {
+        state: `Input${version} · invalid signature · shortcuts disabled`,
+        guidance: 'Fully quit Input, replace it in Finder from the official Work Louder release, then require a verified result. Do not ad-hoc sign or alter the app.',
+      }
+    case 'known_resource_mutation':
+      return {
+        state: `Input${version} · sealed helper changed · not verified · shortcuts disabled`,
+        guidance: 'On this desk, Input 0.18.4 later showed this exact sealed helper change while it was running; which process caused the change is unproven. This installed copy is not trusted or verified. Fully quit Input, make a stopped-state backup, reinstall the official 0.18.4 DMG, and verify the fresh copy before launching it. If the profile is already correct, leave Input closed during commissioning. This state never authorizes firmware work.',
+      }
+    case 'gatekeeper_rejected':
+      return {
+        state: `Input${version} · Gatekeeper rejected · shortcuts disabled`,
+        guidance: 'Replace this copy with the official Work Louder release and let macOS assess it again. Do not bypass Gatekeeper or strip quarantine metadata.',
+      }
+    case 'probe_unavailable':
+      return {
+        state: `Input${version} · verification unavailable · shortcuts disabled`,
+        guidance: 'Publisher, signature, and Gatekeeper verification could not complete. Retry after reopening Agent Board, then verify the intended official installation manually if the probe remains unavailable. Do not reinstall solely because a probe failed, and do not continue while trust is unknown.',
+      }
+  }
+}
+const verifiedInputInstallation = (input: InputInstallationStatus) => input.status === 'verified'
+  && typeof input.version === 'string'
+  && /^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$/.test(input.version)
+const exclusiveReceiverRuntime = (receiver: ReceiverRuntimeStatus) => receiver.status === 'exclusive'
+  && receiver.instanceCount === 1
+  && receiver.distinctBuildCount === 1
+const initialRecoveryGuide: AgentBoardRecoveryGuide = { handoff: null, artifact: { status: 'invalid', available: false }, steps: [] }
 const formatClock = (date: Date) => date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 const normalizeControl = (control: ControlId): ControlId => control === 'cmd6' ? 'cmd5' : control
 
@@ -35,6 +102,16 @@ const hardwareIds: Partial<Record<ControlId, string>> = {
   dialLeft: 'ENC_CC', dialRight: 'ENC_CW', dialPress: 'ENC_CLK',
   joyUp: 'JOY_UP', joyRight: 'JOY_RIGHT', joyDown: 'JOY_DOWN', joyLeft: 'JOY_LEFT',
 }
+
+const STATUS_REFRESH_TIMEOUT_MS = 8_000
+
+const flightLiveGatesReady = (status: SystemStatus, variant: FlightVariant) =>
+  status.boardRoute === 'ashlr_layer'
+  && status.boardConnected
+  && status.shortcutCount === hardware.bindableSignals
+  && verifiedInputInstallation(status.inputInstallation ?? initialStatus.inputInstallation)
+  && exclusiveReceiverRuntime(status.receiverRuntime ?? initialStatus.receiverRuntime)
+  && correctedInputProfileObservedForVariant(status.inputProfile ?? initialStatus.inputProfile, variant)
 
 function App() {
   const bridge = window.agentBoard
@@ -57,8 +134,10 @@ function App() {
   const [flightStartedAt, setFlightStartedAt] = useState<string | null>(null)
   const [flightExport, setFlightExport] = useState<string | null>(null)
   const [flightVariant, setFlightVariant] = useState<FlightVariant>('daily')
+  const [flightInvalidatedRun, setFlightInvalidatedRun] = useState<number | null>(null)
   const [routeSaving, setRouteSaving] = useState(false)
   const [routeError, setRouteError] = useState<string | null>(null)
+  const [recoveryGuide, setRecoveryGuide] = useState<AgentBoardRecoveryGuide>(initialRecoveryGuide)
   const holdTimer = useRef<number | null>(null)
   const holdAttempt = useRef(0)
   const holdPending = useRef(false)
@@ -66,6 +145,7 @@ function App() {
   const lastSignal = useRef<Partial<Record<ControlId, number>>>({})
   const flightExpected = useRef<ControlId[]>([])
   const flightRequest = useRef(0)
+  const flightRun = useRef<{ request: number; underTest: boolean; invalidated: boolean; variant: FlightVariant }>({ request: 0, underTest: false, invalidated: false, variant: 'daily' })
   const statusRequest = useRef(0)
   const routeMutation = useRef(0)
   const flightActive = flightPhase === 'active'
@@ -74,16 +154,50 @@ function App() {
   const activeAction = actions[profile.mapping[activeControl]]
   const effort = effortLevels[effortIndex]
   const nativeCodexMicro = status.nativeCodexMicro ?? initialStatus.nativeCodexMicro
+  const inputInstallation = status.inputInstallation ?? initialStatus.inputInstallation
+  const receiverRuntime = status.receiverRuntime ?? initialStatus.receiverRuntime
+  const inputInstallationDescription = describeInputInstallation(inputInstallation)
+  const inputInstallationReady = verifiedInputInstallation(inputInstallation)
+  const receiverExclusive = exclusiveReceiverRuntime(receiverRuntime)
 
   const refreshStatus = useCallback(async () => {
-    if (!bridge) return
+    if (!bridge) return null
     const request = ++statusRequest.current
     const mutation = routeMutation.current
-    const nextStatus = await bridge.getStatus()
-    if (request === statusRequest.current && mutation === routeMutation.current) setStatus(nextStatus)
+    const flightGeneration = flightRequest.current
+    let timeout: number | undefined
+    try {
+      const nextStatus = await Promise.race<SystemStatus | null>([
+        bridge.getStatus(),
+        new Promise<null>((resolve) => { timeout = window.setTimeout(() => resolve(null), STATUS_REFRESH_TIMEOUT_MS) }),
+      ])
+      if (!nextStatus || request !== statusRequest.current || mutation !== routeMutation.current || flightGeneration !== flightRequest.current) return null
+      const run = flightRun.current
+      if (run.underTest && !flightLiveGatesReady(nextStatus, run.variant)) {
+        flightRun.current = { ...run, invalidated: true }
+        setFlightInvalidatedRun(run.request)
+        setFlightExport(null)
+      }
+      setStatus(nextStatus)
+      return nextStatus
+    } catch {
+      return null
+    } finally {
+      if (timeout !== undefined) window.clearTimeout(timeout)
+    }
   }, [bridge])
   const refreshMission = useCallback(async () => {
     if (bridge?.getMissionControl) setMission(await bridge.getMissionControl())
+  }, [bridge])
+  const refreshRecoveryGuide = useCallback(async () => {
+    if (!bridge?.getRecoveryGuide) return null
+    try {
+      const guide = await bridge.getRecoveryGuide()
+      setRecoveryGuide(guide)
+      return guide
+    } catch {
+      return null
+    }
   }, [bridge])
 
   const internalResult = (title: string, message: string) => setResult({
@@ -205,6 +319,14 @@ function App() {
     return () => { window.clearInterval(interval); window.clearInterval(missionInterval); unsubscribe?.() }
   }, [bridge, executeControl, flightActive, flightVariant, refreshMission, refreshStatus])
 
+  useEffect(() => {
+    let current = true
+    void refreshRecoveryGuide().then((guide) => {
+      if (current && guide?.handoff) setView('setup')
+    })
+    return () => { current = false }
+  }, [refreshRecoveryGuide])
+
   const focusAgentSlot = useCallback(async (slot: number) => {
     setSelectedAgentSlot(slot)
     setActiveControl(`agent${slot}` as ControlId)
@@ -290,7 +412,25 @@ function App() {
   const startFlightCheck = async (variant: 'daily' | 'diagnostic' = 'daily') => {
     if (status.boardRoute === 'codex_native') {
       setView('setup')
-      internalResult('Native verification is separate', 'The Ashlr Flight Check validates only the Work Louder Input shortcut layer. Verify Codex Native in Codex Settings → Creator Micro with Input quit.')
+      internalResult('Native verification is separate', 'The Ashlr Flight Check validates only the Work Louder Input shortcut layer. Quit Work Louder Input and quit this Agent Board app. Open Codex alone, then verify Settings → Creator Micro.')
+      return
+    }
+    if (!verifiedInputInstallation(status.inputInstallation ?? initialStatus.inputInstallation)
+      || !exclusiveReceiverRuntime(status.receiverRuntime ?? initialStatus.receiverRuntime)) {
+      setView('flight')
+      setFlightPhase('inactive')
+      return
+    }
+    if (!correctedInputProfileObservedForVariant(status.inputProfile ?? initialStatus.inputProfile, variant)) {
+      setView('setup')
+      internalResult(
+        'Activate the corrected Input profile first',
+        status.inputProfile?.encoderDirection === 'reversed'
+          ? 'The read-only Input receipt shows clockwise and counterclockwise are reversed. Flight Check cannot produce a valid first gesture until the corrected profile is active.'
+          : variant === 'daily'
+            ? 'Daily Flight Check requires the read-only Input receipt to confirm Ashlr Agent Board Corrected, Ashlr Daily, and the corrected encoder order.'
+            : 'Diagnostic Flight Check requires the temporary Ashlr Flight Check Corrected - diagnostic profile, Ashlr Diagnostic layer, and the corrected encoder order.',
+      )
       return
     }
     if (!status.boardConnected || status.shortcutCount !== hardware.bindableSignals) {
@@ -299,6 +439,8 @@ function App() {
       return
     }
     const request = ++flightRequest.current
+    flightRun.current = { request, underTest: true, invalidated: true, variant }
+    setFlightInvalidatedRun(null)
     setFlightSignals([])
     setFlightEvents([])
     setFlightExport(null)
@@ -310,32 +452,54 @@ function App() {
     cancelHold()
     setFlightPhase('arming')
     if (!bridge) {
-      if (request === flightRequest.current) setFlightPhase('error')
+      if (request === flightRequest.current) {
+        flightRun.current = { request, underTest: false, invalidated: false, variant }
+        setFlightPhase('error')
+      }
       return
     }
     try {
-      const acknowledgement = await bridge.setFlightCheck(true)
+      const acknowledgement = await bridge.setFlightCheck(true, variant)
       if (request !== flightRequest.current) return
       if (!acknowledgement.acknowledged || !acknowledgement.active) {
+        flightRun.current = { request, underTest: false, invalidated: false, variant }
         setFlightPhase('error')
         return
       }
       setFlightStartedAt(acknowledgement.startedAt)
+      const confirmedStatus = await refreshStatus()
+      if (request !== flightRequest.current) return
+      if (!confirmedStatus || !flightLiveGatesReady(confirmedStatus, variant)) {
+        flightRun.current = { request, underTest: true, invalidated: true, variant }
+        setFlightInvalidatedRun(request)
+        setFlightPhase('error')
+        return
+      }
+      flightRun.current = { request, underTest: true, invalidated: false, variant }
+      setFlightInvalidatedRun(null)
       setFlightPhase('active')
     } catch {
-      if (request === flightRequest.current) setFlightPhase('error')
+      if (request === flightRequest.current) {
+        flightRun.current = { request, underTest: false, invalidated: false, variant }
+        setFlightPhase('error')
+      }
     }
   }
 
   const stopFlightCheck = async () => {
+    const priorRun = flightRun.current
+    const failurePhase = flightPhase === 'active' ? 'active' : 'error'
     const request = ++flightRequest.current
+    flightRun.current = { ...priorRun, request }
+    if (priorRun.invalidated) setFlightInvalidatedRun(request)
     if (!bridge) { setFlightPhase('error'); return false }
     setFlightPhase('disarming')
     try {
-      const acknowledgement = await bridge.setFlightCheck(false)
+      const acknowledgement = await bridge.setFlightCheck(false, flightVariant)
       if (request !== flightRequest.current) return false
       if (!acknowledgement.acknowledged || acknowledgement.active) {
-        setFlightPhase('active')
+        setFlightPhase(failurePhase)
+        void refreshStatus()
         return false
       }
       setFlightSignals([])
@@ -343,10 +507,15 @@ function App() {
       setFlightStartedAt(null)
       setFlightExport(null)
       flightExpected.current = []
+      flightRun.current = { request, underTest: false, invalidated: false, variant: flightVariant }
+      setFlightInvalidatedRun(null)
       setFlightPhase('inactive')
       return true
     } catch {
-      if (request === flightRequest.current) setFlightPhase('active')
+      if (request === flightRequest.current) {
+        setFlightPhase(failurePhase)
+        void refreshStatus()
+      }
       return false
     }
   }
@@ -360,20 +529,35 @@ function App() {
 
   const restartFlightCheck = async () => {
     if (!bridge?.restartFlightCheck || flightPhase !== 'active') return
+    if (!flightLiveGatesReady(status, flightVariant)) return
     const request = ++flightRequest.current
+    flightRun.current = { request, underTest: true, invalidated: true, variant: flightVariant }
+    setFlightInvalidatedRun(request)
+    setFlightSignals([])
+    setFlightEvents([])
+    setFlightStartedAt(null)
+    setFlightExport(null)
+    flightExpected.current = []
     setFlightPhase('arming')
     try {
-      const acknowledgement = await bridge.restartFlightCheck()
+      const acknowledgement = await bridge.restartFlightCheck(flightVariant)
       if (request !== flightRequest.current) return
       if (!acknowledgement.acknowledged || !acknowledgement.active || !acknowledgement.startedAt) {
         setFlightPhase('error')
         return
       }
-      setFlightSignals([])
-      setFlightEvents([])
       setFlightStartedAt(acknowledgement.startedAt)
-      setFlightExport(null)
       flightExpected.current = stepsForVariant(flightVariant)[0].signals
+      const confirmedStatus = await refreshStatus()
+      if (request !== flightRequest.current) return
+      if (!confirmedStatus || !flightLiveGatesReady(confirmedStatus, flightVariant)) {
+        flightRun.current = { request, underTest: true, invalidated: true, variant: flightVariant }
+        setFlightInvalidatedRun(request)
+        setFlightPhase('error')
+        return
+      }
+      flightRun.current = { request, underTest: true, invalidated: false, variant: flightVariant }
+      setFlightInvalidatedRun(null)
       setFlightPhase('active')
     } catch {
       if (request === flightRequest.current) setFlightPhase('error')
@@ -381,7 +565,9 @@ function App() {
   }
 
   const exportFlightReceipt = async () => {
-    if (!bridge || !flightStartedAt) return
+    if (!bridge || !flightStartedAt || flightPhase !== 'active') return
+    if (flightRun.current.invalidated || flightInvalidatedRun === flightRequest.current || !flightLiveGatesReady(status, flightVariant)) return
+    const request = flightRequest.current
     const selectedSteps = stepsForVariant(flightVariant)
     const acceptance = flightAcceptance(flightVariant, flightEvents, status.boardConnected, status.shortcutCount, hardware.bindableSignals)
     const missing = selectedSteps.filter((step) => !flightStepComplete(step, flightEvents)).flatMap((step) => step.signals)
@@ -405,7 +591,11 @@ function App() {
       })),
       events: flightEvents,
     })
-    if (response) setFlightExport(response)
+    if (response
+      && request === flightRequest.current
+      && flightRun.current.request === request
+      && flightRun.current.underTest
+      && !flightRun.current.invalidated) setFlightExport(response)
   }
 
   useEffect(() => cancelHold, [activeControl, cancelHold, profileId, view])
@@ -440,7 +630,7 @@ function App() {
           <button type="button" role="tab" aria-selected={view === 'setup'} className={view === 'setup' ? 'active' : ''} onClick={() => void changeView('setup')}>Setup</button>
         </div>
         <div className="system-strip" aria-label="System status">
-          <StatusPill label={status.boardConnected ? 'USB linked' : 'USB absent'} tone={status.boardConnected ? 'ready' : 'off'} icon={<Keyboard size={14} />} />
+          <StatusPill label={status.boardConnected ? 'USB present' : 'USB absent'} tone={status.boardConnected ? 'ready' : 'off'} icon={<Keyboard size={14} />} />
           <StatusPill
             label={nativePill.label}
             tone={nativePill.tone}
@@ -477,9 +667,10 @@ function App() {
         <BoardRouteRail route={status.boardRoute} saving={routeSaving} error={routeError} onChange={(route) => void declareBoardRoute(route)} />
 
         <div className="readiness-ribbon">
-          <span className={status.boardConnected ? 'check ready' : 'check'}><Check size={12} /> USB device</span>
+          <span className={status.boardConnected ? 'check ready' : 'check'}><Check size={12} /> USB presence</span>
           <span className={status.shortcutCount === hardware.bindableSignals ? 'check ready' : 'check'}><Check size={12} /> {status.shortcutCount}/{hardware.bindableSignals} desktop endpoints registered</span>
-          <span className={status.inputInstalled ? 'check ready' : 'check'}><Check size={12} /> Work Louder Input</span>
+          <span className={inputInstallationReady ? 'check ready' : 'check warn'}><Check size={12} /> {inputInstallationReady ? `Input ${inputInstallation.version ?? ''} verified`.replace('  ', ' ') : inputInstallationDescription.state}</span>
+          <span className={receiverExclusive ? 'check ready' : 'check warn'}><ShieldCheck size={12} /> {receiverExclusive ? 'One shortcut receiver' : receiverRuntime.status === 'unavailable' ? 'Receiver ownership unavailable' : `${receiverRuntime.instanceCount} receivers · ownership disabled`}</span>
           {status.workspaceSnapshot?.isGit && <span className={!status.workspaceSnapshot.statusKnown || status.workspaceSnapshot.dirtyFiles ? 'check warn' : 'check ready'}><GitBranch size={12} /> {status.workspaceSnapshot.branch} · {!status.workspaceSnapshot.statusKnown ? 'status unknown' : status.workspaceSnapshot.dirtyFiles ? `${status.workspaceSnapshot.dirtyFiles} changed` : 'clean'}</span>}
           <span className="check"><Keyboard size={12} /> {status.boardRoute === 'codex_native' ? 'Native profile: operator verification required' : status.boardRoute === 'ashlr_layer' ? 'Ashlr layer: physical check required' : 'Physical route: not selected'}</span>
           <button type="button" onClick={() => changeView('setup')}><span className="attention-dot" /> Input Monitoring needs human verification <ChevronRight size={13} /></button>
@@ -510,10 +701,10 @@ function App() {
                   <span className="cable-arrow">↑</span>
                   <span className="case-screw tl" /><span className="case-screw tr" /><span className="case-screw bl" /><span className="case-screw br" />
                   <div className="hardware-grid">
-                    <Dial active={activeControl} onSelect={selectControl} showIds={showIds} />
+                    <Joystick active={activeControl} onSelect={selectControl} showIds={showIds} />
                     <BoardKey control="agent1" action={actions[profile.mapping.agent1]} agent={mission.agents[0]} active={activeControl === 'agent1'} onSelect={selectControl} kind="agent" showIds={showIds} />
                     <BoardKey control="agent2" action={actions[profile.mapping.agent2]} agent={mission.agents[1]} active={activeControl === 'agent2'} onSelect={selectControl} kind="agent" showIds={showIds} />
-                    <Joystick active={activeControl} onSelect={selectControl} showIds={showIds} />
+                    <Dial active={activeControl} onSelect={selectControl} showIds={showIds} />
                     {(['agent3', 'agent4', 'agent5', 'agent6'] as ControlId[]).map((control, index) => <BoardKey key={control} control={control} action={actions[profile.mapping[control]]} agent={mission.agents[index + 2]} active={activeControl === control} onSelect={selectControl} kind="agent" showIds={showIds} />)}
                     <BoardKey control="cmd1" action={actions[profile.mapping.cmd1]} active={activeControl === 'cmd1'} onSelect={selectControl} kind="action" factoryIcon={<Zap />} showIds={showIds} />
                     <BoardKey control="cmd2" action={actions[profile.mapping.cmd2]} active={activeControl === 'cmd2'} onSelect={selectControl} kind="action" factoryIcon={<CircleCheck />} showIds={showIds} />
@@ -541,10 +732,11 @@ function App() {
         </div>
       </> : view === 'flight' ? <FlightCheckView
         active={flightActive} events={flightEvents} startedAt={flightStartedAt}
-        exportPath={flightExport} status={status} variant={flightVariant} phase={flightPhase} onStart={startFlightCheck}
+        exportPath={flightExport} status={status} variant={flightVariant} phase={flightPhase}
+        liveGateInvalidated={flightInvalidatedRun === flightRequest.current} onStart={startFlightCheck}
         onStop={() => void stopFlightCheck()} onRestart={() => void restartFlightCheck()} onExport={exportFlightReceipt}
         onSetup={() => void changeView('setup')} onOperate={() => void changeView('operate')}
-      /> : <SetupView status={status} routeSaving={routeSaving} routeError={routeError} onRouteChange={(route) => void declareBoardRoute(route)} onOperate={() => changeView('operate')} onFlightCheck={() => void changeView('flight')} />}
+      /> : <SetupView status={status} recoveryGuide={recoveryGuide} onRefreshRecoveryGuide={refreshRecoveryGuide} routeSaving={routeSaving} routeError={routeError} onRouteChange={(route) => void declareBoardRoute(route)} onOperate={() => changeView('operate')} onFlightCheck={() => void changeView('flight')} />}
 
       <footer className="footer-bar">
         <div><span className={status.boardConnected ? 'footer-led ready' : 'footer-led'} /> {hardware.mechanicalSwitches} SWITCHES · 1 TOUCH · 1 DIAL · 1 PLANAR STICK</div>
@@ -640,7 +832,7 @@ function Joystick({ active, onSelect, showIds }: { active: ControlId; onSelect: 
 
 function TouchSensor({ showIds }: { showIds: boolean }) {
   return <div className="touch-module" aria-label="Firmware-owned Bluetooth profile touch sensor">
-    <span className="profile-leds"><i /><i /><i /></span><span className="touch-pad" /><small>{showIds ? 'FW PROFILE' : 'BT HOST'}</small>
+    <span className="profile-leds"><i /><i /><i /></span><span className="touch-pad" /><small>{showIds ? 'FW PROFILE' : 'LAYER / LINK'}</small>
   </div>
 }
 
@@ -726,39 +918,63 @@ function ActionConsole({ activeControl, action, result, approval, isRunning, hol
   </aside>
 }
 
-function FlightCheckView({ active, events, startedAt, exportPath, status, variant, phase, onStart, onStop, onRestart, onExport, onSetup, onOperate }: {
+function FlightCheckView({ active, events, startedAt, exportPath, status, variant, phase, liveGateInvalidated, onStart, onStop, onRestart, onExport, onSetup, onOperate }: {
   active: boolean; events: FlightEvent[]; startedAt: string | null; exportPath: string | null; status: SystemStatus; variant: 'daily' | 'diagnostic'
   phase: 'inactive' | 'arming' | 'active' | 'disarming' | 'error'
+  liveGateInvalidated: boolean
   onStart: (variant: 'daily' | 'diagnostic') => void; onStop: () => void; onRestart: () => void; onExport: () => void; onSetup: () => void; onOperate: () => void
 }) {
+  const [clock, setClock] = useState(0)
+  useEffect(() => {
+    if (!active || events.length > 0) return
+    const timer = window.setInterval(() => setClock(Date.now()), 1_000)
+    return () => window.clearInterval(timer)
+  }, [active, events.length, startedAt])
   const selectedSteps = stepsForVariant(variant)
   const expectedSignals = variant === 'diagnostic' ? 20 : 19
   const completedGestures = selectedSteps.filter((step) => flightStepComplete(step, events)).length
   const completedSignals = selectedSteps.filter((step) => flightStepComplete(step, events)).reduce((count, step) => count + step.signals.length, 0)
   const acceptance = flightAcceptance(variant, events, status.boardConnected, status.shortcutCount, hardware.bindableSignals)
-  const complete = acceptance.passed
   const routesComplete = acceptance.routesComplete
   const nextStep = selectedSteps.find((step) => !flightStepComplete(step, events))
   const progress = Math.round((completedSignals / expectedSignals) * 100)
   const problems = events.filter((event) => !event.matched)
   const nativeRoute = status.boardRoute === 'codex_native'
-  const preflightReady = !nativeRoute && status.boardConnected && status.shortcutCount === hardware.bindableSignals
-  const runCannotPass = problems.length > 0
+  const currentInputProfile = status.inputProfile ?? initialStatus.inputProfile
+  const inputInstallation = status.inputInstallation ?? initialStatus.inputInstallation
+  const receiverRuntime = status.receiverRuntime ?? initialStatus.receiverRuntime
+  const inputInstallationDescription = describeInputInstallation(inputInstallation)
+  const inputInstallationReady = verifiedInputInstallation(inputInstallation)
+  const receiverExclusive = exclusiveReceiverRuntime(receiverRuntime)
+  const hardwareReady = status.boardRoute === 'ashlr_layer' && status.boardConnected && inputInstallationReady && receiverExclusive && status.shortcutCount === hardware.bindableSignals
+  const dailyPreflightReady = hardwareReady && correctedInputProfileObservedForVariant(currentInputProfile, 'daily')
+  const diagnosticPreflightReady = hardwareReady && correctedInputProfileObservedForVariant(currentInputProfile, 'diagnostic')
+  const preflightReady = dailyPreflightReady || diagnosticPreflightReady
+  const selectedVariantReady = variant === 'daily' ? dailyPreflightReady : diagnosticPreflightReady
+  const runUnderTest = phase !== 'inactive' || startedAt !== null || events.length > 0
+  const currentGateFailure = runUnderTest && !selectedVariantReady
+  const runInvalidated = liveGateInvalidated || currentGateFailure
+  const complete = phase === 'active' && acceptance.passed && selectedVariantReady && !runInvalidated
+  const profileBlocked = !correctedInputProfileObservedForVariant(currentInputProfile, variant)
+  const runCannotPass = problems.length > 0 || runInvalidated
+  const concurrentCodexTraffic = status.inputRuntime?.codexProtocolTraffic?.status === 'recurring_unresolved_response'
+    && status.inputRuntime.codexProtocolTraffic.fresh
   const phaseLabel = active ? 'ACTIONS SUPPRESSED' : phase === 'arming' ? 'ARMING INTERLOCK' : phase === 'disarming' ? 'RELEASING INTERLOCK' : phase === 'error' ? 'INTERLOCK UNVERIFIED' : 'ACTIONS ENABLED'
   const blockedCompletion = routesComplete && !complete
+  const showNoSignalRecovery = noSignalRecoveryNeeded(active, startedAt, events, clock)
   return <section className="flight-view">
     <div className="flight-hero">
-      <div><span className="eyebrow">HARDWARE ACCEPTANCE / {phaseLabel}</span><h2>{nativeRoute ? 'Flight Check belongs to Ashlr Layer.' : complete ? 'Every signal is accounted for.' : blockedCompletion ? 'Acceptance is blocked by evidence.' : active ? 'Prove the physical path.' : phase === 'arming' ? 'Establishing the safety barrier…' : 'Run a safe Flight Check.'}</h2><p>{nativeRoute ? 'This receipt validates Work Louder Input shortcuts, not Codex’s native keys or lighting. Choose Ashlr Layer to run it; verify Codex Native in Codex Settings → Creator Micro.' : 'Press the real board controls only after the app confirms Actions Suppressed. The board twin and mouse clicks do not count; ordinary keyboard use can generate the same shortcuts, so keep your hands on the board during acceptance.'}</p></div>
-      <div className={complete ? 'flight-score complete' : 'flight-score'}><strong>{completedSignals}<small>/{expectedSignals}</small></strong><span>{completedGestures}/19 gestures</span><i style={{ '--flight-progress': `${progress}%` } as React.CSSProperties} /></div>
+      <div><span className="eyebrow">HARDWARE ACCEPTANCE / {phaseLabel}</span><h2>{nativeRoute ? 'Flight Check belongs to Ashlr Layer.' : complete ? 'Every signal is accounted for.' : blockedCompletion ? 'Acceptance is blocked by evidence.' : active ? 'Prove the physical path.' : phase === 'arming' ? 'Establishing the safety barrier…' : 'Run a safe Flight Check.'}</h2><p>{nativeRoute ? 'This receipt validates Work Louder Input shortcuts, not Codex’s native keys or lighting. Quit Work Louder Input and quit this Agent Board app. Open Codex alone, then verify Settings → Creator Micro.' : 'Press the real board controls only after the app confirms Actions Suppressed. The board twin and mouse clicks do not count; ordinary keyboard use can generate the same shortcuts, so keep your hands on the board during acceptance.'}</p></div>
+      <div className={complete ? 'flight-score complete' : 'flight-score'} role="progressbar" aria-label="Physical Flight Check progress" aria-valuemin={0} aria-valuemax={expectedSignals} aria-valuenow={completedSignals} aria-valuetext={`${completedSignals} of ${expectedSignals} routed signals; ${completedGestures} of 19 gestures complete`}><strong>{completedSignals}<small>/{expectedSignals}</small></strong><span>{completedGestures}/19 gestures</span><i aria-hidden="true" style={{ '--flight-progress': `${progress}%` } as React.CSSProperties} /></div>
     </div>
 
     <div className="flight-layout">
       <div className="flight-sequence">
         <div className="flight-prompt">
           <div className={complete ? 'prompt-icon complete' : active ? 'prompt-icon live' : 'prompt-icon'}>{complete ? <Check /> : active ? <Activity /> : <Keyboard />}</div>
-          <div><span className="eyebrow">{complete ? 'ACCEPTANCE PASSED' : runCannotPass ? 'THIS RUN CANNOT PASS' : blockedCompletion ? 'ACCEPTANCE FAILED' : active ? 'NEXT PHYSICAL GESTURE' : phase === 'arming' ? 'WAIT FOR INTERLOCK' : 'READY WHEN YOU ARE'}</span><h3>{complete ? `${expectedSignals} routed signals received` : runCannotPass ? 'A signal arrived out of order' : blockedCompletion ? 'Resolve the recorded blockers and restart' : active && nextStep ? nextStep.label : preflightReady ? 'Start a clean receipt' : 'Complete preflight first'}</h3><p>{complete ? (variant === 'diagnostic' ? 'The disposable diagnostic path reported ACT10 and ACT11 inside one paired Mic gesture.' : 'The daily path reported one ACT10 Mic event while ACT11 remained silent.') : runCannotPass ? `${problems.length} misroute recorded. Restart to clear this failed evidence; continuing cannot produce a passing receipt.` : blockedCompletion ? `${problems.length} misroutes; USB ${status.boardConnected ? 'linked' : 'absent'}; shortcuts ${status.shortcutCount}/${hardware.bindableSignals}.` : active && nextStep ? nextStep.instruction : phase === 'arming' ? 'Do not touch the board until the main process acknowledges action suppression.' : preflightReady ? 'This clears prior observations and temporarily turns every shortcut into a no-op test signal.' : `USB must be linked and all ${hardware.bindableSignals} desktop endpoints must be registered before physical acceptance starts.`}</p></div>
-          {phase === 'inactive' && !complete && <div className="flight-start-actions"><button type="button" disabled={!preflightReady} onClick={() => onStart('daily')}><Play size={15} /> Daily profile</button><button type="button" disabled={!preflightReady} onClick={() => onStart('diagnostic')}>20-signal diagnostic</button></div>}
-          {active && runCannotPass && <button type="button" className="stop-flight" onClick={onRestart}><RotateCcw size={15} /> End and restart</button>}
+          <div><span className="eyebrow">{complete ? 'ACCEPTANCE PASSED' : runCannotPass ? 'THIS RUN CANNOT PASS' : blockedCompletion ? 'ACCEPTANCE FAILED' : active ? 'NEXT PHYSICAL GESTURE' : phase === 'arming' ? 'WAIT FOR INTERLOCK' : 'READY WHEN YOU ARE'}</span><h3>{complete ? `${expectedSignals} routed signals received` : runInvalidated ? 'A live acceptance gate changed' : runCannotPass ? 'A signal arrived out of order' : blockedCompletion ? 'Resolve the recorded blockers and restart' : active && nextStep ? nextStep.label : preflightReady ? 'Start a clean receipt' : 'Complete preflight first'}</h3><p>{complete ? (variant === 'diagnostic' ? 'The disposable diagnostic path reported ACT10 and ACT11 inside one paired Mic gesture.' : 'The daily path reported one ACT10 Mic event while ACT11 remained silent.') : runInvalidated ? 'USB, Input trust, receiver ownership, the declared route, the exact selected profile, or desktop endpoint readiness changed during this run. Recover every gate, then end and restart; this run cannot become passing.' : runCannotPass ? `${problems.length} misroute recorded. Restart to clear this failed evidence; continuing cannot produce a passing receipt.` : blockedCompletion ? `${problems.length} misroutes; USB ${status.boardConnected ? 'present' : 'absent'}; shortcuts ${status.shortcutCount}/${hardware.bindableSignals}.` : active && nextStep ? nextStep.instruction : phase === 'arming' ? 'Do not touch the board until the main process acknowledges action suppression.' : preflightReady ? 'This clears prior observations and temporarily turns every shortcut into a no-op test signal.' : receiverRuntime.status === 'unavailable' ? 'Agent Board could not verify shortcut receiver ownership, so Flight Check is disabled. Refresh Setup; do not assume this copy owns the shortcuts.' : !receiverExclusive ? 'Multiple Agent Board receivers are running, so shortcut ownership is disabled. Fully quit every copy manually, then reopen one exact build.' : !inputInstallationReady ? inputInstallationDescription.guidance : profileBlocked ? status.inputProfile?.encoderDirection === 'reversed' ? 'The active Input receipt has clockwise and counterclockwise reversed. Open Setup and create the corrected profile before Flight Check.' : 'Flight Check requires Ashlr Agent Board Corrected, Ashlr Daily, and a corrected encoder receipt. Open Setup to finish profile recovery.' : `USB must be present and all ${hardware.bindableSignals} desktop endpoints must be registered before physical acceptance starts.`}</p></div>
+          {phase === 'inactive' && !complete && <div className="flight-start-actions"><button type="button" disabled={!dailyPreflightReady} onClick={() => onStart('daily')}><Play size={15} /> Daily profile</button><button type="button" disabled={!diagnosticPreflightReady} onClick={() => onStart('diagnostic')}>20-signal diagnostic</button></div>}
+          {active && runCannotPass && <div className="flight-start-actions"><button type="button" className="stop-flight" disabled={!selectedVariantReady} onClick={onRestart}><RotateCcw size={15} /> {selectedVariantReady ? 'End and restart' : 'Recover gates to restart'}</button><button type="button" className="stop-flight" onClick={onStop}><CircleStop size={15} /> End invalidated check</button></div>}
           {active && !complete && !runCannotPass && <button type="button" className="stop-flight" onClick={onStop}><CircleStop size={15} /> End check</button>}
           {phase === 'error' && <button type="button" className="stop-flight" onClick={onStop}><CircleStop size={15} /> Restore safe state</button>}
           {complete && <button type="button" onClick={onExport}><Download size={15} /> Export receipt</button>}
@@ -768,9 +984,10 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
           {selectedSteps.map((step, index) => {
             const stepComplete = flightStepComplete(step, events)
             const current = active && nextStep === step
-            return <article key={step.label} className={stepComplete ? 'signal-card complete' : current ? 'signal-card current' : 'signal-card'}>
+            const stepState = stepComplete ? 'Complete' : current ? 'Current gesture' : 'Not tested'
+            return <article key={step.label} className={stepComplete ? 'signal-card complete' : current ? 'signal-card current' : 'signal-card'} aria-label={`${step.label}: ${stepState}`}>
               <span>{String(index + 1).padStart(2, '0')}</span><div><strong>{step.label}</strong><small>{step.signals.map((signal) => hardwareIds[signal]).join(' + ')}{step.requiredCount ? ` · ×${step.requiredCount}` : ''}</small></div>
-              <i>{stepComplete ? <Check size={13} /> : current ? <Activity size={13} /> : null}</i>
+              <i aria-hidden="true">{stepComplete ? <Check size={13} /> : current ? <Activity size={13} /> : null}</i><span className="sr-only">{stepState}</span>
             </article>
           })}
         </div>
@@ -779,17 +996,26 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
       <aside className="flight-evidence">
         <span className="eyebrow">LIVE RECEIPT</span><h3>{status.boardConnected ? 'Creator Micro 2 detected' : 'USB device not detected'}</h3>
         <dl>
-          <div><dt>USB</dt><dd className={status.boardConnected ? 'ready' : ''}>{status.boardConnected ? 'Linked' : 'Absent'}</dd></div>
+          <div><dt>USB</dt><dd className={status.boardConnected ? 'ready' : ''}>{status.boardConnected ? 'Present' : 'Absent'}</dd></div>
           <div><dt>Shortcuts</dt><dd className={status.shortcutCount === hardware.bindableSignals ? 'ready' : ''}>{status.shortcutCount}/20</dd></div>
+          <div><dt>Receiver</dt><dd className={receiverExclusive ? 'ready' : 'problem'}>{receiverExclusive ? 'Exclusive' : receiverRuntime.status === 'unavailable' ? 'Unavailable' : 'Contended'}</dd></div>
           <div><dt>Started</dt><dd>{startedAt ? formatClock(new Date(startedAt)) : 'Not started'}</dd></div>
           <div><dt>Actions</dt><dd className={active ? 'safe' : phase === 'error' ? 'problem' : ''}>{active ? 'Suppressed' : phase === 'arming' ? 'Arming' : phase === 'disarming' ? 'Releasing' : phase === 'error' ? 'Unverified' : 'Enabled'}</dd></div>
+          <div><dt>Raw receipts</dt><dd className={events.length ? 'ready' : ''}>{events.length}</dd></div>
           <div><dt>Misroutes</dt><dd className={problems.length ? 'problem' : 'ready'}>{problems.length}</dd></div>
         </dl>
         <div className="event-stream">
           <span className="eyebrow">LATEST RAW SIGNALS</span>
-          {events.length ? [...events].reverse().slice(0, 8).map((event, index) => <div className={event.matched ? '' : 'misroute'} key={`${event.receivedAt}-${index}`}><code>{hardwareIds[event.signal]}</code><span>{event.matched ? controls.hotkeys[event.signal] : `Expected ${event.expectedSignals.map((signal) => hardwareIds[signal]).join(' + ')}`}</span><time>{formatClock(new Date(event.receivedAt))}</time></div>) : <p>No shortcut signals received yet.</p>}
+          {events.length ? [...events].reverse().slice(0, 8).map((event, index) => <div className={event.matched ? '' : 'misroute'} key={`${event.receivedAt}-${index}`}><code>{hardwareIds[event.signal]}</code><span>{event.matched ? controls.hotkeys[event.signal] : `Expected ${event.expectedSignals.map((signal) => hardwareIds[signal]).join(' + ')}`}</span><time>{formatClock(new Date(event.receivedAt))}</time></div>) : <p>{active ? '0 raw desktop receipts since Flight Check started.' : 'No shortcut signals received yet.'}</p>}
         </div>
-        {exportPath && <div className="exported-receipt"><Check size={14} /><span>Receipt saved</span><code title={exportPath}>{exportPath}</code></div>}
+        {showNoSignalRecovery && <div className="no-signal-recovery" role="status">
+          <strong>No physical shortcut arrived</strong>
+          <p>{concurrentCodexTraffic
+            ? <>Input is currently receiving recurring Codex-protocol responses, so this check is not an exclusive Input-only window. This proves co-presence, not ownership or cause. End the check, then follow the recovery checklist; no application was automatically quit.</>
+            : <>Use the top-right rotary dial—not the bottom-left layer and connection selector. End this check, quit competing board controllers, then open Work Louder Input alone. Use <b>Set as current profile</b> for <b>Ashlr Agent Board Corrected</b>, verify <b>Ashlr Daily</b>, fully relaunch Input, and run a fresh check. Do not jump to firmware from one zero-signal receipt.</>}</p>
+          <button type="button" onClick={onSetup}>Open recovery checklist</button>
+        </div>}
+        {exportPath && !runInvalidated && <div className="exported-receipt"><Check size={14} /><span>Receipt saved</span><code title={exportPath}>{exportPath}</code></div>}
         {!status.boardConnected && <button type="button" className="flight-secondary" onClick={onSetup}>Open connection setup</button>}
         {complete && <button type="button" className="flight-secondary" onClick={onOperate}>Start operating</button>}
         <p className="flight-caveat"><ShieldCheck size={13} /> {variant === 'diagnostic' ? 'Diagnostic mode requires a disposable layer with ACT10 and ACT11 mapped separately; deactivate it afterward.' : 'Daily mode expects ACT10 once and ACT11 silenced.'} A passing receipt does not validate native Codex RGB or authorize consequential actions.</p>
@@ -798,33 +1024,164 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
   </section>
 }
 
-function SetupView({ status, routeSaving, routeError, onRouteChange, onOperate, onFlightCheck }: { status: SystemStatus; routeSaving: boolean; routeError: string | null; onRouteChange: (route: BoardRoute) => void; onOperate: () => void; onFlightCheck: () => void }) {
+function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, routeSaving, routeError, onRouteChange, onOperate, onFlightCheck }: { status: SystemStatus; recoveryGuide: AgentBoardRecoveryGuide; onRefreshRecoveryGuide: () => Promise<AgentBoardRecoveryGuide | null>; routeSaving: boolean; routeError: string | null; onRouteChange: (route: BoardRoute) => void; onOperate: () => void; onFlightCheck: () => void }) {
+  const [repairBusy, setRepairBusy] = useState(false)
+  const [repairResult, setRepairResult] = useState<ProfileRepairResult | null>(null)
+  const [recoveryAction, setRecoveryAction] = useState<AgentBoardRecoveryActionResult | null>(null)
+  const [dismissConfirm, setDismissConfirm] = useState(false)
+  const recoveryFocus = useRef<HTMLElement | null>(null)
   const nativeCodexMicro = status.nativeCodexMicro ?? initialStatus.nativeCodexMicro
-  const steps = [
+  const inputProfile = status.inputProfile ?? initialStatus.inputProfile
+  const inputRuntime = status.inputRuntime ?? initialStatus.inputRuntime
+  const inputInstallation = status.inputInstallation ?? initialStatus.inputInstallation
+  const inputInstallationDescription = describeInputInstallation(inputInstallation)
+  const inputInstallationReady = verifiedInputInstallation(inputInstallation)
+  const receiverRuntime = status.receiverRuntime ?? initialStatus.receiverRuntime
+  const receiverExclusive = exclusiveReceiverRuntime(receiverRuntime)
+  const recentRuntimeEvidence = inputRuntime.status === 'unresolved_profile_layer' && inputRuntime.fresh
+  const recentCodexTraffic = inputRuntime.codexProtocolTraffic?.status === 'recurring_unresolved_response'
+    && inputRuntime.codexProtocolTraffic.fresh
+  const observedInputProfile = inputProfile.activeProfile && inputProfile.activeLayer
+    ? `${inputProfile.activeProfile} · ${inputProfile.activeLayer}`
+    : inputProfile.activeProfile
+  const profileState = inputProfile.encoderDirection === 'correct'
+    ? `${observedInputProfile ?? 'Input profile'} · cached mapping observed`
+    : inputProfile.encoderDirection === 'reversed'
+      ? `${observedInputProfile ?? 'Input profile'} · dial directions reversed`
+      : observedInputProfile
+        ? `${observedInputProfile} · dial mapping unverified`
+        : 'Current keyboard profile requires physical verification'
+  const correctedProfileObserved = correctedInputProfileObserved(inputProfile)
+  const inputRecoveryState = status.boardRoute !== 'ashlr_layer'
+    ? 'none'
+    : correctedProfileObserved
+      ? recentRuntimeEvidence ? 'runtime_log_advisory' : 'cache_observed'
+      : 'profile_repair'
+  const steps: Array<{ number: string; title: string; detail: string; state: string; ready: boolean; observed?: boolean }> = [
     { number: '01', title: 'Connect the board', detail: 'USB-C is the best commissioning path. Bluetooth keyboard and trackpad can remain connected.', state: status.boardConnected ? 'Detected as Creator Micro 2' : 'Waiting for USB device', ready: status.boardConnected },
-    { number: '02', title: 'Declare the expected board route', detail: 'Codex Native and the Ashlr shortcut layer are separate operating contracts. The declaration never changes the device.', state: status.boardRoute === 'codex_native' ? 'Codex Native declared · not detected' : status.boardRoute === 'ashlr_layer' ? 'Ashlr Layer declared · not detected' : 'No route selected', ready: status.boardRoute !== 'unknown' },
-    { number: '03', title: 'Install Work Louder Input', detail: 'The signed vendor app owns profiles, layers, shortcuts, firmware updates, and the radial menu.', state: status.inputInstalled ? 'Input.app installed' : 'Input.app not found', ready: status.inputInstalled },
-    { number: '04', title: 'Verify Input Monitoring', detail: 'In System Settings → Privacy & Security → Input Monitoring, allow the app that should receive board events. Only you can grant this.', state: 'Human verification required', ready: false },
-    { number: '05', title: 'Verify the declared physical route', detail: status.boardRoute === 'codex_native' ? 'Codex Native requires its own connection and operator verification; Agent Board does not infer native RGB or thread ownership.' : 'Map 19 daily gestures in Input. The desktop can register endpoints, but only a physical Flight Check verifies the active board layer.', state: status.boardRoute === 'codex_native' ? (nativeCodexMicro.status === 'firmware_rpc_missing' ? `Qualification required: v.oai.rgbcfg returned RPC 404${nativeCodexMicro.fresh ? ' recently' : ' in historical evidence'}` : nativeCodexMicro.status === 'connected' && nativeCodexMicro.fresh ? 'Recent native connection evidence found' : 'Native board state unverified') : `${status.shortcutCount}/${hardware.bindableSignals} desktop endpoints registered · physical layer unverified`, ready: status.boardRoute === 'codex_native' && nativeCodexMicro.status === 'connected' && nativeCodexMicro.fresh === true },
+    { number: '02', title: 'Declare the expected board route', detail: 'Codex Native and the Ashlr shortcut layer are separate operating contracts. The declaration never changes the device.', state: status.boardRoute === 'codex_native' ? 'Codex Native declared · connection unverified' : status.boardRoute === 'ashlr_layer' ? 'Ashlr Layer declared · physical acceptance pending' : 'No route selected', ready: status.boardRoute !== 'unknown' },
+    { number: '03', title: 'Verify Work Louder Input', detail: inputInstallationDescription.guidance, state: inputInstallationDescription.state, ready: inputInstallationReady },
+    { number: '04', title: 'Prove one shortcut receiver', detail: 'Only one exact Agent Board build may own the 20 global shortcuts. The app detects conflicts but never kills another process.', state: receiverExclusive ? 'One receiver · shortcut ownership available' : receiverRuntime?.status === 'unavailable' ? 'Receiver ownership unavailable · shortcuts disabled' : `${receiverRuntime?.instanceCount ?? 0} receivers / ${receiverRuntime?.distinctBuildCount ?? 0} builds · shortcuts disabled`, ready: receiverExclusive },
+    { number: '05', title: 'Verify Input Monitoring', detail: 'In System Settings → Privacy & Security → Input Monitoring, allow the app that should receive board events. Only you can grant this.', state: 'Human verification required', ready: false },
+    { number: '06', title: "Inspect Input's cached profile", detail: status.boardRoute === 'codex_native' ? 'Codex Native requires its own connection and operator verification; Agent Board does not infer native RGB or thread ownership.' : !inputInstallationReady ? 'Profile repair, import, activation, and synchronization stay paused until the installed Input copy passes publisher, signature, and Gatekeeper verification.' : inputProfile.encoderDirection === 'reversed' ? 'The read-only Input cache shows the known clockwise/counterclockwise inversion. Import and activate the uniquely named corrected profile through Input before restarting Flight Check.' : correctedProfileObserved ? 'Input’s header is only the profile being edited. The cache-current profile and the profile physically emitting are separate states; a fresh physical Flight Check may supersede older log evidence.' : 'In Input, choose Ashlr Agent Board Corrected, use Set as current profile, and verify Ashlr Daily. A correct encoder-only receipt under another profile name is not enough; cache observation does not prove the board write or physical route.', state: status.boardRoute === 'codex_native' ? (nativeCodexMicro.status === 'firmware_rpc_missing' ? `Qualification required: v.oai.rgbcfg returned RPC 404${nativeCodexMicro.fresh ? ' recently' : ' in historical evidence'}` : nativeCodexMicro.status === 'connected' && nativeCodexMicro.fresh ? 'Recent native connection evidence found' : 'Native board state unverified') : !inputInstallationReady ? 'Blocked by Input integrity' : correctedProfileObserved ? 'Cache observed · Ashlr Agent Board Corrected · Ashlr Daily · device sync unproven' : profileState, ready: false, observed: status.boardRoute === 'ashlr_layer' && inputInstallationReady && correctedProfileObserved },
+    { number: '07', title: 'Verify the declared physical route', detail: status.boardRoute === 'codex_native' ? 'Quit Work Louder Input and quit this Agent Board app. Open Codex alone, then verify Settings → Creator Micro.' : 'Run all 19 daily gestures. The first gesture uses the top-right rotary dial; the bottom-left circle selects layers and the wired/Bluetooth connection.', state: status.boardRoute === 'codex_native' ? 'Manual Codex verification required' : `${status.shortcutCount}/${hardware.bindableSignals} desktop endpoints registered · physical layer unverified`, ready: false },
   ]
+  const repairNeeded = inputInstallationReady && inputRecoveryState === 'profile_repair'
+  const handoffPersistenceFailed = repairResult?.status === 'saved' && repairResult.handoffPersisted === false
+  const recoveryHandoff = handoffPersistenceFailed ? null : recoveryGuide.handoff
+  const recoverySteps = handoffPersistenceFailed ? repairResult.recoverySteps ?? [] : recoveryGuide.steps
+  const artifactAvailable = !handoffPersistenceFailed && recoveryGuide.artifact?.available === true
+  const showRecoveryGuide = inputInstallationReady && (status.boardRoute === 'ashlr_layer' || Boolean(recoveryHandoff))
+  useEffect(() => {
+    if (recoveryHandoff) recoveryFocus.current?.focus()
+  }, [recoveryHandoff])
+  const createRepairProfile = async () => {
+    if (repairBusy) return
+    if (!window.agentBoard?.createCorrectedInputProfile) {
+      setRepairResult({ status: 'failed', message: 'This build does not include the offline profile repair flow. No setting changed.' })
+      return
+    }
+    setRepairBusy(true)
+    setRepairResult(null)
+    setRecoveryAction(null)
+    try {
+      const nextResult = await window.agentBoard.createCorrectedInputProfile()
+      setRepairResult(nextResult)
+      if (nextResult.status === 'saved' && nextResult.handoffPersisted !== false) await onRefreshRecoveryGuide()
+    } catch {
+      setRepairResult({ status: 'failed', message: 'Profile repair could not start. No file, Input setting, or device setting changed.' })
+    } finally {
+      setRepairBusy(false)
+    }
+  }
+  const revealRecoveryArtifact = async () => {
+    const action = window.agentBoard?.revealRecoveryArtifact
+    if (!action) return setRecoveryAction({ ok: false, message: 'This build cannot reveal the saved artifact. Use the full path shown above.' })
+    try { setRecoveryAction(await action()) } catch { setRecoveryAction({ ok: false, message: 'Finder could not be opened. Use the full artifact path shown above.' }) }
+  }
+  const copyRecoveryChecklist = async () => {
+    const action = window.agentBoard?.copyRecoveryChecklist
+    if (!action) return setRecoveryAction({ ok: false, message: 'This build cannot copy the checklist. Keep this recovery card open.' })
+    try { setRecoveryAction(await action()) } catch { setRecoveryAction({ ok: false, message: 'The checklist could not be copied. Keep this recovery card open.' }) }
+  }
+  const openInputMonitoringSettings = async () => {
+    const action = window.agentBoard?.openInputMonitoringSettings
+    if (!action) return setRecoveryAction({ ok: false, message: 'Open System Settings → Privacy & Security → Input Monitoring manually.' })
+    try { setRecoveryAction(await action()) } catch { setRecoveryAction({ ok: false, message: 'Open System Settings → Privacy & Security → Input Monitoring manually.' }) }
+  }
+  const dismissRecoveryHandoff = async () => {
+    if (!dismissConfirm) {
+      setDismissConfirm(true)
+      setRecoveryAction({ ok: false, message: 'Confirm once more to dismiss only the saved startup reminder. The profile artifact and Input configuration will remain unchanged.' })
+      return
+    }
+    const action = window.agentBoard?.dismissRecoveryHandoff
+    if (!action) return setRecoveryAction({ ok: false, message: 'This build cannot dismiss the saved reminder safely.' })
+    try {
+      const result = await action()
+      setRecoveryAction(result)
+      if (result.ok) {
+        setDismissConfirm(false)
+        await onRefreshRecoveryGuide()
+      }
+    } catch {
+      setRecoveryAction({ ok: false, message: 'The saved reminder could not be dismissed. No artifact or Input setting changed.' })
+    }
+  }
   return <section className="setup-view">
     <div className="setup-intro"><span className="eyebrow">COMMISSIONING / TRUTHFUL READINESS</span><h2>Make every layer observable.</h2><p>USB presence, macOS authority, Input configuration, and native Codex integration are separate states. This checklist keeps them separate so “connected” never means more than we proved.</p></div>
     <BoardRouteRail route={status.boardRoute} saving={routeSaving} error={routeError} onChange={onRouteChange} />
     <div className="setup-grid">
       <div className="setup-steps">
-        {steps.map((step) => <article key={step.number} className={step.ready ? 'setup-step ready' : 'setup-step'}>
+        {steps.map((step) => <article key={step.number} className={step.ready ? 'setup-step ready' : step.observed ? 'setup-step observed' : 'setup-step'}>
           <span className="step-number">{step.number}</span><div><h3>{step.title}</h3><p>{step.detail}</p><strong><i />{step.state}</strong></div>
         </article>)}
+        {repairNeeded && <section className="profile-repair" aria-labelledby="profile-repair-title">
+          <div><span className="eyebrow">OFFLINE REPAIR / NO DEVICE WRITE</span><h3 id="profile-repair-title">Create the corrected profile here.</h3></div>
+          <p>Select an ordinary US Creator Micro 2 profile exported from Work Louder Input. Agent Board will validate it and save a new <b>Ashlr Daily</b> import with the clockwise/counterclockwise order corrected. It never opens Input, edits Input's cache, or writes to the board.</p>
+          {recentRuntimeEvidence && <p><b>Advisory:</b> Input also logged profile {inputRuntime.profileIndex} / layer {inputRuntime.layerIndex} as unresolved recently. That event may predate the cache and does not replace this deterministic profile repair.</p>}
+          <button type="button" onClick={() => void createRepairProfile()} disabled={repairBusy}><Download size={14} />{repairBusy ? 'Creating…' : 'Create corrected Input profile'}</button>
+          {repairResult?.status === 'saved' && <div className="profile-repair-result saved" role="status">
+            <strong>Repair artifact ready—nothing activated yet.</strong>
+            <code title={repairResult.filePath}>{repairResult.filePath}</code>
+            <small>SHA-256 {repairResult.sha256}</small>
+            <p>{repairResult.message}</p>
+            <p>In Input alone, choose <b>Import Profile</b> for this file, choose <b>Set as current profile</b> on <b>Ashlr Agent Board Corrected</b>, select <b>Ashlr Daily</b>, then fully quit and relaunch Input. “layout updated” alone is not acceptance.</p>
+          </div>}
+          {repairResult?.status === 'failed' && <div className="profile-repair-result failed" role="alert"><strong>Repair not created.</strong><p>{repairResult.message}</p></div>}
+          {repairResult?.status === 'canceled' && <div className="profile-repair-result" role="status"><p>{repairResult.message}</p></div>}
+        </section>}
+        {showRecoveryGuide && <section className="recovery-handoff" aria-labelledby="input-reconciliation-title" tabIndex={-1} ref={recoveryFocus}>
+          <div className="recovery-handoff-heading"><span className="eyebrow">INPUT-ONLY RECONCILIATION / HUMAN-GUIDED</span><h3 id="input-reconciliation-title">{recoveryHandoff ? artifactAvailable ? 'Resume the saved recovery handoff.' : 'The saved artifact needs attention.' : 'Keep these steps visible before you quit.'}</h3><p>{recoveryHandoff ? 'This private receipt does not prove import, activation, synchronization, permission, or physical acceptance.' : 'This is the complete safe sequence. Agent Board never quits apps, changes Input, grants permission, writes the board, or updates firmware for you.'}</p></div>
+          {recentRuntimeEvidence && <p className="recovery-advisory"><b>Advisory only:</b> Input logged profile {inputRuntime.profileIndex} / layer {inputRuntime.layerIndex} as unresolved at {inputRuntime.observedAt ? formatClock(new Date(inputRuntime.observedAt)) : 'an unknown time'}. It may predate the current cache and does not replace these steps.</p>}
+          {recentCodexTraffic && <p className="recovery-advisory"><b>Input-only window is not exclusive:</b> recurring Codex-protocol responses are currently reaching Input. This is co-presence evidence, not an ownership or root-cause claim. No application was automatically quit.</p>}
+          {recoveryHandoff && <div className={artifactAvailable ? 'recovery-artifact' : 'recovery-artifact missing'}>
+            <span>{artifactAvailable ? 'Corrected artifact verified' : `Artifact ${recoveryGuide.artifact?.status?.replaceAll('_', ' ') ?? 'unavailable'}`}</span><code title={recoveryHandoff.artifactPath}>{recoveryHandoff.artifactPath}</code><small>SHA-256 {recoveryHandoff.sha256}</small>
+          </div>}
+          {recoverySteps.length > 0
+            ? <ol className="recovery-checklist">{recoverySteps.map((step, index) => <li key={`${index}-${step}`}><span>{step}</span></li>)}</ol>
+            : <p className="recovery-advisory" role="status">Loading the local recovery checklist…</p>}
+          <div className="recovery-actions">
+            {recoveryHandoff && artifactAvailable && <button type="button" onClick={() => void revealRecoveryArtifact()}><FolderOpen size={15} /> Reveal artifact in Finder</button>}
+            <button type="button" onClick={() => void copyRecoveryChecklist()}><Command size={15} /> Copy recovery checklist</button>
+            <button type="button" onClick={() => void openInputMonitoringSettings()}><ShieldCheck size={15} /> Open Input Monitoring settings</button>
+            {recoveryHandoff && <button type="button" className="dismiss-handoff" onClick={() => void dismissRecoveryHandoff()}><X size={15} /> {dismissConfirm ? 'Confirm dismiss reminder' : 'Dismiss saved handoff'}</button>}
+          </div>
+          {recoveryAction && <p className={recoveryAction.ok ? 'recovery-action-result' : 'recovery-action-result failed'} role={recoveryAction.ok ? 'status' : 'alert'}>{recoveryAction.message}</p>}
+          <p className="recovery-proof-boundary"><ShieldCheck size={14} /> Permission remains manually verified. Cache observation is not device synchronization, and only a fresh physical Flight Check accepts the shortcut route.</p>
+          <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{recoveryHandoff ? artifactAvailable ? 'A private Input recovery handoff is ready to resume.' : 'The saved Input recovery artifact is missing or changed. Verify it or create a new corrected artifact before import.' : ''}</p>
+        </section>}
       </div>
       <aside className="hardware-truth">
         <span className="eyebrow">PHYSICAL CONTRACT</span><h3>{hardware.name}</h3>
         <dl><div><dt>13</dt><dd>Mechanical switches</dd></div><div><dt>06</dt><dd>Live Agent positions</dd></div><div><dt>07</dt><dd>Action switches</dd></div><div><dt>20</dt><dd>Bindable signals</dd></div></dl>
         <div className="hardware-note"><Mic2 size={18} /><p><strong>Mic is one cap, two switches.</strong> The visible wide key spans ACT10 + ACT11. Never give its halves different actions.</p></div>
-        <div className="hardware-note"><ShieldCheck size={18} /><p>{status.boardRoute === 'codex_native' ? <><strong>Native firmware changes require a guarded qualification.</strong> Back up Input, quit Codex, use only a stable vendor candidate, then re-prove both native RPCs and every control.</> : <><strong>Freeze firmware during acceptance for Ashlr Layer.</strong> Defer it until the active profile is backed up and a separate qualification is planned.</>}</p></div>
-        <div className="hardware-note"><RotateCcw size={18} /><p><strong>The bottom-left circle is not a key.</strong> It is the firmware-owned haptic selector for three Bluetooth host profiles.</p></div>
+        <div className="hardware-note"><ShieldCheck size={18} /><p>{status.boardRoute === 'codex_native' ? <><strong>Native firmware changes require a guarded qualification.</strong> Back up Input, quit Codex, use only the exact reviewed vendor-published candidate, then re-prove both native RPCs and every control.</> : <><strong>Freeze firmware during acceptance for Ashlr Layer.</strong> Defer it until the active profile is backed up and a separate qualification is planned.</>}</p></div>
+        <div className="hardware-note"><RotateCcw size={18} /><p><strong>The bottom-left circle is not a bindable key.</strong> A short tap changes layer; a three-second hold opens the selector for three Bluetooth channels and wired mode.</p></div>
         <div className="rgb-legend" aria-label="Black-opaque state language"><span className="eyebrow">BLACK-OPAQUE STATE LANGUAGE</span><div>{agentStateLegendOrder.map((state) => <span key={state}><i className={agentStateClassName(state)} />{agentStateLabels[state]}{' '}</span>)}</div><small>The screen is the complete legend. Black caps use edge and underglow only after lighting transport is qualified; a frosted hero cap is optional.</small></div>
+        {status.receiverIdentity && <div className="receiver-identity"><span className="eyebrow">CURRENT RECEIVER BUILD</span><strong>{status.receiverIdentity.packaged ? 'Packaged' : 'Development'} · v{status.receiverIdentity.appVersion}</strong>{status.receiverIdentity.appAsarSha256 && <code title={status.receiverIdentity.appAsarSha256}>app.asar {status.receiverIdentity.appAsarSha256.slice(0, 12)}</code>}<p>{receiverExclusive ? 'This is the only observed Agent Board receiver.' : `${receiverRuntime?.instanceCount ?? 0} receivers across ${receiverRuntime?.distinctBuildCount ?? 0} builds are contending. Fully quit every copy manually, then reopen one exact build. No process was quit automatically.`} Build identity does not prove macOS permission, shortcut receipt, signing, or physical acceptance.</p></div>}
         {status.boardRoute === 'codex_native'
-          ? <div className="native-manual-gate"><ShieldCheck size={16} /><span><strong>Manual native gate</strong> Quit Work Louder Input, then verify the connection in Codex Settings → Creator Micro. Agent Board cannot perform or accept that check.</span></div>
+          ? <div className="native-manual-gate"><ShieldCheck size={16} /><span><strong>Manual native gate</strong> Quit Work Louder Input and quit this Agent Board app. Open Codex alone, then verify Settings → Creator Micro. Agent Board cannot perform or accept that check.</span></div>
           : <button type="button" className="operate-button" onClick={onFlightCheck}>Run Ashlr Flight Check <ChevronRight size={16} /></button>}
         <button type="button" className="operate-button secondary" onClick={onOperate}>Return to board</button>
       </aside>

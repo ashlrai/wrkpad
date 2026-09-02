@@ -25,6 +25,7 @@
   "engines": {
     "node": ">=22"
   },
+  "packageManager": "npm@10.9.8",
   "description": "A local-first agent mission control for the Work Louder Creator Micro 2.",
   "main": "electron/main.cjs",
   "type": "module",
@@ -32,6 +33,8 @@
     "dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
     "dev:web": "vite --host 127.0.0.1",
     "doctor": "node scripts/doctor.mjs",
+    "agent:preflight": "node ../tools/agent-preflight.mjs inspect --json",
+    "profile:generate": "node scripts/generate-input-profile.mjs",
     "build": "tsc -b && vite build",
     "capture:public-demo": "npm run build && electron scripts/capture-public-demo.cjs",
     "lint": "oxlint src electron scripts vite.config.ts vitest.config.ts",
@@ -44,9 +47,22 @@
     "appId": "ai.ashlr.agent-board",
     "productName": "Ashlr Agent Board",
     "afterPack": "scripts/after-pack.cjs",
-    "directories": { "output": "release" },
-    "files": ["dist-renderer/**/*", "electron/**/*", "!electron/*.test.cjs", "package.json", "LICENSE", "NOTICE"],
-    "mac": { "category": "public.app-category.developer-tools", "target": "dir", "icon": "build/icon.png" }
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist-renderer/**/*",
+      "electron/**/*",
+      "!electron/*.test.cjs",
+      "package.json",
+      "LICENSE",
+      "NOTICE"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": "dir",
+      "icon": "build/icon.png"
+    }
   },
   "dependencies": {
     "lucide-react": "^1.33.0",
@@ -59,6 +75,7 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.4",
+    "ajv": "8.20.0",
     "concurrently": "^10.0.5",
     "electron": "^43.4.1",
     "electron-builder": "^26.15.3",

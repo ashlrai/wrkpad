@@ -7,6 +7,8 @@ Provider hooks are useful only while HASP is available. `wrkpad service` manages
 Use a stable installed binary, not a Cargo build artifact that can disappear:
 
 ```bash
+cargo install --path . --locked --root "$HOME/.local"
+~/.local/bin/wrkpad --version
 wrkpad init
 wrkpad service status
 wrkpad service plan --action install --json

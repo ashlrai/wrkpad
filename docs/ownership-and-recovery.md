@@ -9,7 +9,20 @@ The occupancy state is wrkpad policy, not firmware state.
 | `takeover` | One wrkpad writer may paint supported lighting only | Exact compatibility tuple, active OAI layer, no likely external writer, local lease, explicit confirmation |
 | `release` | Stop writes, close handle, invalidate lease | Existing takeover |
 
-Current source can persist and test the state machine. The desk descriptor is now captured read-only, but runtime evidence still blocks shadow and takeover: the live Input connection reports firmware `v0.1.50`, the required status/RGB methods return `Method not found`, potential external HID clients remain open and exclusive ownership is unproven, and no write transport is enabled in wrkpad.
+Current source can persist and test the state machine. The September 2 desk
+snapshot verifies firmware `0.6.2`, wired USB presence, and successful firmware
+responses to both required Codex methods. Shadow and takeover remain blocked:
+native response consumption, visible behavior, and exclusive ownership were
+unproven; a potential background HID client was present at that snapshot; and
+wrkpad exposes no write transport. See the canonical
+[post-flash evidence record](creator-micro-2-post-flash-2026-09-02.md).
+
+Application ownership is a separate contract from wrkpad occupancy. Declaring
+Ashlr Layer does not disable Codex's native client. Native qualification requires
+Input and Agent Board quit with Codex as the sole intended controller; Input
+profile or firmware work requires Codex and Agent Board quit with signed Input
+as the sole intended controller. These process checks narrow contention but do
+not prove exclusive ownership.
 
 ## Why process checks are insufficient
 
