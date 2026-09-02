@@ -3,9 +3,15 @@ import test from 'node:test'
 
 import { detectCreatorMicro2, evaluateDoctor } from './doctor.mjs'
 
+const receiverHash = 'a'.repeat(64)
+
 const requiredProbes = {
   board: { ok: true, detail: 'Work Louder 303A:8298' },
-  input: { ok: true, detail: 'installed' },
+  inputInstallation: { status: 'verified', version: '0.18.4' },
+  receiverRuntime: {
+    status: 'exclusive', instanceCount: 1, distinctBuildCount: 1,
+    currentAsarSha256: receiverHash, candidateAsarSha256: null, candidateMatchesCurrent: null,
+  },
   inputProfile: {
     cacheStatus: 'available',
     activeProfile: 'Ashlr Agent Board Corrected',
@@ -73,12 +79,112 @@ test('missing Work Louder Input fails doctor and leads with installation', () =>
   const result = evaluateDoctor({
     ...requiredProbes,
     ...missingOptionalProbes,
-    input: { ok: false, detail: 'missing' },
+    inputInstallation: { status: 'missing', version: null },
   })
 
   assert.equal(result.ok, false)
   assert.equal(result.checks[1].severity, 'error')
   assert.match(result.nextAction, /Install the signed Work Louder Input app/)
+})
+
+test('required Input check passes only an exact verified installation receipt', () => {
+  const verified = evaluateDoctor({ ...requiredProbes, ...missingOptionalProbes })
+  assert.deepEqual(verified.inputInstallation, { status: 'verified', version: '0.18.4' })
+  assert.equal(verified.checks[1].ok, true)
+  assert.equal(verified.checks[1].code, 'verified')
+
+  const invalid = evaluateDoctor({
+    ...requiredProbes,
+    ...missingOptionalProbes,
+    input: { ok: true, detail: 'private false pass' },
+    inputInstallation: { status: 'invalid_signature', version: '0.18.4', raw: '/Users/private/modified' },
+  })
+  assert.equal(invalid.ok, false)
+  assert.deepEqual(invalid.inputInstallation, { status: 'invalid_signature', version: '0.18.4' })
+  assert.deepEqual(invalid.checks[1], {
+    name: 'Work Louder Input', ok: false, detail: 'Input.app signature integrity failed v0.18.4',
+    category: 'required', severity: 'error', blocking: true, code: 'invalid_signature',
+  })
+  assert.match(invalid.nextAction, /replace or repair Input\.app from the signed vendor distribution/)
+  assert.doesNotMatch(JSON.stringify(invalid), /private|Users|modified|false pass/)
+})
+
+test('malformed Input installation evidence fails closed without leaking fields', () => {
+  const result = evaluateDoctor({
+    ...requiredProbes,
+    ...missingOptionalProbes,
+    inputInstallation: { status: '/Users/private', version: '0.18.4\nsecret', output: 'raw signature' },
+  })
+  assert.deepEqual(result.inputInstallation, { status: 'probe_unavailable', version: null })
+  assert.equal(result.ok, false)
+  assert.equal(result.checks[1].code, 'probe_unavailable')
+  assert.doesNotMatch(JSON.stringify(result), /Users|secret|raw signature/)
+})
+
+test('Input installation versions must match the exact status shape', () => {
+  for (const inputInstallation of [
+    { status: 'verified', version: null },
+    { status: 'missing', version: '0.18.4' },
+    { status: 'probe_unavailable' },
+  ]) {
+    const result = evaluateDoctor({ ...requiredProbes, ...missingOptionalProbes, inputInstallation })
+    assert.deepEqual(result.inputInstallation, { status: 'probe_unavailable', version: null })
+    assert.equal(result.ok, false)
+  }
+})
+
+test('receiver contention blocks only Ashlr readiness and requires a human single-receiver recovery', () => {
+  const result = evaluateDoctor({
+    ...requiredProbes,
+    ...missingOptionalProbes,
+    boardRoute: 'ashlr_layer',
+    receiverRuntime: {
+      status: 'contended_distinct_builds', instanceCount: 2, distinctBuildCount: 2,
+      currentAsarSha256: receiverHash, candidateAsarSha256: 'b'.repeat(64), candidateMatchesCurrent: false,
+      processes: ['/Users/private/old', '/Users/private/new'],
+    },
+  })
+  assert.equal(result.ok, true)
+  assert.equal(result.readiness.ashlrLayer.status, 'blocked')
+  assert.equal(result.readiness.ashlrLayer.reason, 'receiver_contended_distinct_builds')
+  assert.notEqual(result.readiness.codexNative.status, 'blocked')
+  assert.match(result.modeGuidance.ashlrLayer, /receiver ownership is contended/)
+  assert.match(result.nextAction, /human must fully quit every Ashlr Agent Board copy/)
+  assert.match(result.nextAction, /No process was quit automatically/)
+  assert.doesNotMatch(JSON.stringify(result), /Users|private|old|new/)
+})
+
+test('unavailable or malformed receiver evidence blocks Ashlr and stays bounded', () => {
+  for (const receiverRuntime of [
+    { status: 'unavailable', instanceCount: 2, distinctBuildCount: 0, currentAsarSha256: null, candidateAsarSha256: null, candidateMatchesCurrent: null },
+    { status: 'contended_same_build', instanceCount: 99_999, distinctBuildCount: 1, currentAsarSha256: '/private/hash', candidateAsarSha256: null, candidateMatchesCurrent: null, raw: 'secret' },
+    { status: 'contended_distinct_builds', instanceCount: 2, distinctBuildCount: 3, currentAsarSha256: receiverHash, candidateAsarSha256: null, candidateMatchesCurrent: null },
+    { status: 'exclusive', instanceCount: 1, distinctBuildCount: 1, currentAsarSha256: receiverHash, candidateAsarSha256: 'b'.repeat(64), candidateMatchesCurrent: true },
+  ]) {
+    const result = evaluateDoctor({ ...requiredProbes, ...missingOptionalProbes, boardRoute: 'ashlr_layer', receiverRuntime })
+    assert.deepEqual(result.receiverRuntime.status, 'unavailable')
+    assert.equal(result.readiness.ashlrLayer.status, 'blocked')
+    assert.equal(result.readiness.ashlrLayer.reason, 'receiver_probe_unavailable')
+    assert.match(result.nextAction, /reopen exactly one reviewed build/)
+    assert.doesNotMatch(JSON.stringify(result), /private|secret|99999/)
+  }
+})
+
+test('native route guidance does not promote Ashlr receiver recovery over native qualification', () => {
+  const result = evaluateDoctor({
+    ...requiredProbes,
+    ...missingOptionalProbes,
+    boardRoute: 'codex_native',
+    nativeCodex: { ok: false, code: 'firmware_rpc_missing', detail: 'RPC 404', fresh: true },
+    receiverRuntime: {
+      status: 'contended_same_build', instanceCount: 2, distinctBuildCount: 1,
+      currentAsarSha256: receiverHash, candidateAsarSha256: receiverHash, candidateMatchesCurrent: true,
+    },
+  })
+  assert.equal(result.readiness.ashlrLayer.status, 'blocked')
+  assert.equal(result.readiness.codexNative.reason, 'firmware_rpc_missing')
+  assert.match(result.nextAction, /guarded vendor firmware qualification/)
+  assert.doesNotMatch(result.nextAction, /reopen exactly one/)
 })
 
 test('result exposes non-blocking manual checks and a next action', () => {
@@ -95,7 +201,7 @@ test('available optional integrations are reported as passing', () => {
     ...requiredProbes,
     chatgpt: { ok: true, detail: 'installed' },
     codex: { ok: true, detail: 'codex 1.0' },
-    nativeCodex: { ok: true, detail: 'connected' },
+    nativeCodex: { ok: true, detail: 'connected', fresh: true },
     claude: { ok: true, detail: 'claude 1.0' },
     ashlr: { ok: true, detail: 'ashlr 1.0' },
     logitech: { ok: true, detail: 'not running' },
@@ -112,13 +218,14 @@ test('native firmware RPC failure receives specific nonblocking recovery guidanc
     ...requiredProbes,
     ...missingOptionalProbes,
     boardRoute: 'codex_native',
-    nativeCodex: { ok: false, code: 'firmware_rpc_missing', detail: 'RPC 404' },
+    nativeCodex: { ok: false, code: 'firmware_rpc_missing', detail: 'RPC 404', fresh: true },
   })
 
   assert.equal(result.ok, true)
   assert.deepEqual(result.readiness.codexNative, {
     status: 'blocked',
     reason: 'firmware_rpc_missing',
+    fresh: true,
   })
   assert.equal(result.readiness.ashlrLayer.status, 'manual')
   assert.equal(result.route, 'codex_native')
@@ -132,14 +239,16 @@ test('Ashlr Layer never promotes an optional native firmware operation', () => {
     ...requiredProbes,
     ...missingOptionalProbes,
     boardRoute: 'ashlr_layer',
-    nativeCodex: { ok: false, code: 'firmware_rpc_missing', detail: 'historical RPC 404' },
+    nativeCodex: { ok: false, code: 'firmware_rpc_missing', detail: 'historical RPC 404', fresh: false },
   })
 
   assert.match(result.nextAction, /Input Monitoring/)
-  assert.match(result.modeGuidance.codexNative, /firmware candidate/)
+  assert.match(result.modeGuidance.codexNative, /evidence is historical/)
   assert.match(result.modeGuidance.ashlrLayer, /independently commissionable/)
   assert.equal(result.route, 'ashlr_layer')
-  assert.equal(result.readiness.codexNative.status, 'blocked')
+  assert.deepEqual(result.readiness.codexNative, {
+    status: 'manual', reason: 'historical_firmware_rpc_missing', fresh: false,
+  })
   assert.equal(result.readiness.ashlrLayer.status, 'manual')
 })
 

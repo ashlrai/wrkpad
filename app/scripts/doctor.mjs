@@ -8,8 +8,10 @@ import { fileURLToPath } from 'node:url'
 const require = createRequire(import.meta.url)
 const { detectCreatorMicro2 } = require('../electron/creator-micro-identity.cjs')
 const { inspectCodexMicroLogs } = require('../electron/codex-micro-diagnostics.cjs')
+const { inspectInputInstallation } = require('../electron/input-installation-diagnostics.cjs')
 const { inspectInputProfile } = require('../electron/input-profile-diagnostics.cjs')
 const { inspectInputRuntime } = require('../electron/input-runtime-diagnostics.cjs')
+const { inspectReceiverRuntime, RECEIVER_PROCESS_PATTERN } = require('../electron/receiver-runtime-diagnostics.cjs')
 const { appSettingsPath, readAppSettings } = require('../electron/settings.cjs')
 const { resolveTool } = require('../electron/tool-resolver.cjs')
 
@@ -54,11 +56,81 @@ const MANUAL_CHECKS = [
 ]
 const INPUT_RUNTIME_STATUSES = new Set(['unresolved_profile_layer', 'not_observed', 'log_missing', 'log_unsafe', 'log_unavailable'])
 const CODEX_PROTOCOL_TRAFFIC_STATUSES = new Set(['recurring_unresolved_response', 'not_observed', 'log_missing', 'log_unsafe', 'log_unavailable'])
+const INPUT_INSTALLATION_STATUSES = new Set(['verified', 'missing', 'multiple_installations', 'unsafe', 'invalid_metadata', 'publisher_unrecognized', 'invalid_signature', 'gatekeeper_rejected', 'probe_unavailable'])
+const RECEIVER_RUNTIME_STATUSES = new Set(['exclusive', 'contended_same_build', 'contended_distinct_builds', 'not_running', 'unavailable'])
+const SHA256 = /^[0-9a-f]{64}$/
+const SAFE_VERSION = /^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$/
 const boundedIsoTimestamp = (value) => {
   if (typeof value !== 'string' || value.length > 40 || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) return null
   const parsed = new Date(value)
   return Number.isFinite(parsed.getTime()) && parsed.toISOString() === value ? value : null
 }
+
+const projectInputInstallation = (raw) => {
+  const status = INPUT_INSTALLATION_STATUSES.has(raw?.status) ? raw.status : 'probe_unavailable'
+  const version = typeof raw?.version === 'string' && SAFE_VERSION.test(raw.version) ? raw.version : null
+  const versionRequired = ['verified', 'publisher_unrecognized', 'invalid_signature', 'gatekeeper_rejected'].includes(status)
+  const versionForbidden = ['missing', 'multiple_installations', 'unsafe', 'invalid_metadata', 'probe_unavailable'].includes(status)
+  if ((versionRequired && !version) || (versionForbidden && raw?.version !== null)) {
+    return { status: 'probe_unavailable', version: null }
+  }
+  return { status, version }
+}
+
+const inputCheck = (installation) => {
+  const version = installation.version ? ` v${installation.version}` : ''
+  const details = {
+    verified: `verified signed vendor app${version}`,
+    missing: 'signed vendor app not found',
+    multiple_installations: 'multiple Input.app installations found',
+    unsafe: 'Input.app installation candidate is unsafe',
+    invalid_metadata: 'Input.app metadata is invalid',
+    publisher_unrecognized: `Input.app publisher is unrecognized${version}`,
+    invalid_signature: `Input.app signature integrity failed${version}`,
+    gatekeeper_rejected: `Input.app was rejected by Gatekeeper${version}`,
+    probe_unavailable: 'Input.app integrity probe unavailable',
+  }
+  return { ok: installation.status === 'verified', detail: details[installation.status], code: installation.status }
+}
+
+const inputRecoveryAction = (status) => {
+  if (status === 'missing') return 'Install the signed Work Louder Input app from the vendor, then rerun the doctor.'
+  if (status === 'multiple_installations') return 'A human must review both Input.app installations, keep one verified signed vendor copy, and rerun the doctor. No application was removed automatically.'
+  if (status === 'probe_unavailable') return 'A human must verify the signed Work Louder Input installation manually, then rerun the read-only doctor; no application was changed.'
+  return 'Stop Input and firmware qualification. A human must replace or repair Input.app from the signed vendor distribution, then rerun the doctor; no application was changed automatically.'
+}
+
+const unavailableReceiver = () => ({
+  status: 'unavailable', instanceCount: 0, distinctBuildCount: 0,
+  currentAsarSha256: null, candidateAsarSha256: null, candidateMatchesCurrent: null,
+})
+
+const projectReceiverRuntime = (raw) => {
+  if (!RECEIVER_RUNTIME_STATUSES.has(raw?.status)) return unavailableReceiver()
+  const instanceCount = Number.isInteger(raw.instanceCount) && raw.instanceCount >= 0 && raw.instanceCount <= 64 ? raw.instanceCount : null
+  const distinctBuildCount = Number.isInteger(raw.distinctBuildCount) && raw.distinctBuildCount >= 0 && raw.distinctBuildCount <= 64 ? raw.distinctBuildCount : null
+  const currentAsarSha256 = raw.currentAsarSha256 === null ? null : SHA256.test(raw.currentAsarSha256 ?? '') ? raw.currentAsarSha256 : undefined
+  const candidateAsarSha256 = raw.candidateAsarSha256 === null ? null : SHA256.test(raw.candidateAsarSha256 ?? '') ? raw.candidateAsarSha256 : undefined
+  const candidateMatchesCurrent = raw.candidateMatchesCurrent === null || typeof raw.candidateMatchesCurrent === 'boolean' ? raw.candidateMatchesCurrent : undefined
+  if (instanceCount === null || distinctBuildCount === null || currentAsarSha256 === undefined || candidateAsarSha256 === undefined || candidateMatchesCurrent === undefined) return unavailableReceiver()
+  if (distinctBuildCount > instanceCount) return unavailableReceiver()
+  const candidateShapeValid = candidateAsarSha256 === null
+    ? candidateMatchesCurrent === null
+    : currentAsarSha256 !== null && candidateMatchesCurrent === (candidateAsarSha256 === currentAsarSha256)
+  const shapeValid = raw.status === 'not_running'
+    ? instanceCount === 0 && distinctBuildCount === 0 && currentAsarSha256 === null && candidateAsarSha256 === null && candidateMatchesCurrent === null
+    : raw.status === 'unavailable'
+      ? distinctBuildCount === 0 && currentAsarSha256 === null && candidateAsarSha256 === null && candidateMatchesCurrent === null
+      : raw.status === 'exclusive'
+        ? instanceCount === 1 && distinctBuildCount === 1 && currentAsarSha256 !== null && candidateShapeValid
+        : raw.status === 'contended_same_build'
+          ? instanceCount >= 2 && distinctBuildCount === 1 && currentAsarSha256 !== null && candidateShapeValid
+          : instanceCount >= 2 && distinctBuildCount >= 2 && currentAsarSha256 !== null && candidateShapeValid
+  if (!shapeValid) return unavailableReceiver()
+  return { status: raw.status, instanceCount, distinctBuildCount, currentAsarSha256, candidateAsarSha256, candidateMatchesCurrent }
+}
+
+const receiverRecoveryAction = 'A human must fully quit every Ashlr Agent Board copy, then reopen exactly one reviewed build and rerun the doctor. No process was quit automatically.'
 
 const makeCheck = (definition, probe, category) => ({
   name: definition.name,
@@ -68,17 +140,24 @@ const makeCheck = (definition, probe, category) => ({
   severity: probe?.ok ? 'pass' : category === 'required' ? 'error' : 'warning',
   blocking: category === 'required',
   ...(typeof probe?.code === 'string' ? { code: probe.code } : {}),
+  ...(typeof probe?.fresh === 'boolean' ? { fresh: probe.fresh } : {}),
 })
 
 export function evaluateDoctor(probes, options = {}) {
+  const inputInstallation = projectInputInstallation(probes.inputInstallation)
+  const receiverRuntime = projectReceiverRuntime(probes.receiverRuntime)
+  const evaluatedProbes = { ...probes, input: inputCheck(inputInstallation) }
   const requiredChecks = REQUIRED_CHECKS.map((definition) =>
-    makeCheck(definition, probes[definition.key], 'required'),
+    makeCheck(definition, evaluatedProbes[definition.key], 'required'),
   )
   const optionalChecks = OPTIONAL_CHECKS.map((definition) =>
     makeCheck(definition, probes[definition.key], 'optional'),
   )
   const failedRequiredIndex = requiredChecks.findIndex((check) => !check.ok)
   const nativeFirmwareMissing = probes.nativeCodex?.code === 'firmware_rpc_missing'
+  const nativeEvidenceFresh = probes.nativeCodex?.fresh === true
+  const currentNativeFirmwareMissing = nativeFirmwareMissing && nativeEvidenceFresh
+  const nativeConnected = probes.nativeCodex?.ok === true && nativeEvidenceFresh
   const nativeRouteSelected = probes.boardRoute === 'codex_native'
   const route = ['codex_native', 'ashlr_layer'].includes(probes.boardRoute)
     ? probes.boardRoute
@@ -113,9 +192,19 @@ export function evaluateDoctor(probes, options = {}) {
   const projectedCodexTrafficStatus = codexTrafficShapeValid ? codexTrafficStatus : 'log_unavailable'
   const recurringCodexTrafficObserved = projectedCodexTrafficStatus === 'recurring_unresolved_response'
     && rawCodexTraffic?.fresh === true && codexTrafficObservedAt !== null
+  const receiverBlocked = ['contended_same_build', 'contended_distinct_builds', 'unavailable'].includes(receiverRuntime.status)
+  const receiverReason = receiverRuntime.status === 'contended_same_build'
+    ? 'receiver_contended_same_build'
+    : receiverRuntime.status === 'contended_distinct_builds'
+      ? 'receiver_contended_distinct_builds'
+      : 'receiver_probe_unavailable'
   const ashlrReason = failedRequiredIndex !== -1
     ? 'required_prerequisite_missing'
-    : inputProfile.encoderDirection === 'reversed'
+    : receiverBlocked
+      ? receiverReason
+      : receiverRuntime.status === 'not_running'
+        ? 'receiver_not_running'
+        : inputProfile.encoderDirection === 'reversed'
       ? 'encoder_direction_reversed'
       : !dailyProfileReady
         ? 'input_profile_requires_activation'
@@ -138,6 +227,8 @@ export function evaluateDoctor(probes, options = {}) {
     route,
     ok: failedRequiredIndex === -1,
     checks: [...requiredChecks, ...optionalChecks],
+    inputInstallation,
+    receiverRuntime,
     inputProfile: {
       cacheStatus: inputProfile.cacheStatus,
       dailyProfileMatch: inputProfile.activeProfile === 'Ashlr Agent Board Corrected',
@@ -164,28 +255,45 @@ export function evaluateDoctor(probes, options = {}) {
         reason: failedRequiredIndex === -1 ? 'required_checks_passed' : `required_check_failed:${REQUIRED_CHECKS[failedRequiredIndex].key}`,
       },
       codexNative: {
-        status: nativeFirmwareMissing ? 'blocked' : probes.nativeCodex?.ok ? 'pass' : 'manual',
-        reason: nativeFirmwareMissing ? 'firmware_rpc_missing' : probes.nativeCodex?.ok ? 'recent_native_connection_observed' : 'native_connection_requires_verification',
+        status: currentNativeFirmwareMissing ? 'blocked' : nativeConnected ? 'pass' : 'manual',
+        reason: currentNativeFirmwareMissing
+          ? 'firmware_rpc_missing'
+          : nativeConnected
+            ? 'recent_native_connection_observed'
+            : nativeFirmwareMissing
+              ? 'historical_firmware_rpc_missing'
+              : 'native_connection_requires_verification',
+        fresh: nativeEvidenceFresh,
       },
       ashlrLayer: {
-        status: failedRequiredIndex === -1 ? 'manual' : 'blocked',
+        status: failedRequiredIndex === -1 && !receiverBlocked ? 'manual' : 'blocked',
         reason: ashlrReason,
       },
     },
     modeGuidance: {
-      codexNative: nativeFirmwareMissing
-        ? 'Codex observed v.oai.rgbcfg RPC 404. Back up Input profiles, then qualify a stable vendor firmware candidate with Codex fully quit; release strings alone do not prove compatibility.'
+      codexNative: currentNativeFirmwareMissing
+        ? 'Codex recently observed v.oai.rgbcfg RPC 404. Back up Input profiles, then qualify a reviewed vendor firmware candidate with Codex fully quit; release strings alone do not prove compatibility.'
+        : nativeFirmwareMissing
+          ? 'Codex previously observed v.oai.rgbcfg RPC 404, but that evidence is historical. Re-run the explicit native connection check before considering firmware.'
         : 'Native Codex requires an explicit connected receipt; process presence alone is not enough.',
-      ashlrLayer: unresolvedRuntimeObserved
-        ? 'Input recently logged an unresolved profile/layer combination. This event is advisory and may predate the current cache; a fresh physical Flight Check can supersede it.'
-        : recurringCodexTrafficObserved
-          ? 'Input is receiving recurring Codex-protocol responses for which it had no active resolver. This is co-presence evidence, not ownership; Input-only reconciliation is not exclusive.'
-        : 'The Ashlr shortcut route remains independently commissionable through Work Louder Input and the physical Flight Check.',
+      ashlrLayer: receiverBlocked
+        ? 'Agent Board receiver ownership is contended or unavailable. Shortcut and physical acceptance must wait for one reviewed receiver; no process was quit automatically.'
+        : unresolvedRuntimeObserved
+          ? 'Input recently logged an unresolved profile/layer combination. This event is advisory and may predate the current cache; a fresh physical Flight Check can supersede it.'
+          : recurringCodexTrafficObserved
+            ? 'Input is receiving recurring Codex-protocol responses for which it had no active resolver. This is co-presence evidence, not ownership; Input-only reconciliation is not exclusive.'
+            : 'The Ashlr shortcut route remains independently commissionable through Work Louder Input and the physical Flight Check.',
     },
     nextAction:
       failedRequiredIndex === -1
-        ? nativeFirmwareMissing && nativeRouteSelected
+        ? currentNativeFirmwareMissing && nativeRouteSelected
           ? 'For the declared Codex Native route, back up the Input profile and plan a guarded vendor firmware qualification with Codex fully quit.'
+          : nativeFirmwareMissing && nativeRouteSelected
+            ? 'Re-run the explicit Codex Native connection check. Historical RPC evidence is advisory and does not authorize firmware work.'
+          : route === 'ashlr_layer' && receiverBlocked
+            ? receiverRecoveryAction
+            : route === 'ashlr_layer' && receiverRuntime.status === 'not_running'
+              ? 'Open exactly one reviewed Ashlr Agent Board build, then rerun the doctor before Flight Check.'
           : route === 'ashlr_layer' && inputProfile.encoderDirection === 'reversed'
             ? 'Create and activate the corrected Input profile before Flight Check.'
             : route === 'ashlr_layer' && !dailyProfileReady
@@ -195,7 +303,7 @@ export function evaluateDoctor(probes, options = {}) {
                 : recurringCodexTrafficObserved && route === 'ashlr_layer'
                   ? 'A human must establish an Input-only window before reconciliation; no application was quit and protocol traffic does not prove ownership.'
                 : manualChecks[0].detail
-        : REQUIRED_CHECKS[failedRequiredIndex].nextAction,
+        : failedRequiredIndex === 1 ? inputRecoveryAction(inputInstallation.status) : REQUIRED_CHECKS[failedRequiredIndex].nextAction,
   }
 }
 
@@ -220,19 +328,25 @@ export function collectProbes() {
   const usb = run('/usr/sbin/ioreg', ['-p', 'IOUSB', '-n', 'Creator Micro 2', '-r', '-l'])
   const boardIdentity = detectCreatorMicro2(usb)
   const chatgptInstalled = existsSync('/Applications/ChatGPT.app')
-  const inputInstalled = existsSync('/Applications/Input.app')
+  const inputInstallation = inspectInputInstallation({ home })
+  const receiverPidText = run('/usr/bin/pgrep', ['-of', RECEIVER_PROCESS_PATTERN])
+  const receiverPid = /^\d{1,10}$/.test(receiverPidText ?? '') ? Number(receiverPidText) : null
+  const receiverRuntime = inspectReceiverRuntime(receiverPid ? { currentPid: receiverPid } : {})
   const logitechOwner = run('/usr/bin/pgrep', ['-fl', 'logioptionsplus_agent'])
   const nativeCodex = inspectCodexMicroLogs(home)
   const settings = readAppSettings(appSettingsPath(join(home, 'Library', 'Application Support')), home)
 
   return {
     board: { ok: Boolean(boardIdentity), detail: boardIdentity ? `Work Louder ${boardIdentity.vidPid}${boardIdentity.evidence === 'candidate' ? ' candidate' : ''}` : 'not detected' },
-    input: { ok: inputInstalled, detail: inputInstalled ? 'installed' : 'missing' },
+    inputInstallation,
+    input: inputCheck(projectInputInstallation(inputInstallation)),
+    receiverRuntime,
     chatgpt: { ok: chatgptInstalled, detail: chatgptInstalled ? 'installed' : 'missing' },
     codex: toolProbe('codex'),
     nativeCodex: {
       ok: nativeCodex.status === 'connected' && nativeCodex.fresh === true,
       code: nativeCodex.status,
+      fresh: nativeCodex.fresh === true,
       detail: nativeCodex.status === 'firmware_rpc_missing'
         ? `v.oai.rgbcfg returned RPC 404${nativeCodex.fresh ? ' recently' : ` in historical evidence${nativeCodex.observedAt ? ` at ${nativeCodex.observedAt}` : ''}`}`
         : nativeCodex.detail,
@@ -266,6 +380,8 @@ function printHuman(result) {
   console.log(`Declared route: ${result.route}`)
   if (result.inputRuntime.fresh) console.log(`Input runtime: unresolved profile ${result.inputRuntime.profileIndex} / layer ${result.inputRuntime.layerIndex} observed recently`)
   if (result.inputRuntime.codexProtocolTraffic.fresh) console.log('Input runtime: recurring Codex-protocol responses observed; co-presence only, ownership unproven')
+  console.log(`Input integrity: ${result.inputInstallation.status}${result.inputInstallation.version ? ` v${result.inputInstallation.version}` : ''}`)
+  console.log(`Agent Board receiver: ${result.receiverRuntime.status}; ${result.receiverRuntime.instanceCount} instance(s)`)
   console.log(`Next: ${result.nextAction}`)
 }
 

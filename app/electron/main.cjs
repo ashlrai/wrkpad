@@ -1,18 +1,21 @@
 const { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, shell } = require('electron')
 const { spawn } = require('node:child_process')
 const { createHash, randomUUID } = require('node:crypto')
-const { existsSync, renameSync, writeFileSync } = require('node:fs')
+const { renameSync, writeFileSync } = require('node:fs')
 const path = require('node:path')
 const { ACTION_SPECS, executeSpec } = require('./action-registry.cjs')
 const { detectCreatorMicro2 } = require('./creator-micro-identity.cjs')
 const { inspectCodexMicroLogs } = require('./codex-micro-diagnostics.cjs')
 const { inspectInputProfile } = require('./input-profile-diagnostics.cjs')
 const { inspectInputRuntime } = require('./input-runtime-diagnostics.cjs')
+const { inspectInputInstallation } = require('./input-installation-diagnostics.cjs')
+const { createCachedAsarHasher, inspectPackagedReceiverPeers, inspectReceiverRuntime, shouldRegisterShortcuts } = require('./receiver-runtime-diagnostics.cjs')
 const { writeGeneratedProfile } = require('./input-profile-generator.cjs')
 const { buildRecoveryChecklist, observeRecoveryArtifact, readRecoveryReceipt, recoveryChecklistText, recoveryReceiptPath, removeRecoveryReceipt, writeRecoveryReceipt } = require('./recovery-receipt.cjs')
 const { holdSatisfied } = require('./approval-guard.cjs')
 const { evaluateFlightSignals } = require('./flight-receipt.cjs')
 const { createFlightSession } = require('./flight-session.cjs')
+const { evaluateFlightGates } = require('./flight-gates.cjs')
 const { inspectWorkspace } = require('./workspace-inspector.cjs')
 const { appForProvider, collectMissionControl } = require('./mission-control.cjs')
 const { configuredRendererUrl, trustedRendererUrl } = require('./renderer-trust.cjs')
@@ -27,9 +30,12 @@ const HOTKEYS = {
   dialLeft:'Control+Alt+Command+Q',dialRight:'Control+Alt+Command+W',dialPress:'Control+Alt+Command+R',
 }
 let mainWindow; let rendererUrl; let currentProfile = 'codex'; let signalSequence = 0; let shortcutRegistrations = []
+let receiverRuntime = { status: 'unavailable', instanceCount: 0, distinctBuildCount: 0, currentAsarSha256: null, candidateAsarSha256: null, candidateMatchesCurrent: null }
 let missionCache = null; let missionCacheAt = 0; let missionInFlight = null
+let inputInstallationCache = null; let inputInstallationCacheAt = 0
 const approvals = new Map()
 const flightSession = createFlightSession()
+const cachedReceiverAsarHash = createCachedAsarHasher({ ttlMs: 30_000, maxEntries: 32 })
 
 function settingsPath() { return appSettingsPath(app.getPath('appData')) }
 function handoffPath() { return recoveryReceiptPath(settingsPath()) }
@@ -69,6 +75,7 @@ function trustedIpc(handler) {
 }
 
 function registerShortcuts() {
+  globalShortcut.unregisterAll()
   shortcutRegistrations = []
   for (const [control, accelerator] of Object.entries(HOTKEYS)) {
     const registered = globalShortcut.register(accelerator, () => {
@@ -88,6 +95,35 @@ function registerShortcuts() {
   }
 }
 
+function inspectCurrentReceiverRuntime() {
+  if (!app.isPackaged) {
+    const peers = inspectPackagedReceiverPeers()
+    if (peers.status === 'none') {
+      return { status: 'exclusive', instanceCount: 1, distinctBuildCount: 1, currentAsarSha256: null, candidateAsarSha256: null, candidateMatchesCurrent: null }
+    }
+    return { status: 'unavailable', instanceCount: peers.status === 'present' ? peers.instanceCount + 1 : 0, distinctBuildCount: 0, currentAsarSha256: null, candidateAsarSha256: null, candidateMatchesCurrent: null }
+  }
+  return inspectReceiverRuntime({ currentPid: process.pid, hashAsar: cachedReceiverAsarHash })
+}
+
+function receiverOwnsShortcuts(runtime) {
+  return app.isPackaged ? shouldRegisterShortcuts(runtime) : runtime?.status === 'exclusive'
+}
+
+function synchronizeShortcutOwnership() {
+  receiverRuntime = inspectCurrentReceiverRuntime()
+  if (!receiverOwnsShortcuts(receiverRuntime)) {
+    if (shortcutRegistrations.length) globalShortcut.unregisterAll()
+    shortcutRegistrations = []
+    flightSession.reset()
+    approvals.clear()
+    return receiverRuntime
+  }
+  if (shortcutRegistrations.length !== Object.keys(HOTKEYS).length
+    || shortcutRegistrations.some((registration) => !registration.registered)) registerShortcuts()
+  return receiverRuntime
+}
+
 async function commandExists(executable, args = ['--version']) {
   return new Promise((resolve) => {
     const child = spawn(executable, args, { stdio: 'ignore' })
@@ -98,8 +134,41 @@ async function commandExists(executable, args = ['--version']) {
 async function boardConnected() {
   return new Promise((resolve) => {
     const child = spawn('/usr/sbin/ioreg', ['-p', 'IOUSB', '-n', 'Creator Micro 2', '-r', '-l'])
-    let output = ''; child.stdout.on('data', (chunk) => { output += chunk })
-    child.on('error', () => resolve(null)); child.on('close', () => resolve(detectCreatorMicro2(output)))
+    let output = ''; let settled = false
+    const finish = (value) => { if (!settled) { settled = true; clearTimeout(timer); resolve(value) } }
+    child.stdout.on('data', (chunk) => {
+      if (Buffer.byteLength(output, 'utf8') + chunk.length > 512 * 1024) {
+        child.kill('SIGTERM'); finish(null); return
+      }
+      output += chunk
+    })
+    const timer = setTimeout(() => { child.kill('SIGTERM'); finish(null) }, 3_000)
+    child.on('error', () => finish(null)); child.on('close', () => finish(detectCreatorMicro2(output)))
+  })
+}
+
+function inspectCurrentInputInstallation(force = false) {
+  if (!force && inputInstallationCache && Date.now() - inputInstallationCacheAt < 30_000) return inputInstallationCache
+  inputInstallationCache = inspectInputInstallation({ home: app.getPath('home') })
+  inputInstallationCacheAt = Date.now()
+  return inputInstallationCache
+}
+
+async function verifyFlightGates(variant, forceInput = true) {
+  const settings = readSettings()
+  const home = app.getPath('home')
+  const inputInstallation = inspectCurrentInputInstallation(forceInput)
+  const currentReceiverRuntime = synchronizeShortcutOwnership()
+  const board = await boardConnected()
+  return evaluateFlightGates({
+    variant,
+    boardRoute: settings.boardRoute,
+    usbDetected: Boolean(board),
+    inputInstallation,
+    inputProfile: inspectInputProfile(home, board?.storageId),
+    receiverRuntime: currentReceiverRuntime,
+    shortcutRegistrations,
+    expectedSignals: Object.keys(HOTKEYS),
   })
 }
 
@@ -131,6 +200,8 @@ ipcMain.handle('board:getStatus', trustedIpc(async () => {
   const codexExecutable = resolveTool('codex', { home })
   const claudeExecutable = resolveTool('claude', { home })
   const ashlrExecutable = resolveTool('ashlr', { home })
+  const inputInstallation = inspectCurrentInputInstallation()
+  const currentReceiverRuntime = synchronizeShortcutOwnership()
   const [board, codex, claude, ashlr, workspaceSnapshot] = await Promise.all([
     boardConnected(), codexExecutable ? commandExists(codexExecutable) : false,
     claudeExecutable ? commandExists(claudeExecutable) : false,
@@ -139,7 +210,8 @@ ipcMain.handle('board:getStatus', trustedIpc(async () => {
   ])
   return {
     boardConnected: Boolean(board),
-    inputInstalled: existsSync('/Applications/Input.app'),
+    inputInstalled: inputInstallation.status !== 'missing',
+    inputInstallation,
     inputProfile: inspectInputProfile(home, board?.storageId),
     inputRuntime: inspectInputRuntime(home),
     inputMonitoring: 'unverified',
@@ -155,8 +227,9 @@ ipcMain.handle('board:getStatus', trustedIpc(async () => {
     receiverIdentity: {
       appVersion: app.getVersion(),
       packaged: app.isPackaged,
-      path: app.isPackaged ? process.execPath : app.getAppPath(),
+      appAsarSha256: currentReceiverRuntime.currentAsarSha256,
     },
+    receiverRuntime: currentReceiverRuntime,
   }
 }))
 ipcMain.handle('board:getMissionControl', trustedIpc(() => missionControl()))
@@ -186,12 +259,21 @@ ipcMain.handle('board:focusAgentSlot', trustedIpc(async (_event, slot) => {
   return { ok:true,title:`Opened ${appName} for ${agent.title}`,message,timestamp:new Date().toISOString() }
 }))
 ipcMain.handle('board:setProfile', trustedIpc((_event, profile) => { if (PROFILE_IDS.has(profile)) currentProfile = profile; return currentProfile }))
-ipcMain.handle('board:setFlightCheck', trustedIpc((_event, active) => {
+ipcMain.handle('board:setFlightCheck', trustedIpc(async (_event, active, variant) => {
+  if (active === true) {
+    const admission = await verifyFlightGates(variant, true)
+    if (!admission.ready) return { acknowledged: false, active: false, startedAt: null }
+  }
   const state = active === true ? flightSession.start() : flightSession.stop()
   if (state.active) approvals.clear()
   return { acknowledged: true, active: state.active, startedAt: state.startedAt }
 }))
-ipcMain.handle('board:restartFlightCheck', trustedIpc(() => {
+ipcMain.handle('board:restartFlightCheck', trustedIpc(async (_event, variant) => {
+  const admission = await verifyFlightGates(variant, true)
+  if (!admission.ready) {
+    flightSession.stop()
+    return { acknowledged: false, active: false, startedAt: null }
+  }
   const state = flightSession.restart()
   if (state.active) approvals.clear()
   return { acknowledged: state.active, active: state.active, startedAt: state.startedAt }
@@ -296,10 +378,11 @@ ipcMain.handle('board:saveFlightReceipt', trustedIpc(async (_event, receipt) => 
   if (![...receipt.receivedSignals, ...receipt.missingSignals].every((signal) => allowedSignals.has(signal))) return null
   if (!receipt.events.every((item) => item && allowedSignals.has(item.signal) && typeof item.receivedAt === 'string')) return null
   const variant = receipt.profileKind === 'diagnostic' ? 'diagnostic' : 'daily'
+  const admission = await verifyFlightGates(variant, true)
   const evaluation = evaluateFlightSignals(variant, flight.rawEvents)
-  const usbDetected = Boolean(await boardConnected())
+  const usbDetected = admission.evidence.usbDetected
   const registeredCount = shortcutRegistrations.filter((item) => item.registered).length
-  const status = evaluation.status === 'passed' && usbDetected && registeredCount === Object.keys(HOTKEYS).length ? 'passed' : evaluation.status === 'incomplete' ? 'incomplete' : 'failed'
+  const status = evaluation.status === 'passed' && admission.ready ? 'passed' : evaluation.status === 'incomplete' ? 'incomplete' : 'failed'
   const payload = {
     schema: 'ai.ashlr.agent-board.flight-check/v2',
     receiptId: randomUUID(),
@@ -309,7 +392,7 @@ ipcMain.handle('board:saveFlightReceipt', trustedIpc(async (_event, receipt) => 
     exportedAt: new Date().toISOString(),
     appVersion: app.getVersion(),
     device: { expectedName: 'Creator Micro 2', usbDetected },
-    configuration: { registrations: shortcutRegistrations, registeredCount },
+    configuration: { registrations: shortcutRegistrations, registeredCount, admission: admission.evidence, gates: admission.gates },
     evaluation,
     rawEvents: flight.rawEvents,
     disclaimer: 'Operator-guided global-shortcut receipt; not a cryptographic device-identity attestation.',
@@ -367,7 +450,20 @@ ipcMain.handle('board:confirmAction', trustedIpc(async (_event, actionId, token)
   return executeSpec(actionId, approval.workspace, { clipboard, home: app.getPath('home') })
 }))
 
-app.whenReady().then(() => { app.setName('Ashlr Agent Board'); createWindow(); registerShortcuts() })
-app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
-app.on('will-quit', () => { flightSession.reset(); globalShortcut.unregisterAll() })
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
+app.setName('Ashlr Agent Board')
+const hasSingleInstanceLock = app.requestSingleInstanceLock()
+
+if (!hasSingleInstanceLock) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    if (!mainWindow) return
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.show()
+    mainWindow.focus()
+  })
+  app.whenReady().then(() => { createWindow(); synchronizeShortcutOwnership() })
+  app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
+  app.on('will-quit', () => { flightSession.reset(); globalShortcut.unregisterAll() })
+  app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
+}

@@ -59,7 +59,7 @@ Provider is always shown as text and an icon. New `error` and `needs_input` tran
 
 The wide Mic cap spans ACT10 and ACT11. In the daily profile, map the desired Mic shortcut to ACT10 and set ACT11 to `None`. Map both only on a disposable diagnostic layer used by the 20-signal Flight Check.
 
-The bottom-left circular surface is not a bindable key. It is the firmware-owned haptic selector for Bluetooth host profiles.
+The bottom-left circular surface is not a bindable key. A short tap changes the active layer. A three-second hold opens the firmware-owned connection selector for Bluetooth channels 1–3 and the fourth wired channel.
 
 Work Louder Input serializes the encoder slots as `[clockwise,
 counter-clockwise, press]`. That storage order is intentionally different from

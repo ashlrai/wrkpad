@@ -17,9 +17,13 @@ const CODEX_PROTOCOL_TRAFFIC_STATUSES = new Set(['recurring_unresolved_response'
 const REQUIRED_DOCTOR_CHECK_NAMES = new Set(['Creator Micro 2 USB', 'Work Louder Input'])
 const INPUT_CACHE_STATUSES = new Set(['available', 'missing', 'invalid', 'unsafe'])
 const INPUT_ENCODER_DIRECTIONS = new Set(['correct', 'reversed', 'unrecognized', 'unavailable'])
+const INPUT_INSTALLATION_STATUSES = new Set(['verified', 'missing', 'multiple_installations', 'unsafe', 'invalid_metadata', 'publisher_unrecognized', 'invalid_signature', 'gatekeeper_rejected', 'probe_unavailable'])
+const RECEIVER_RUNTIME_STATUSES = new Set(['not_running', 'exclusive', 'contended_same_build', 'contended_distinct_builds', 'unavailable'])
 const READINESS_STATUSES = new Set(['pass', 'manual', 'blocked'])
-const NATIVE_REASONS = new Set(['firmware_rpc_missing', 'recent_native_connection_observed', 'native_connection_requires_verification'])
-const ASHLR_REASONS = new Set(['required_prerequisite_missing', 'encoder_direction_reversed', 'input_profile_requires_activation', 'recent_unresolved_profile_layer_observed', 'recurring_codex_protocol_traffic', 'physical_acceptance_required'])
+const NATIVE_REASONS = new Set(['firmware_rpc_missing', 'historical_firmware_rpc_missing', 'recent_native_connection_observed', 'native_connection_requires_verification'])
+const ASHLR_REASONS = new Set(['required_prerequisite_missing', 'receiver_contended_same_build', 'receiver_contended_distinct_builds', 'receiver_probe_unavailable', 'receiver_not_running', 'encoder_direction_reversed', 'input_profile_requires_activation', 'recent_unresolved_profile_layer_observed', 'recurring_codex_protocol_traffic', 'physical_acceptance_required'])
+const boundedHash = (value) => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value) ? value : null
+const boundedVersion = (value) => typeof value === 'string' && /^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$/.test(value) ? value : null
 const boundedIsoTimestamp = (value) => {
   if (typeof value !== 'string' || value.length > 40 || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) return null
   const parsed = new Date(value)
@@ -46,8 +50,8 @@ function run(executable, args, cwd = REPO_ROOT, options = {}) {
   }
 }
 
-function parseJson(result) {
-  if (!result.ok) return null
+function parseJson(result, { allowNonZero = false } = {}) {
+  if (!result || (!result.ok && !allowNonZero) || typeof result.stdout !== 'string') return null
   try { return JSON.parse(result.stdout) } catch { return null }
 }
 
@@ -162,10 +166,49 @@ function projectAppDoctor(raw) {
     ? raw.checks.filter((item) => item.category === 'required')
     : []
   const requiredNames = new Set(required.map((item) => item?.name).filter((name) => typeof name === 'string'))
+  const rawInputInstallation = raw.inputInstallation && typeof raw.inputInstallation === 'object' ? raw.inputInstallation : null
+  const projectedInputStatus = INPUT_INSTALLATION_STATUSES.has(rawInputInstallation?.status) ? rawInputInstallation.status : 'probe_unavailable'
+  const inputVersion = boundedVersion(rawInputInstallation?.version)
+  const inputVersionRequired = ['verified', 'publisher_unrecognized', 'invalid_signature', 'gatekeeper_rejected'].includes(projectedInputStatus)
+  const inputVersionForbidden = ['missing', 'multiple_installations', 'unsafe', 'invalid_metadata', 'probe_unavailable'].includes(projectedInputStatus)
+  const inputShapeValid = !(inputVersionRequired && inputVersion === null)
+    && !(inputVersionForbidden && rawInputInstallation?.version !== null)
+  const inputInstallation = {
+    status: inputShapeValid ? projectedInputStatus : 'probe_unavailable',
+    version: inputShapeValid ? inputVersion : null,
+  }
+  const rawReceiverRuntime = raw.receiverRuntime && typeof raw.receiverRuntime === 'object' ? raw.receiverRuntime : null
+  const receiverStatus = RECEIVER_RUNTIME_STATUSES.has(rawReceiverRuntime?.status) ? rawReceiverRuntime.status : 'unavailable'
+  const receiverInstanceCount = Number.isInteger(rawReceiverRuntime?.instanceCount) && rawReceiverRuntime.instanceCount >= 0 && rawReceiverRuntime.instanceCount <= 64 ? rawReceiverRuntime.instanceCount : 0
+  const receiverBuildCount = Number.isInteger(rawReceiverRuntime?.distinctBuildCount) && rawReceiverRuntime.distinctBuildCount >= 0 && rawReceiverRuntime.distinctBuildCount <= receiverInstanceCount ? rawReceiverRuntime.distinctBuildCount : 0
+  const receiverHash = boundedHash(rawReceiverRuntime?.currentAsarSha256)
+  const candidateHash = rawReceiverRuntime?.candidateAsarSha256 === null ? null : boundedHash(rawReceiverRuntime?.candidateAsarSha256)
+  const candidateMatch = rawReceiverRuntime?.candidateMatchesCurrent === null || typeof rawReceiverRuntime?.candidateMatchesCurrent === 'boolean'
+    ? rawReceiverRuntime?.candidateMatchesCurrent
+    : undefined
+  const candidateShapeValid = candidateHash === null
+    ? rawReceiverRuntime?.candidateAsarSha256 === null && candidateMatch === null
+    : receiverHash !== null && candidateMatch === (candidateHash === receiverHash)
+  const receiverShapeValid = receiverStatus === 'exclusive'
+    ? receiverInstanceCount === 1 && receiverBuildCount === 1 && receiverHash !== null && candidateShapeValid
+    : receiverStatus === 'contended_same_build'
+      ? receiverInstanceCount >= 2 && receiverBuildCount === 1 && receiverHash !== null && candidateShapeValid
+      : receiverStatus === 'contended_distinct_builds'
+        ? receiverInstanceCount >= 2 && receiverBuildCount >= 2 && receiverHash !== null && candidateShapeValid
+        : receiverStatus === 'not_running'
+          ? receiverInstanceCount === 0 && receiverBuildCount === 0 && rawReceiverRuntime?.currentAsarSha256 === null && candidateShapeValid
+          : receiverBuildCount === 0 && rawReceiverRuntime?.currentAsarSha256 === null && candidateShapeValid
+  const receiverRuntime = {
+    status: receiverShapeValid ? receiverStatus : 'unavailable',
+    instanceCount: receiverShapeValid ? receiverInstanceCount : 0,
+    distinctBuildCount: receiverShapeValid ? receiverBuildCount : 0,
+    currentAsarSha256: receiverShapeValid ? receiverHash : null,
+  }
   const requiredReady = required.length === REQUIRED_DOCTOR_CHECK_NAMES.size
     && requiredNames.size === REQUIRED_DOCTOR_CHECK_NAMES.size
     && [...REQUIRED_DOCTOR_CHECK_NAMES].every((name) => requiredNames.has(name))
     && required.every((item) => item.ok === true)
+    && inputInstallation.status === 'verified'
   const rawRuntime = raw.inputRuntime && typeof raw.inputRuntime === 'object' ? raw.inputRuntime : null
   const runtimeStatus = rawRuntime && INPUT_RUNTIME_STATUSES.has(rawRuntime.status) ? rawRuntime.status : rawRuntime ? 'invalid' : null
   const runtimeProfileIndex = Number.isInteger(rawRuntime?.profileIndex) && rawRuntime.profileIndex >= 0 && rawRuntime.profileIndex <= 31 ? rawRuntime.profileIndex : null
@@ -190,8 +233,18 @@ function projectAppDoctor(raw) {
   const dailyProfileMatch = rawProfile?.dailyProfileMatch === true
   const dailyLayerMatch = rawProfile?.dailyLayerMatch === true
   const dailyProfileReady = cacheStatus === 'available' && dailyProfileMatch && dailyLayerMatch && encoderDirection === 'correct'
-  const nativeStatus = READINESS_STATUSES.has(raw.readiness?.codexNative?.status) ? raw.readiness.codexNative.status : 'unknown'
-  const nativeReason = NATIVE_REASONS.has(raw.readiness?.codexNative?.reason) ? raw.readiness.codexNative.reason : 'native_readiness_unavailable'
+  const projectedNativeStatus = READINESS_STATUSES.has(raw.readiness?.codexNative?.status) ? raw.readiness.codexNative.status : 'unknown'
+  const projectedNativeReason = NATIVE_REASONS.has(raw.readiness?.codexNative?.reason) ? raw.readiness.codexNative.reason : 'native_readiness_unavailable'
+  const nativeFresh = raw.readiness?.codexNative?.fresh === true
+  const nativeShapeValid = projectedNativeStatus === 'blocked' && projectedNativeReason === 'firmware_rpc_missing'
+    ? nativeFresh
+    : projectedNativeStatus === 'pass' && projectedNativeReason === 'recent_native_connection_observed'
+      ? nativeFresh
+      : projectedNativeStatus === 'manual' && projectedNativeReason === 'historical_firmware_rpc_missing'
+        ? !nativeFresh
+        : projectedNativeStatus === 'manual' && projectedNativeReason === 'native_connection_requires_verification'
+  const nativeStatus = nativeShapeValid ? projectedNativeStatus : 'unknown'
+  const nativeReason = nativeShapeValid ? projectedNativeReason : 'native_readiness_unavailable'
   const ashlrStatus = READINESS_STATUSES.has(raw.readiness?.ashlrLayer?.status) ? raw.readiness.ashlrLayer.status : 'manual'
   const ashlrReason = ASHLR_REASONS.has(raw.readiness?.ashlrLayer?.reason) ? raw.readiness.ashlrLayer.reason : 'physical_acceptance_required'
   return {
@@ -215,9 +268,12 @@ function projectAppDoctor(raw) {
         fresh: projectedCodexTrafficStatus === 'recurring_unresolved_response' && rawCodexTraffic.fresh === true,
       } : null,
     } : null,
+    inputInstallation,
+    receiverRuntime,
     requiredReady,
     nativeStatus,
     nativeReason,
+    nativeFresh: nativeShapeValid && nativeFresh,
     ashlrStatus,
     ashlrReason,
   }
@@ -246,7 +302,7 @@ export function buildPreflight({
   source = sourceSnapshot(),
   stable = resolveStableWrkpad(),
   runCommand = run,
-  appDoctorRaw = parseJson(runCommand(process.execPath, [APP_DOCTOR, '--json'])),
+  appDoctorRaw = parseJson(runCommand(process.execPath, [APP_DOCTOR, '--json']), { allowNonZero: true }),
   developmentBinary,
 } = {}) {
   if (!ROUTES.has(route)) throw new Error(`route must be one of: ${[...ROUTES].join(', ')}`)
@@ -322,9 +378,22 @@ export function buildPreflight({
     ),
   ]
   const ashlrPrerequisitesReady = appDoctor?.requiredReady === true
+  const inputInstallationReady = appDoctor?.inputInstallation?.status === 'verified'
+  const ashlrReceiverReady = appDoctor?.receiverRuntime?.status === 'exclusive'
   let ashlrProfileObserved = false
   let ashlrProfileReady = false
   let ashlrInputOnlyWindowNeeded = false
+
+  checks.push(check(
+    'input_installation_integrity',
+    inputInstallationReady ? 'pass' : 'blocked',
+    `status=${appDoctor?.inputInstallation?.status ?? 'probe_unavailable'}; version=${appDoctor?.inputInstallation?.version ?? 'unavailable'}`,
+    inputInstallationReady
+      ? 'the exact vendor publisher, bundle signature, and Gatekeeper assessment passed'
+      : 'presence alone is insufficient; restore one official signed Work Louder Input installation before configuration or firmware work',
+    inputInstallationReady ? 'agent' : 'human',
+    inputInstallationReady ? 'read' : 'local_write',
+  ))
 
   if (route === 'ashlr_layer') {
     const profile = appDoctor?.inputProfile
@@ -335,6 +404,16 @@ export function buildPreflight({
     const codexTraffic = runtime?.codexProtocolTraffic
     ashlrInputOnlyWindowNeeded = codexTraffic?.status === 'recurring_unresolved_response' && codexTraffic.fresh === true
     const codexTrafficUnavailable = ['log_missing', 'log_unsafe', 'log_unavailable', 'invalid'].includes(codexTraffic?.status)
+    checks.push(check(
+      'receiver_ownership',
+      ashlrReceiverReady ? 'pass' : 'blocked',
+      `status=${appDoctor?.receiverRuntime?.status ?? 'unavailable'}; instances=${appDoctor?.receiverRuntime?.instanceCount ?? 0}; builds=${appDoctor?.receiverRuntime?.distinctBuildCount ?? 0}`,
+      ashlrReceiverReady
+        ? 'one hashed Agent Board receiver may own the global shortcuts'
+        : 'shortcut ownership fails closed; fully quit every Agent Board copy manually, then reopen one reviewed build',
+      ashlrReceiverReady ? 'agent' : 'human',
+      ashlrReceiverReady ? 'read' : 'local_write',
+    ))
     checks.push(check(
       'input_profile',
       profile?.dailyProfileReady ? 'pass' : profile?.encoderDirection === 'reversed' ? 'blocked' : 'warn',
@@ -373,15 +452,20 @@ export function buildPreflight({
     ))
   } else {
     const firmwareMissing = appDoctor?.nativeStatus === 'blocked'
+      && appDoctor?.nativeReason === 'firmware_rpc_missing'
+      && appDoctor?.nativeFresh === true
+    const historicalFirmwareEvidence = appDoctor?.nativeReason === 'historical_firmware_rpc_missing'
     checks.push(check(
       'route_readiness',
       firmwareMissing ? 'blocked' : 'manual',
       `Codex Native: ${appDoctor?.nativeReason ?? 'native connection requires manual verification'}`,
       firmwareMissing
-        ? 'the current firmware lacks the mandatory native RPC; only a guarded vendor firmware qualification can change this state'
-        : 'Codex Settings must show a native connection and physical controls must be accepted',
+        ? 'a recent Codex receipt found the mandatory native RPC unavailable; only a guarded vendor firmware qualification can change that observed state'
+        : historicalFirmwareEvidence
+          ? 'the RPC failure evidence is historical; re-run the explicit native connection check before considering firmware'
+          : 'Codex Settings must show a native connection and physical controls must be accepted',
       firmwareMissing ? 'human' : 'human',
-      firmwareMissing ? 'firmware' : 'device_write',
+      firmwareMissing ? 'firmware' : 'local_write',
     ))
   }
 
@@ -407,8 +491,20 @@ export function buildPreflight({
       { executable: 'cargo', args: ['build', '--release', '--locked'], cwd: '$REPO_ROOT' },
     ))
   }
-  nextSteps.push(route === 'ashlr_layer'
-    ? !ashlrPrerequisitesReady
+  nextSteps.push(!inputInstallationReady
+    ? nextStep(
+      'restore_signed_input', 'human', 'local_write', ['download the official Work Louder Input release', 'verify there is one intended installation', 'preserve profile backups before replacement'],
+      'the desktop doctor verifies the exact vendor publisher, signature integrity, and Gatekeeper assessment',
+      'profile activation, device synchronization, firmware compatibility, shortcut ownership, Input Monitoring, or physical acceptance',
+    )
+    : route === 'ashlr_layer'
+      ? !ashlrReceiverReady
+        ? nextStep(
+          'reconcile_agent_board_receivers', 'human', 'local_write', ['save current work', 'fully quit every Agent Board copy manually', 'reopen one reviewed exact build'],
+          'one hashed Agent Board receiver is available to own the 20 shortcuts',
+          'Input Monitoring, profile activation, device synchronization, physical acceptance, native Codex RGB, or release readiness',
+        )
+        : !ashlrPrerequisitesReady
       ? nextStep(
         'resolve_ashlr_prerequisites', 'human', 'local_write', ['connect the Creator Micro 2 over USB', 'install the signed Work Louder Input app', 'rerun the read-only desktop doctor'],
         'the bounded desktop prerequisite probes are available and passing',
@@ -438,11 +534,17 @@ export function buildPreflight({
               'the named daily shortcut route emitted all expected physical gestures',
               'native Codex RGB, firmware compatibility, provider authority, or consequential-action approval',
             )
-    : nextStep(
-      'qualify_native_firmware', 'human', 'firmware', ['vendor-matched stable image', 'recorded checksum', 'stable power', 'recovery plan', 'Codex, Agent Board, and competing HID controllers quit; signed Work Louder Input is sole owner'],
-      'the exact firmware and Codex build complete rgbcfg then thstatus and physical acceptance',
-      'cross-provider Ashlr Layer readiness or general hardware compatibility',
-    ))
+      : appDoctor?.nativeStatus === 'blocked' && appDoctor?.nativeReason === 'firmware_rpc_missing' && appDoctor?.nativeFresh === true
+        ? nextStep(
+          'qualify_native_firmware', 'human', 'firmware', ['reviewed vendor-matched image', 'recorded checksum', 'stable power', 'recovery plan', 'Codex, Agent Board, and competing HID controllers quit; signed Work Louder Input is sole owner'],
+          'the exact firmware and Codex build complete rgbcfg then thstatus and physical acceptance',
+          'cross-provider Ashlr Layer readiness or general hardware compatibility',
+        )
+        : nextStep(
+          'verify_native_connection', 'human', 'local_write', ['signed Work Louder Input verified', 'Work Louder Input and Agent Board fully quit', 'Codex opened alone'],
+          'a fresh Codex Settings and physical-control receipt replaces historical or missing native evidence',
+          'firmware compatibility, Ashlr Layer readiness, provider authority, or release readiness',
+        ))
 
   const overall = checks.some((item) => item.status === 'blocked')
     ? 'blocked'

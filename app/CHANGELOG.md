@@ -36,7 +36,12 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 - A fail-closed Input profile transformer with verified clockwise,
   counterclockwise, press encoder serialization.
 - A timed zero-signal recovery panel that distinguishes the rotary dial,
-  joystick, and firmware-owned Bluetooth host selector.
+  joystick, and firmware-owned layer/connection touch selector.
+- Sanitized Work Louder Input integrity and Agent Board receiver diagnostics;
+  Flight Check fails closed until the vendor app verifies and one hashed
+  receiver owns the shortcuts.
+- A single-instance receiver policy that focuses an existing copy and exposes
+  manual recovery when legacy and current builds contend without killing either.
 - A bounded, read-only Input cache receipt that identifies the active profile,
   layer, and known reversed encoder mapping without exposing macros or paths.
 - Privacy-safe detection of recurring Codex-protocol responses reaching Input,
@@ -66,6 +71,12 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 - Refuse to arm Flight Check when the active Input receipt has a known reversed
   encoder, reserve Setup readiness for the exact corrected profile receipt, and
   keep daily and disposable diagnostic acceptance gates distinct.
+- Revalidate USB, signed Input, exact profile/layer, exclusive receiver, and all
+  20 shortcut registrations in the trusted main process before Flight Check
+  start, restart, or a passing receipt export.
+- Cache only identity-stable bounded receiver hashes and the short-lived Input
+  integrity result so recurring status refreshes do not stall physical control
+  handling; development builds now fail closed around packaged peers.
 
 ### Security
 

@@ -64,19 +64,35 @@ proof of source identity, review, provenance, signing, or release.
 | Codex hook trust and disposable provider receipt | No | Yes | [Hook runtime verification](hook-setup.md#runtime-verification) |
 | Input Monitoring or Input profile activation | No | Yes | [Agent Board setup](../app/docs/setup.md) |
 | Physical Flight Check | Agent may arm/suppress actions | Human moves every real control | [Flight Check](../app/docs/setup.md#run-flight-check) |
-| Firmware, bootloader, HID, keymap, or device filesystem | No | Foreground human qualification | [Firmware qualification](../app/docs/setup.md#3-install-work-louder-input) |
+| Full-quit/relaunch of Agent Board or Input | No automatic process action | Human uses Command-Q and reopens one intended build | [Troubleshooting](../app/docs/troubleshooting.md#multiple-agent-board-receivers-are-running) |
+| Firmware, bootloader, HID, keymap, or device filesystem | No | Foreground human qualification after verified Input | [Firmware qualification](../app/docs/setup.md#3-verify-work-louder-input) |
 | Push, merge, release, deploy, publish, spend, credentials, provider approval | Only when explicitly requested | Explicit authorization and reconciliation | Project/release policy |
 
 ## Daily cross-provider sequence
 
 1. Start with `ashlr_layer` preflight and read every `blocked` or `manual` item.
-2. Confirm the stable binary is a user/system install, not a build-tree path.
-3. Inspect service and hook status. Use guarded plan/apply only when the user
+2. For a Creator Micro 2 Pro, follow the current Codex Micro guidance: ask the
+   operator to open the connection selector, choose the fourth **WIRED** channel,
+   and confirm white underglow. Do not infer that cable insertion left Bluetooth;
+   in that state USB may only charge. Treat white as visual mode evidence only.
+   A connected Bluetooth keyboard or Apple trackpad is unrelated and may remain
+   connected.
+3. Confirm the stable binary is a user/system install, not a build-tree path.
+   Require Setup to report **One receiver · shortcut ownership available**. If
+   it does not, ask the human to Command-Q every Agent Board copy and reopen one
+   intended build. Never kill a process automatically; receiver exclusivity
+   does not prove shortcut or physical receipt.
+4. Require Work Louder Input to report **publisher, signature, and Gatekeeper
+   verified**. For any sanitized failure, stop profile and firmware work and
+   guide the human through reinstalling Input from the official Work Louder
+   page. Do not expose raw signing output or local paths, bypass Gatekeeper, or
+   delete an app.
+5. Inspect service and hook status. Use guarded plan/apply only when the user
    requested configuration changes.
-4. Have the operator trust only the exact wrkpad Codex hooks in `/hooks` and run
+6. Have the operator trust only the exact wrkpad Codex hooks in `/hooks` and run
    one disposable Codex and Claude Code receipt. Claude Desktop chats do not
    expose the Claude Code hook lifecycle.
-5. Have the operator use Input's **Set as current profile** action for `Ashlr
+7. Have the operator use Input's **Set as current profile** action for `Ashlr
    Agent Board Corrected`, verify `Ashlr Daily`, and grant Input Monitoring.
    Inspect the read-only `input_profile` receipt, but do not treat it as board
    synchronization. If `input_runtime` reports a recent unresolved-index event,
@@ -95,12 +111,12 @@ proof of source identity, review, provenance, signing, or release.
    and the receipt does not prove import, current-profile selection, device
    synchronization, permission, or physical acceptance. On the next launch,
    resume the numbered checklist in Setup.
-6. Arm Daily Flight Check. Wait for the screen to say actions are suppressed,
+8. Arm Daily Flight Check. Wait for the screen to say actions are suppressed,
    then have the operator complete all 19 gestures on the physical board.
-7. Operate from Agent Board. Slot selection may foreground Codex Desktop or
+9. Operate from Agent Board. Slot selection may foreground Codex Desktop or
    cmux; it does not prove exact Codex task or cmux pane focus and sends no
    prompt or terminal input.
-8. Use Ashlr Hub status/briefs as read-only evidence. Fleet pause/resume/stop
+10. Use Ashlr Hub status/briefs as read-only evidence. Fleet pause/resume/stop
    retains confirmation or hold; inbox decisions and production actions remain
    outside this daily shortcut path.
 
@@ -110,6 +126,12 @@ When Codex discovers `303A:8298` but preflight reports
 `firmware_rpc_missing`, reconnection, Bluetooth changes, Input Monitoring, and
 quitting Logitech do not add the missing RPC. The operator must decide whether
 to keep the working shared route or run the separate firmware qualification.
+
+The desk observation is firmware `v0.1.50`, which is older than the reviewed
+`v0.6.2` vendor candidate. An agent must not turn that version comparison into
+an update instruction while Input is unverified. First require the sanitized
+publisher/signature/Gatekeeper gate, then preserve the backup and exact human
+approval boundary below.
 
 An agent may prepare the vendor release identity, checksum, backups, and
 post-flash test plan. It must stop before quitting applications, entering a
@@ -135,6 +157,10 @@ Physical receipt: <accepted, failed, or not performed>
 Public release: <artifact/tag or not performed>
 Remaining human gates: <permission, firmware, trust, physical, approval>
 Rollback: <artifact or procedure, or explicitly unavailable>
+Receiver runtime: <exclusive, contended same build, contended distinct builds,
+or unavailable; never include process IDs, command lines, or local paths>
+Input installation: <verified version or sanitized failure; never include raw
+signature output, publisher identifiers, or local paths>
 Input recovery: <not needed, artifact filename plus checksum saved in a private
 local handoff, imported, or physically accepted; never infer a later stage>
 ```

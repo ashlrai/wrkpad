@@ -16,8 +16,13 @@ const appDoctor = {
     { name: 'Creator Micro 2 USB', category: 'required', ok: true },
     { name: 'Work Louder Input', category: 'required', ok: true },
   ],
+  inputInstallation: { status: 'verified', version: '0.18.4' },
+  receiverRuntime: {
+    status: 'exclusive', instanceCount: 1, distinctBuildCount: 1,
+    currentAsarSha256: 'b'.repeat(64), candidateAsarSha256: null, candidateMatchesCurrent: null,
+  },
   readiness: {
-    codexNative: { status: 'blocked', reason: 'firmware_rpc_missing' },
+    codexNative: { status: 'blocked', reason: 'firmware_rpc_missing', fresh: true },
     ashlrLayer: { status: 'manual', reason: 'physical_acceptance_required' },
   },
   inputProfile: {
@@ -61,7 +66,7 @@ test('Codex Native remains blocked when the native firmware RPC is missing', () 
   assert.deepEqual(result.checks.find((item) => item.id === 'route_readiness'), {
     id: 'route_readiness', status: 'blocked', actor: 'human', safety: 'firmware',
     evidence: 'Codex Native: firmware_rpc_missing',
-    reason: 'the current firmware lacks the mandatory native RPC; only a guarded vendor firmware qualification can change this state',
+    reason: 'a recent Codex receipt found the mandatory native RPC unavailable; only a guarded vendor firmware qualification can change that observed state',
   })
   const firmwareStep = result.next_steps.find((item) => item.id === 'qualify_native_firmware')
   assert.equal(firmwareStep.command, undefined)
@@ -99,6 +104,131 @@ test('Ashlr Layer blocks the known reversed dial mapping', () => {
   assert.equal(result.checks.find((item) => item.id === 'input_profile').reason, 'the read-only cache identifies the known reversed dial mapping')
   assert.ok(result.next_steps.some((item) => item.id === 'reconcile_input_profile'))
   assert.equal(result.next_steps.some((item) => item.id === 'complete_ashlr_flight_check'), false)
+})
+
+test('Ashlr Layer blocks hostile Input integrity and never exposes raw diagnostic fields', () => {
+  const result = buildPreflight({
+    route: 'ashlr_layer', source, stable: null,
+    appDoctorRaw: {
+      ...appDoctor,
+      inputInstallation: { status: 'invalid_signature', version: '0.18.4', path: '/Users/example/private', raw: 'secret' },
+      checks: appDoctor.checks.map((item) => item.name === 'Work Louder Input' ? { ...item, ok: false } : item),
+      readiness: { ...appDoctor.readiness, ashlrLayer: { status: 'blocked', reason: 'input_installation_unverified' } },
+    },
+    developmentBinary: '/missing/development/binary', runCommand: commandFixture,
+    observedAt: '2026-09-01T20:00:00.000Z',
+  })
+
+  assert.equal(result.checks.find((item) => item.id === 'input_installation_integrity').status, 'blocked')
+  assert.ok(result.next_steps.some((item) => item.id === 'restore_signed_input'))
+  assert.equal(result.next_steps.some((item) => item.id === 'reconcile_input_profile'), false)
+  assert.doesNotMatch(JSON.stringify(result), /Users|private|secret/)
+})
+
+test('Codex Native restores signed Input before offering firmware qualification', () => {
+  const result = buildPreflight({
+    route: 'codex_native', source, stable: null,
+    appDoctorRaw: {
+      ...appDoctor,
+      inputInstallation: { status: 'invalid_signature', version: '0.18.4', raw: '/Users/example/private' },
+      checks: appDoctor.checks.map((item) => item.name === 'Work Louder Input' ? { ...item, ok: false } : item),
+    },
+    developmentBinary: '/missing/development/binary', runCommand: commandFixture,
+    observedAt: '2026-09-01T20:00:00.000Z',
+  })
+
+  assert.equal(result.checks.find((item) => item.id === 'input_installation_integrity').status, 'blocked')
+  assert.ok(result.next_steps.some((item) => item.id === 'restore_signed_input'))
+  assert.equal(result.next_steps.some((item) => item.id === 'qualify_native_firmware'), false)
+  assert.doesNotMatch(JSON.stringify(result), /Users|private/)
+})
+
+test('historical native RPC evidence is advisory and requires a fresh native check', () => {
+  const result = buildPreflight({
+    route: 'codex_native', source, stable: null,
+    appDoctorRaw: {
+      ...appDoctor,
+      readiness: {
+        ...appDoctor.readiness,
+        codexNative: { status: 'manual', reason: 'historical_firmware_rpc_missing', fresh: false },
+      },
+    },
+    developmentBinary: '/missing/development/binary', runCommand: commandFixture,
+    observedAt: '2026-09-01T20:00:00.000Z',
+  })
+
+  assert.equal(result.checks.find((item) => item.id === 'route_readiness').status, 'manual')
+  assert.equal(result.checks.find((item) => item.id === 'route_readiness').safety, 'local_write')
+  assert.match(result.checks.find((item) => item.id === 'route_readiness').reason, /historical/)
+  assert.ok(result.next_steps.some((item) => item.id === 'verify_native_connection'))
+  assert.equal(result.next_steps.some((item) => item.id === 'qualify_native_firmware'), false)
+})
+
+test('hostile Input versions and receiver shapes fail closed', () => {
+  for (const hostile of [
+    { inputInstallation: { status: 'verified', version: null } },
+    { inputInstallation: { status: 'missing', version: '0.18.4' } },
+    { receiverRuntime: { status: 'exclusive', instanceCount: 1, distinctBuildCount: 1, currentAsarSha256: 'b'.repeat(64), candidateAsarSha256: 'c'.repeat(64), candidateMatchesCurrent: true } },
+    { receiverRuntime: { status: 'contended_distinct_builds', instanceCount: 2, distinctBuildCount: 3, currentAsarSha256: 'b'.repeat(64), candidateAsarSha256: null, candidateMatchesCurrent: null } },
+  ]) {
+    const result = buildPreflight({
+      route: 'ashlr_layer', source, stable: null,
+      appDoctorRaw: { ...appDoctor, ...hostile },
+      developmentBinary: '/missing/development/binary', runCommand: commandFixture,
+      observedAt: '2026-09-01T20:00:00.000Z',
+    })
+    if (hostile.inputInstallation) {
+      assert.equal(result.checks.find((item) => item.id === 'input_installation_integrity').status, 'blocked')
+    } else {
+      assert.equal(result.checks.find((item) => item.id === 'receiver_ownership').evidence, 'status=unavailable; instances=0; builds=0')
+    }
+  }
+})
+
+test('agent preflight projects a valid blocked doctor receipt from its nonzero exit', () => {
+  const blockedDoctor = {
+    ...appDoctor,
+    inputInstallation: { status: 'invalid_signature', version: '0.18.4' },
+    checks: appDoctor.checks.map((item) => item.name === 'Work Louder Input' ? { ...item, ok: false } : item),
+    readiness: { ...appDoctor.readiness, ashlrLayer: { status: 'blocked', reason: 'required_prerequisite_missing' } },
+  }
+  const result = buildPreflight({
+    route: 'ashlr_layer', source, stable: null,
+    developmentBinary: '/missing/development/binary',
+    runCommand(executable, args) {
+      if (executable === process.execPath && args.some((arg) => arg.endsWith('doctor.mjs'))) {
+        return { ok: false, stdout: JSON.stringify(blockedDoctor), code: 1 }
+      }
+      return commandFixture(executable, args)
+    },
+    observedAt: '2026-09-01T20:00:00.000Z',
+  })
+
+  assert.equal(result.checks.find((item) => item.id === 'agent_board_doctor').status, 'blocked')
+  assert.equal(result.checks.find((item) => item.id === 'input_installation_integrity').evidence, 'status=invalid_signature; version=0.18.4')
+  assert.ok(result.next_steps.some((item) => item.id === 'restore_signed_input'))
+})
+
+test('Ashlr Layer blocks multiple receiver builds before physical acceptance', () => {
+  const result = buildPreflight({
+    route: 'ashlr_layer', source, stable: null,
+    appDoctorRaw: {
+      ...appDoctor,
+      receiverRuntime: {
+        status: 'contended_distinct_builds', instanceCount: 2, distinctBuildCount: 2,
+        currentAsarSha256: 'b'.repeat(64), candidateAsarSha256: null, candidateMatchesCurrent: null,
+        privatePath: '/Users/example/private',
+      },
+      readiness: { ...appDoctor.readiness, ashlrLayer: { status: 'blocked', reason: 'receiver_contention' } },
+    },
+    developmentBinary: '/missing/development/binary', runCommand: commandFixture,
+    observedAt: '2026-09-01T20:00:00.000Z',
+  })
+
+  assert.equal(result.checks.find((item) => item.id === 'receiver_ownership').status, 'blocked')
+  assert.ok(result.next_steps.some((item) => item.id === 'reconcile_agent_board_receivers'))
+  assert.equal(result.next_steps.some((item) => item.id === 'complete_ashlr_flight_check'), false)
+  assert.doesNotMatch(JSON.stringify(result), /Users|private/)
 })
 
 test('Ashlr Layer never recommends a device write when desktop prerequisites are missing', () => {

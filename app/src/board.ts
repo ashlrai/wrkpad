@@ -72,6 +72,7 @@ export interface WorkspaceSnapshot {
 export interface SystemStatus {
   boardConnected: boolean
   inputInstalled: boolean
+  inputInstallation: InputInstallationStatus
   inputProfile: InputProfileStatus
   inputRuntime: InputRuntimeStatus
   inputMonitoring: 'unverified'
@@ -85,6 +86,21 @@ export interface SystemStatus {
   shortcutRegistrations: ShortcutRegistration[]
   workspaceSnapshot: WorkspaceSnapshot | null
   receiverIdentity: ReceiverIdentity | null
+  receiverRuntime: ReceiverRuntimeStatus
+}
+
+export interface InputInstallationStatus {
+  status: 'verified' | 'missing' | 'multiple_installations' | 'unsafe' | 'invalid_metadata' | 'publisher_unrecognized' | 'invalid_signature' | 'gatekeeper_rejected' | 'probe_unavailable'
+  version: string | null
+}
+
+export interface ReceiverRuntimeStatus {
+  status: 'not_running' | 'exclusive' | 'contended_same_build' | 'contended_distinct_builds' | 'unavailable'
+  instanceCount: number
+  distinctBuildCount: number
+  currentAsarSha256: string | null
+  candidateAsarSha256: string | null
+  candidateMatchesCurrent: boolean | null
 }
 
 export interface InputProfileStatus {
@@ -110,7 +126,7 @@ export interface InputRuntimeStatus {
 export interface ReceiverIdentity {
   appVersion: string
   packaged: boolean
-  path: string
+  appAsarSha256?: string | null
 }
 
 export const correctedInputProfileObservedForVariant = (profile: InputProfileStatus, variant: 'daily' | 'diagnostic'): boolean =>
@@ -273,7 +289,7 @@ export const hardware = {
   planarJoysticks: 1,
   bindableSignals: 20,
   firmwareControls: [
-    { id: 'touchProfile', label: 'Bluetooth host profile', row: 4, column: 1, bindable: false, leds: 3 },
+    { id: 'touchProfile', label: 'Layer and connection selector', row: 4, column: 1, bindable: false, leds: 3 },
   ],
   controls: [
     { id: 'joyUp', hardwareId: 'JOY_UP', kind: 'joystick', row: 1, column: 1 },

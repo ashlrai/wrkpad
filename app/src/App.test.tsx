@@ -10,6 +10,18 @@ const correctedInputProfile = {
   encoderDirection: 'correct' as const,
 }
 
+const trustedHardwareDiagnostics = {
+  inputInstallation: { status: 'verified' as const, version: '0.18.4' },
+  receiverRuntime: {
+    status: 'exclusive' as const,
+    instanceCount: 1,
+    distinctBuildCount: 1,
+    currentAsarSha256: 'a'.repeat(64),
+    candidateAsarSha256: null,
+    candidateMatchesCurrent: null,
+  },
+}
+
 const initialUnavailableMission = () => ({
   schemaVersion: 1 as const,
   observedAt: new Date().toISOString(),
@@ -152,6 +164,7 @@ describe('operator interface', () => {
     window.agentBoard = {
       getStatus: vi.fn().mockResolvedValue({
         boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
+        ...trustedHardwareDiagnostics,
         codex: true, claude: true, ashlr: true, workspace: '/tmp', shortcutCount: 20,
         shortcutRegistrations: [], workspaceSnapshot: null,
       }),
@@ -177,14 +190,14 @@ describe('operator interface', () => {
     expect(screen.getByText(/requires Ashlr Agent Board Corrected, Ashlr Daily, and a corrected encoder receipt/i)).toBeTruthy()
   })
 
-  it('keeps a cache match observational and exposes the exact local receiver build', async () => {
-    const executablePath = '/Applications/Ashlr Agent Board.app/Contents/MacOS/Ashlr Agent Board'
+  it('keeps a cache match observational and exposes sanitized receiver provenance', async () => {
     window.agentBoard = {
       getStatus: vi.fn().mockResolvedValue({
         boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
         inputProfile: correctedInputProfile,
         inputRuntime: { status: 'not_observed', profileIndex: null, layerIndex: null, observedAt: null, fresh: false },
-        receiverIdentity: { appVersion: '0.1.0', packaged: true, path: executablePath },
+        receiverIdentity: { appVersion: '0.1.0', packaged: true, appAsarSha256: 'a'.repeat(64) },
+        receiverRuntime: { status: 'exclusive', instanceCount: 1, distinctBuildCount: 1, currentAsarSha256: 'a'.repeat(64), candidateAsarSha256: null, candidateMatchesCurrent: null },
         codex: true, claude: true, ashlr: true, boardRoute: 'ashlr_layer', workspace: '/tmp', shortcutCount: 20,
         shortcutRegistrations: [], workspaceSnapshot: null,
       }),
@@ -200,8 +213,8 @@ describe('operator interface', () => {
     expect(cacheState.closest('article')?.classList.contains('ready')).toBe(false)
     expect(cacheState.textContent).toContain('device sync unproven')
     expect(screen.queryByText('Set the live keyboard profile')).toBeNull()
-    expect(screen.getByText(executablePath)).toBeTruthy()
-    expect(screen.getByText(/identifies the receiver process only/i)).toBeTruthy()
+    expect(screen.getByText(/app\.asar aaaaaaaaaaaa/i)).toBeTruthy()
+    expect(screen.getByText(/only observed Agent Board receiver/i)).toBeTruthy()
   })
 
   it('resumes a private recovery handoff with exact accessible operator actions', async () => {
@@ -225,7 +238,7 @@ describe('operator interface', () => {
         boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
         inputProfile: correctedInputProfile,
         inputRuntime: { status: 'not_observed', profileIndex: null, layerIndex: null, observedAt: null, fresh: false },
-        receiverIdentity: { appVersion: '0.1.0', packaged: true, path: '/Applications/Ashlr Agent Board.app' },
+        receiverIdentity: { appVersion: '0.1.0', packaged: true },
         codex: true, claude: true, ashlr: true, boardRoute: 'ashlr_layer', workspace: '/tmp', shortcutCount: 20,
         shortcutRegistrations: [], workspaceSnapshot: null,
       }),
@@ -258,7 +271,7 @@ describe('operator interface', () => {
 
     cleanup()
     render(<App />)
-    await screen.findByText('USB linked')
+    await screen.findByText('USB present')
     await waitFor(() => expect(getRecoveryGuide).toHaveBeenCalledTimes(3))
     expect(screen.queryByRole('heading', { name: 'Resume the saved recovery handoff.' })).toBeNull()
   })
@@ -293,6 +306,7 @@ describe('operator interface', () => {
     window.agentBoard = {
       getStatus: vi.fn().mockResolvedValue({
         boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
+        ...trustedHardwareDiagnostics,
         inputProfile: correctedInputProfile,
         inputRuntime: { status: 'unresolved_profile_layer', profileIndex: 2, layerIndex: 1, observedAt: '2026-09-01T19:33:00.000Z', fresh: true },
         receiverIdentity: null, codex: true, claude: true, ashlr: true, boardRoute: 'ashlr_layer', workspace: '/tmp', shortcutCount: 20,
@@ -354,6 +368,7 @@ describe('operator interface', () => {
     window.agentBoard = {
       getStatus: vi.fn().mockResolvedValue({
         boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
+        ...trustedHardwareDiagnostics,
         inputProfile: { cacheStatus: 'available', activeProfile: 'Ashlr Agent Board', activeLayer: 'Ashlr Daily', encoderDirection: 'reversed' },
         codex: true, claude: true, ashlr: true, boardRoute: 'ashlr_layer', workspace: '/tmp', shortcutCount: 20,
         shortcutRegistrations: [], workspaceSnapshot: null,
@@ -404,6 +419,7 @@ describe('operator interface', () => {
     window.agentBoard = {
       getStatus: vi.fn().mockResolvedValue({
         boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
+        ...trustedHardwareDiagnostics,
         inputProfile: correctedInputProfile,
         inputRuntime: {
           status: 'not_observed', profileIndex: null, layerIndex: null, observedAt: null, fresh: false,
@@ -423,7 +439,7 @@ describe('operator interface', () => {
     } as unknown as NonNullable<typeof window.agentBoard>
 
     render(<App />)
-    expect(await screen.findByText('USB linked')).toBeTruthy()
+    expect(await screen.findByText('USB present')).toBeTruthy()
     fireEvent.click(screen.getByRole('tab', { name: 'Flight Check' }))
     vi.useFakeTimers()
     vi.setSystemTime(new Date(startedAt))
@@ -442,7 +458,7 @@ describe('operator interface', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Open recovery checklist' }))
       await Promise.resolve()
     })
-    expect(setFlightCheck.mock.calls).toEqual([[true], [false]])
+    expect(setFlightCheck.mock.calls).toEqual([[true, 'daily'], [false, 'daily']])
     expect(screen.getByRole('heading', { name: 'Make every layer observable.' })).toBeTruthy()
   })
 
@@ -466,6 +482,7 @@ describe('operator interface', () => {
     window.agentBoard = {
       getStatus: vi.fn().mockResolvedValue({
         boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
+        ...trustedHardwareDiagnostics,
         inputProfile: correctedInputProfile,
         codex: true, claude: true, ashlr: true, boardRoute: 'ashlr_layer', workspace: '/tmp', shortcutCount: 20,
         shortcutRegistrations: [], workspaceSnapshot: null,
@@ -580,6 +597,7 @@ describe('operator interface', () => {
     window.agentBoard = {
       getStatus: vi.fn().mockResolvedValue({
         boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
+        ...trustedHardwareDiagnostics,
         inputProfile: correctedInputProfile,
         codex: true, claude: true, ashlr: true, boardRoute: 'ashlr_layer', workspace: '/tmp', shortcutCount: 20,
         shortcutRegistrations: [], workspaceSnapshot: null,
@@ -619,6 +637,7 @@ describe('operator interface', () => {
     window.agentBoard = {
       getStatus: vi.fn().mockResolvedValue({
         boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
+        ...trustedHardwareDiagnostics,
         inputProfile: {
           cacheStatus: 'available',
           activeProfile: 'Ashlr Flight Check Corrected - diagnostic',
@@ -640,7 +659,7 @@ describe('operator interface', () => {
     expect((daily as HTMLButtonElement).disabled).toBe(true)
     expect((diagnostic as HTMLButtonElement).disabled).toBe(false)
     fireEvent.click(diagnostic)
-    await waitFor(() => expect(setFlightCheck).toHaveBeenCalledWith(true))
+    await waitFor(() => expect(setFlightCheck).toHaveBeenCalledWith(true, 'diagnostic'))
   })
 
   it('labels tool presence, observer evidence, and desktop endpoints precisely', async () => {
@@ -671,6 +690,7 @@ describe('operator interface', () => {
     window.agentBoard = {
       getStatus: vi.fn().mockResolvedValue({
         boardConnected: false, inputInstalled: true, inputMonitoring: 'unverified',
+        ...trustedHardwareDiagnostics,
         inputProfile: correctedInputProfile,
         codex: true, claude: true, ashlr: false, boardRoute: 'ashlr_layer', workspace: '/tmp', shortcutCount: 19,
         shortcutRegistrations: [], workspaceSnapshot: null,
@@ -689,7 +709,108 @@ describe('operator interface', () => {
     await screen.findByText('Complete preflight first')
     expect((screen.getByRole('button', { name: /Daily profile/i }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByRole('button', { name: /20-signal diagnostic/i }) as HTMLButtonElement).disabled).toBe(true)
-    expect(screen.getByText(/USB must be linked and all 20 desktop endpoints/i)).toBeTruthy()
+    expect(screen.getByText(/USB must be present and all 20 desktop endpoints/i)).toBeTruthy()
+  })
+
+  it('blocks Flight Check when the vendor Input installation fails integrity verification', async () => {
+    window.agentBoard = {
+      getStatus: vi.fn().mockResolvedValue({
+        boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
+        inputInstallation: { status: 'invalid_signature', version: '0.18.4' },
+        receiverRuntime: { status: 'exclusive', instanceCount: 1, distinctBuildCount: 1, currentAsarSha256: 'a'.repeat(64), candidateAsarSha256: null, candidateMatchesCurrent: null },
+        inputProfile: correctedInputProfile,
+        codex: true, claude: true, ashlr: false, boardRoute: 'ashlr_layer', workspace: '/tmp', shortcutCount: 20,
+        shortcutRegistrations: [], workspaceSnapshot: null,
+      }),
+      getMissionControl: vi.fn().mockResolvedValue(initialUnavailableMission()),
+      focusAgentSlot: vi.fn(), setProfile: vi.fn(), setFlightCheck: vi.fn(), requestAction: vi.fn(), confirmAction: vi.fn(),
+      beginHold: vi.fn(), cancelHold: vi.fn(), chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(), onControl: vi.fn(() => () => {}),
+    } as unknown as NonNullable<typeof window.agentBoard>
+
+    render(<App />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
+    expect(await screen.findByText(/Input 0\.18\.4 · invalid signature/i)).toBeTruthy()
+    fireEvent.click(screen.getByRole('tab', { name: 'Flight Check' }))
+    expect((screen.getByRole('button', { name: /Daily profile/i }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByText(/replace it in Finder from the official Work Louder release/i)).toBeTruthy()
+  })
+
+  it.each([
+    ['missing', 'Install Work Louder Input from the official release'],
+    ['multiple_installations', 'keep one intended official Input installation'],
+    ['unsafe', 'Replace the unsafe copy through Finder'],
+    ['invalid_metadata', 'bundle metadata could not be verified'],
+    ['publisher_unrecognized', 'Do not approve or work around an unexpected publisher'],
+    ['invalid_signature', 'Do not ad-hoc sign or alter the app'],
+    ['gatekeeper_rejected', 'Do not bypass Gatekeeper or strip quarantine metadata'],
+    ['probe_unavailable', 'Do not continue while trust is unknown'],
+  ] as const)('shows bounded recovery guidance for Input status %s', async (inputStatus, expectedGuidance) => {
+    window.agentBoard = {
+      getStatus: vi.fn().mockResolvedValue({
+        boardConnected: true, inputInstalled: inputStatus !== 'missing', inputMonitoring: 'unverified',
+        inputInstallation: { status: inputStatus, version: null },
+        receiverRuntime: trustedHardwareDiagnostics.receiverRuntime,
+        inputProfile: correctedInputProfile,
+        codex: true, claude: true, ashlr: false, boardRoute: 'ashlr_layer', workspace: '/tmp', shortcutCount: 20,
+        shortcutRegistrations: [], workspaceSnapshot: null,
+      }),
+      getMissionControl: vi.fn().mockResolvedValue(initialUnavailableMission()),
+      focusAgentSlot: vi.fn(), setProfile: vi.fn(), setFlightCheck: vi.fn(), requestAction: vi.fn(), confirmAction: vi.fn(),
+      beginHold: vi.fn(), cancelHold: vi.fn(), chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(), onControl: vi.fn(() => () => {}),
+    } as unknown as NonNullable<typeof window.agentBoard>
+
+    render(<App />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
+    expect(await screen.findByText(new RegExp(expectedGuidance, 'i'))).toBeTruthy()
+  })
+
+  it('fails closed when Input trust and receiver ownership diagnostics are missing', async () => {
+    window.agentBoard = {
+      getStatus: vi.fn().mockResolvedValue({
+        boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
+        inputProfile: correctedInputProfile,
+        codex: true, claude: true, ashlr: false, boardRoute: 'ashlr_layer', workspace: '/tmp', shortcutCount: 20,
+        shortcutRegistrations: [], workspaceSnapshot: null,
+      }),
+      getMissionControl: vi.fn().mockResolvedValue(initialUnavailableMission()),
+      focusAgentSlot: vi.fn(), setProfile: vi.fn(), setFlightCheck: vi.fn(), requestAction: vi.fn(), confirmAction: vi.fn(),
+      beginHold: vi.fn(), cancelHold: vi.fn(), chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(), onControl: vi.fn(() => () => {}),
+    } as unknown as NonNullable<typeof window.agentBoard>
+
+    render(<App />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Flight Check' }))
+    expect((screen.getByRole('button', { name: /Daily profile/i }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByText(/could not verify shortcut receiver ownership/i)).toBeTruthy()
+    expect(screen.getByText('Unavailable')).toBeTruthy()
+    fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
+    expect(await screen.findByText(/Input · verification unavailable · shortcuts disabled/i)).toBeTruthy()
+    expect(screen.getByText(/Receiver ownership unavailable · shortcuts disabled/i)).toBeTruthy()
+  })
+
+  it('fails closed and explains recovery when multiple receiver builds contend', async () => {
+    window.agentBoard = {
+      getStatus: vi.fn().mockResolvedValue({
+        boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
+        inputInstallation: { status: 'verified', version: '0.18.4' },
+        receiverRuntime: { status: 'contended_distinct_builds', instanceCount: 2, distinctBuildCount: 2, currentAsarSha256: 'a'.repeat(64), candidateAsarSha256: null, candidateMatchesCurrent: null },
+        receiverIdentity: { appVersion: '0.1.0', packaged: true, appAsarSha256: 'a'.repeat(64) },
+        inputProfile: correctedInputProfile,
+        codex: true, claude: true, ashlr: false, boardRoute: 'ashlr_layer', workspace: '/tmp', shortcutCount: 0,
+        shortcutRegistrations: [], workspaceSnapshot: null,
+      }),
+      getMissionControl: vi.fn().mockResolvedValue(initialUnavailableMission()),
+      focusAgentSlot: vi.fn(), setProfile: vi.fn(), setFlightCheck: vi.fn(), requestAction: vi.fn(), confirmAction: vi.fn(),
+      beginHold: vi.fn(), cancelHold: vi.fn(), chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(), onControl: vi.fn(() => () => {}),
+    } as unknown as NonNullable<typeof window.agentBoard>
+
+    render(<App />)
+    expect(await screen.findByText(/2 receivers · ownership disabled/i)).toBeTruthy()
+    fireEvent.click(screen.getByRole('tab', { name: 'Flight Check' }))
+    expect((screen.getByRole('button', { name: /Daily profile/i }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByText(/Fully quit every copy manually/i)).toBeTruthy()
+    fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
+    expect(await screen.findByText(/2 receivers across 2 builds are contending/i)).toBeTruthy()
+    expect(screen.getByText(/No process was quit automatically/i)).toBeTruthy()
   })
 
   it('routes Setup to preflight without arming an unavailable Flight Check', async () => {
@@ -726,6 +847,7 @@ describe('operator interface', () => {
     window.agentBoard = {
       getStatus: vi.fn().mockResolvedValue({
         boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
+        ...trustedHardwareDiagnostics,
         inputProfile: correctedInputProfile,
         codex: true, claude: true, ashlr: false, boardRoute: 'ashlr_layer', workspace: '/tmp', shortcutCount: 20,
         shortcutRegistrations: [], workspaceSnapshot: null,
@@ -754,8 +876,8 @@ describe('operator interface', () => {
     expect(screen.getByText('THIS RUN CANNOT PASS')).toBeTruthy()
     expect(screen.getByText(/continuing cannot produce a passing receipt/i)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /End and restart/i }))
-    await waitFor(() => expect(restartFlightCheck).toHaveBeenCalledTimes(1))
-    expect(setFlightCheck.mock.calls.map(([active]) => active)).toEqual([true])
+    await waitFor(() => expect(restartFlightCheck).toHaveBeenCalledWith('daily'))
+    expect(setFlightCheck.mock.calls).toEqual([[true, 'daily']])
     expect(await screen.findByRole('heading', { name: 'Dial left' })).toBeTruthy()
   })
 })

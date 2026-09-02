@@ -14,7 +14,7 @@ versions from colliding.
 | Test verified | Tests, lint, build, and relevant hardware tests pass at one full SHA | Package exists |
 | Artifact built | Architecture-specific app and checksum from the verified SHA | Signing, notarization, or launch |
 | Distribution ready | Signature, notarization, Gatekeeper check, provenance, rollback | Provider or physical acceptance |
-| Integration configured | Apps, tools, hooks, and permissions are present | Valid runtime receipt |
+| Integration configured | Official Input passes sanitized publisher/signature/Gatekeeper checks; one intended Agent Board receiver; apps, tools, hooks, and permissions are present | Valid shortcut, provider, or physical receipt |
 | Physical accepted | Fresh Flight Check passes on the actual board and daily layer | Native RGB or firmware qualification |
 | Provider accepted | Real Codex, Claude/cmux, `wrkpad`, and Fleet workflows pass | User acceptance |
 | User accepted | Named workflow and usability criteria pass with a real operator | General availability |
@@ -37,6 +37,24 @@ git rev-parse HEAD
 
 Record the full SHA, platform, architecture, Node/npm versions, passed and skipped checks, and doctor warnings. The doctor is environment evidence and can fail when source tests pass.
 
+For hardware acceptance, also record these independent local gates:
+
+- A human confirmed the Creator Micro 2 Pro's fourth **WIRED** communication
+  channel by white underglow. This is mode evidence only, not USB acceptance.
+- Setup reported **Input … · publisher, signature, and Gatekeeper verified**.
+  Record only the sanitized status and version, never raw signing output or app
+  paths.
+- Setup reported **One receiver · shortcut ownership available**. If it was
+  contended, a human used Command-Q to fully quit all Agent Board copies and
+  relaunched one intended build; no process was killed automatically.
+- `v0.1.50` remains the observed desk firmware and is older than the reviewed
+  `v0.6.2` candidate. No firmware update proceeds until the official Input
+  installation is verified and the separate human qualification is approved.
+
+These gates do not prove one another, a current Input profile, Input Monitoring,
+device synchronization, native Codex RPC success, provider receipt, or physical
+acceptance.
+
 ## Build an unsigned artifact
 
 ```bash
@@ -52,6 +70,21 @@ checksum, and expected `developer_id_signed=false`/`notarized=false` state. It d
 upload an application archive or publish an installable binary. Its temporary
 manifest is diagnostic evidence only, not a signature, notarization receipt,
 release artifact, or provenance attestation.
+
+## Local preview install or update
+
+The preview has no automatic updater. Before replacing a local preview, record
+its source SHA and `app.asar` checksum, then have the operator use Command-Q to
+fully quit every Ashlr Agent Board copy. Move the new build to one intended
+location and reopen only that copy. Do not use an agent to kill processes or
+delete the prior build; keep the prior verified artifact as rollback until the
+new build passes Setup and Flight Check.
+
+After launch, require **One receiver · shortcut ownership available** and verify
+the exact receiver manually in **System Settings → Privacy & Security → Input
+Monitoring**. A matching `app.asar` hash identifies bytes only; it does not prove
+Developer ID signing, notarization, permission, shortcut receipt, or physical
+acceptance. An unsigned preview is still not distribution ready.
 
 ## Public distribution gate
 
@@ -81,6 +114,9 @@ Artifact identifier and checksum:
 Signature and notarization receipts:
 Checks passed and skipped:
 Doctor result and warnings:
+Input installation sanitized status/version:
+Receiver status and bounded build count:
+Wired-mode white-underglow confirmation:
 Flight Check receipt ID/status:
 Codex acceptance:
 Claude/cmux acceptance:

@@ -70,6 +70,10 @@ marks missing observers and optional CLIs as unavailable.
   profile, a uniquely observable single layer, encoder order, and exact
   unresolved-index reason codes without exposing raw logs or claiming current
   device state.
+- Agent Board distinguishes **USB present** from a working shortcut route,
+  verifies only sanitized Work Louder Input publisher/signature/Gatekeeper
+  results, and disables shortcut ownership when more than one Agent Board
+  receiver is running.
 - Both components sanitize private provider content and distinguish source,
   package, integration, provider, physical, and user acceptance.
 
@@ -139,6 +143,15 @@ npm run dev
 Follow the [desktop setup and Flight Check](app/docs/setup.md) before using the
 physical controls. `npm run package:mac` creates an unsigned, architecture-specific
 local directory build; it does not install, sign, notarize, or publish anything.
+For a Creator Micro 2 Pro, commission in wired mode: the current
+[Codex Micro guide](https://learn.chatgpt.com/docs/features/codex-micro) says a
+USB cable only charges while Bluetooth remains selected, so open the connection
+selector and choose the fourth channel until the underglow is white. The general
+[Creator Micro 2 setup](https://worklouder.cc/micro-setup) documents that fourth
+channel but conflicts about automatic USB switching; use the explicit selector
+for Codex commissioning. White underglow confirms only the board's
+firmware-selected wired mode. It does not prove macOS enumeration, Input
+integrity, receiver exclusivity, native Codex connection, or a physical receipt.
 
 ## Development
 
@@ -230,7 +243,11 @@ with six HID collections. The operating-system registry descriptor is 275 bytes
 with SHA-256 `9257d7361f9c784e0fc0b260bbac0feadd49bf79cbb6202d6c41560cbae96fb6`;
 serial data is discarded. The current Input log reports firmware `v0.1.50`, while
 `device.status` and `v.oai.rgbcfg` return `Method not found`, so that unit is not
-lighting-qualified. Bluetooth keyboard and trackpad traffic is unrelated.
+lighting-qualified. That observed version is older than the reviewed `v0.6.2`
+vendor candidate, but no firmware operation is authorized until the official
+Work Louder Input installation passes publisher, signature, and Gatekeeper
+verification and a human approves the separate qualification. Bluetooth
+keyboard and trackpad traffic is unrelated to this USB commissioning path.
 
 Automated source checks and local package creation do not prove installed hooks,
 provider receipt, physical gesture completion, RGB support, signed distribution,

@@ -5,7 +5,7 @@ export interface FlightStep { label: string; instruction: string; signals: Contr
 export interface FlightEvent { signal: ControlId; receivedAt: string; sequence: number; accelerator: string; monotonicNs: string; expectedSignals: ControlId[]; matched: boolean }
 
 export const diagnosticFlightSteps: FlightStep[] = [
-  { label: 'Dial left', instruction: 'Turn the top-right rotary dial three slow detents counterclockwise. The bottom-left circle is the Bluetooth host selector, not the dial.', signals: ['dialLeft'], requiredCount: 3 },
+  { label: 'Dial left', instruction: 'Turn the top-right rotary dial three slow detents counterclockwise. The bottom-left circle is the layer and connection selector, not the dial.', signals: ['dialLeft'], requiredCount: 3 },
   { label: 'Dial right', instruction: 'Turn the top-right rotary dial three slow detents clockwise.', signals: ['dialRight'], requiredCount: 3 },
   { label: 'Dial press', instruction: 'Press the top-right rotary dial once.', signals: ['dialPress'] },
   { label: 'Agent 1', instruction: 'Press the upper Agent key beside the white joystick.', signals: ['agent1'] },

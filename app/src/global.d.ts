@@ -30,8 +30,8 @@ declare global {
       setBoardRoute(boardRoute: BoardRoute): Promise<BoardRoute>
       focusAgentSlot(slot: number): Promise<ExecutionResult>
       setProfile(profile: ProfileId): Promise<void>
-      setFlightCheck(active: boolean): Promise<{ acknowledged: boolean; active: boolean; startedAt: string | null }>
-      restartFlightCheck(): Promise<{ acknowledged: boolean; active: boolean; startedAt: string | null }>
+      setFlightCheck(active: boolean, variant: 'daily' | 'diagnostic'): Promise<{ acknowledged: boolean; active: boolean; startedAt: string | null }>
+      restartFlightCheck(variant: 'daily' | 'diagnostic'): Promise<{ acknowledged: boolean; active: boolean; startedAt: string | null }>
       requestAction(actionId: string): Promise<ExecutionResult>
       confirmAction(actionId: string, token: string): Promise<ExecutionResult>
       beginHold(actionId: string, token: string): Promise<boolean>

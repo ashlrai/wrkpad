@@ -31,6 +31,9 @@ All notable changes will be documented here. The project follows semantic versio
 - Offline, allowlisted Creator Micro 2 profile repair that emits a uniquely named
   private artifact without opening Input or writing the board.
 - Read-only active-profile receipts for both bounded Creator Micro 2 USB identities.
+- Privacy-bounded Input installation and Agent Board receiver diagnostics that
+  gate Flight Check on a verified publisher/signature/Gatekeeper result and one
+  exclusive shortcut receiver without exposing process or installation paths.
 
 ### Changed
 
@@ -42,6 +45,12 @@ All notable changes will be documented here. The project follows semantic versio
   real renderer and link its existing architecture and trust model.
 - Make Setup distinguish an encoder-only observation from the exact corrected
   profile and block Flight Check while a known reversed dial mapping is active.
+- Align commissioning and recovery documentation with the Creator Micro 2
+  wired selector's white-underglow state, manual duplicate-receiver recovery,
+  official Input reinstallation, and the separate firmware-qualification gate.
+- Move Flight Check admission and export truth into the trusted main process,
+  fail closed on missing diagnostic evidence, and keep recurring receiver
+  identity probes responsive through bounded file-identity caching.
 
 ### Fixed
 

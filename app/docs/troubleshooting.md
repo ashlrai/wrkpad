@@ -11,11 +11,64 @@ cd wrkpad/app
 If the app says **USB absent** or the doctor reports `not detected`:
 
 1. Connect the board directly by USB-C and confirm it is powered.
-2. Try a known data-capable cable and another port.
-3. Quit and reopen Agent Board after reconnecting.
-4. Run `npm run doctor` again.
+2. On a Pro model, hold the bottom-left touch sensor for three seconds, then tap
+   through the three Bluetooth channels to the fourth **WIRED** channel. The
+   underglow turns white. Let communication mode exit after five seconds.
+3. Try a known data-capable cable and another port.
+4. Fully quit and reopen Agent Board after reconnecting.
+5. Run `npm run doctor` again.
 
-Bluetooth keyboard and trackpad traffic is separate. USB presence still does not prove Input Monitoring, routing, firmware compatibility, or RGB.
+The general [Creator Micro 2 setup](https://worklouder.cc/micro-setup) says USB
+insertion switches a Pro to wired mode, but the current
+[Codex Micro guide](https://learn.chatgpt.com/docs/features/codex-micro) says it
+only charges while Bluetooth remains selected. For Codex troubleshooting,
+explicitly select the white wired channel rather than relying on cable insertion.
+White underglow is human-visible mode evidence only; it is not a USB receipt.
+Bluetooth keyboard and Apple trackpad traffic is separate and does not need to
+be disconnected. USB presence still does not prove Input Monitoring, routing,
+firmware compatibility, or RGB.
+
+## Work Louder Input is installed but not verified
+
+Setup accepts Input only when it says **publisher, signature, and Gatekeeper
+verified**. The app deliberately shows a sanitized reason such as `invalid
+signature`, `publisher unrecognized`, `Gatekeeper rejected`, `multiple
+installations`, `unsafe`, or `probe unavailable`; it does not display raw
+signing output, a local app path, or publisher identifiers.
+
+For any result other than verified:
+
+1. Stop Flight Check and do not open a firmware updater.
+2. Use Command-Q to fully quit Input. Agent Board will not quit it for you.
+3. Download a fresh Input installer from the official
+   [Work Louder page](https://worklouder.cc/input/).
+4. Replace the unverified installation in Finder. If Input exists in both
+   `/Applications` and the user's Applications folder, keep one intended
+   official installation and resolve the duplicate manually.
+5. Reopen Input, refresh Setup, and require the verified status before profile
+   import, device synchronization, or firmware qualification.
+
+Do not bypass Gatekeeper, strip quarantine metadata, ad-hoc sign Input, or let
+an agent remove application bundles. A verified installation proves publisher,
+signature, and Gatekeeper assessment for that copy only; it does not prove
+permission, current profile, device synchronization, firmware compatibility, or
+physical acceptance.
+
+## Multiple Agent Board receivers are running
+
+Setup says **One receiver · shortcut ownership available** only when one exact
+Ashlr Agent Board main process is observed. If it reports multiple receivers or
+Flight Check says **Receiver · Contended**, the app disables shortcut ownership
+so two copies cannot silently divide the 20 registrations.
+
+Use Command-Q to fully quit every Ashlr Agent Board copy, including development
+and packaged builds; closing a window is not enough. Reopen exactly one intended
+build and refresh Setup. Do not use an agent or shell command to kill processes.
+Packaged copies produce bounded instance/build counts and hashes; a development
+copy fails closed when a packaged peer is present. Neither mode exposes process
+IDs, command lines, app paths, or raw process output.
+**Exclusive** proves only the observed receiver count, not Input Monitoring,
+shortcut receipt, USB ownership, or physical acceptance.
 
 ## Shortcuts are missing or controls do nothing
 
@@ -86,13 +139,16 @@ window is not exclusive. End Flight Check and establish the human-guided
 Input-only window above; Agent Board does not quit applications automatically.
 
 If Flight Check receives zero raw signals, use the top-right black rotary dial.
-The top-left white control is the joystick and the bottom-left circle is the
-Bluetooth host selector. If the correct control still emits nothing, do not
+The top-left white control is the joystick. The bottom-left circle is the
+layer/communication-mode touch sensor, not the dial and not a Flight Check
+gesture. If the correct control still emits nothing, do not
 simulate the shortcut from the keyboard. Complete the Input-only reconciliation
 above, then confirm the fresh check still records `0` raw receipts.
 
 Only after a fresh second check still receives zero signals should firmware
-qualification be considered. Keep the
+qualification be considered. The observed desk firmware `v0.1.50` is older
+than the reviewed `v0.6.2` vendor candidate, but do not update until Setup says
+Input's publisher, signature, and Gatekeeper are verified. Keep the
 external profile backup and fully quit ChatGPT/Codex Desktop, Agent Board, and
 every other board/HID controller before the signed Input updater downloads or
 enters a bootloader.
@@ -107,7 +163,7 @@ Agent Board's global shortcuts are not the cause.
 
 Do not repeatedly reconnect, grant more permissions, or quit Logitech just to
 clear this error. Follow the [separate firmware qualification
-workflow](setup.md#3-install-work-louder-input). The currently published vendor
+workflow](setup.md#3-verify-work-louder-input). The currently published vendor
 release is only a qualification candidate until this exact desk path passes.
 After updating, test Codex with
 Input fully quit. Codex must receive successful `v.oai.rgbcfg` and then

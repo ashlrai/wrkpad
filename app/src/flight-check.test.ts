@@ -24,7 +24,7 @@ describe('Flight Check model', () => {
   })
   it('identifies the physical dial and reveals recovery only after a silent grace period', () => {
     expect(diagnosticFlightSteps[0].instruction).toContain('top-right rotary dial')
-    expect(diagnosticFlightSteps[0].instruction).toContain('Bluetooth host selector')
+    expect(diagnosticFlightSteps[0].instruction).toContain('layer and connection selector')
     expect(diagnosticFlightSteps.find((step) => step.label === 'Agent 1')?.instruction).toContain('white joystick')
     expect(diagnosticFlightSteps.find((step) => step.label === 'Agent 2')?.instruction).toContain('black dial')
     const startedAt = '2026-09-01T18:00:00.000Z'

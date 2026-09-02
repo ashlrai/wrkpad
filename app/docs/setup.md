@@ -12,7 +12,29 @@ cd wrkpad/app
 
 ## 1. Connect the board
 
-Connect the Creator Micro 2 directly over USB-C for commissioning. A Bluetooth keyboard and trackpad can remain connected.
+Connect the Creator Micro 2 directly over USB-C for commissioning. A Bluetooth
+keyboard and Apple trackpad can remain connected; they use separate device
+paths and are not the cause of a missing Creator Micro USB device.
+
+For a Creator Micro 2 Pro, confirm the board is in wired mode using the current
+official [Creator Micro 2 setup](https://worklouder.cc/micro-setup):
+
+1. Hold the bottom-left touch sensor for three seconds to enter communication
+   mode. The underglow turns blue for Bluetooth Low Energy mode.
+2. Tap the same sensor through Bluetooth channels 1, 2, and 3. The fourth tap
+   selects **WIRED** mode; the underglow turns white.
+3. Stop touching the sensor and let communication mode exit after its five
+   seconds of inactivity. The Base model has no wireless selection; plug it in.
+
+Outside communication mode, a short tap on this sensor changes the active
+layer. Do not tap it during Flight Check. White underglow proves only that the
+board firmware selected wired mode. It does not prove that macOS enumerated the
+USB device, that either app connected, that Input synchronized a profile, or
+that a physical gesture was accepted. Work Louder's general guide says inserting
+USB switches the Pro to wired mode, while the current
+[Codex Micro guide](https://learn.chatgpt.com/docs/features/codex-micro) says it
+only charges while Bluetooth remains selected. For Codex, do not rely on cable
+insertion: explicitly select the white wired channel.
 
 ```bash
 npm run doctor
@@ -35,19 +57,43 @@ This is labeled **Declared here — not detected**. Changing it writes only the
 private Agent Board settings file. It does not change firmware, Input, Codex,
 shortcuts, processes, hooks, or `wrkpad` occupancy.
 
-## 3. Install Work Louder Input
+## 3. Verify Work Louder Input
 
-Install the signed vendor application from [Work Louder](https://worklouder.cc/input/). Input owns board profiles, layers, shortcuts, firmware updates, and its radial menu. Agent Board does not write firmware or Input's configuration database.
+Install Work Louder Input only from the official
+[Work Louder Input download](https://worklouder.cc/input/). Input owns board
+profiles, layers, shortcuts, firmware updates, and its radial menu. Agent Board
+does not write firmware or Input's configuration database.
+
+In Setup, require **Input … · publisher, signature, and Gatekeeper verified**
+before importing a profile, opening an updater, or relying on Input for Flight
+Check. The diagnostic returns a sanitized status and optional bounded version;
+it does not expose the app path, signing output, or publisher identifier. An
+installed app with `invalid metadata`, `publisher unrecognized`, `invalid
+signature`, `Gatekeeper rejected`, `unsafe`, `multiple installations`, or
+`probe unavailable` is not a verified controller.
+
+If verification does not pass, stop configuration and firmware work. Fully quit
+Input manually, download a fresh installer from the official page, replace the
+unverified copy using Finder, reopen Input, and refresh Setup. Do not have an
+agent delete an application, bypass Gatekeeper, alter quarantine metadata, or
+kill a process. If both `/Applications` and the user's Applications folder
+contain Input, resolve the duplicate manually before continuing. Reinstallation
+does not prove profile state, Input Monitoring, device sync, or physical
+acceptance.
 
 Do not use QMK/VIA instructions intended for the legacy Creator Micro v1.
 
 If Input offers a firmware update during Ashlr-layer commissioning, defer it.
 Firmware availability is not firmware qualification, and changing firmware
-invalidates the configuration baseline.
+invalidates the configuration baseline. Do not enter the updater at all until
+Setup reports the signed Input installation as verified.
 
 For **Codex Native**, a recent Codex log result of
 `firmware_rpc_missing` is different: USB and HID work, but the board returned
 RPC 404 for `v.oai.rgbcfg`. The tested desk unit reports firmware `v0.1.50`.
+That observed version is older than the reviewed `v0.6.2` vendor candidate and
+is treated as outdated for qualification planning, not as authorization to
+flash.
 As verified on September 1, 2026, Work Louder marks [Creator Micro v2 firmware
 v0.6.2](https://github.com/worklouder/cm-v2-fw-releases/releases/tag/v0.6.2)
 as its latest release, and its release asset contains both required Codex RPC
@@ -71,8 +117,9 @@ rather than treating this pinned candidate as perpetually current.
 4. Record the external backup path and the candidate firmware checksum before
    any download. Downloading is not installing; do not proceed if the asset or
    channel differs from the reviewed candidate.
-5. Apply only the stable version offered by the signed Input app; stop if
-   it offers a prerelease or different channel.
+5. Apply only the exact reviewed vendor-published candidate offered by the
+   signed Input app; stop if it offers a different asset, prerelease, or
+   channel.
 6. Reconnect, confirm Input reports the intended version, and verify the saved
    profile.
 7. Quit Input, launch Codex alone, and verify `v.oai.rgbcfg` followed by
@@ -80,11 +127,28 @@ rather than treating this pinned candidate as perpetually current.
 8. Re-run the appropriate physical acceptance afterward. Restore the exported
    profile if the mapping or device sync changed.
 
-## 4. Grant Input Monitoring
+## 4. Prove one shortcut receiver
+
+Setup must say **One receiver · shortcut ownership available** before Flight
+Check. Opening a development build and a packaged build at the same time can
+split the 20 global shortcuts. Packaged receivers report a contended same-build
+or distinct-build count. A development receiver refuses ownership whenever a
+packaged peer is observed. Diagnostics return no process IDs, command lines, or
+local paths, and shortcut ownership stays disabled while exclusivity is not
+proven.
+
+If Setup reports multiple receivers, use Command-Q to fully quit every **Ashlr
+Agent Board** copy; closing a window is not enough. Then reopen exactly one
+intended build and refresh Setup. Agent Board never quits or kills another
+process automatically. An exclusive receiver proves only that one observed app
+may register shortcuts; it does not prove Input Monitoring, shortcut receipt,
+USB routing, or physical acceptance.
+
+## 5. Verify Input Monitoring
 
 Open **System Settings → Privacy & Security → Input Monitoring** and enable the application that receives the board's shortcuts. Only the logged-in user can grant this macOS permission. Agent Board does not inspect or modify the protected TCC database.
 
-## 5. Create the daily Input layer
+## 6. Inspect Input's cached profile
 
 Map the physical controls to [the canonical shortcuts](controls.md#action-switches-and-motion-controls).
 
@@ -183,7 +247,7 @@ Claude Code hook events can populate the runway after the guarded
 [`wrkpad` hook setup](../../docs/hook-setup.md). Claude Desktop chats are not
 enrolled unless a separate adapter contract has been implemented and verified.
 
-## 6. Start the app
+## 7. Start the app
 
 For development:
 
@@ -206,9 +270,10 @@ Open the architecture directory created under `release/`, then select a working 
 2. Wait until the app says **Actions suppressed**.
 3. Use only the physical board while following each gesture prompt. The white
    control at top-left is the joystick, the black control at top-right is the
-   rotary dial, and the bottom-left circle with three LEDs is only the Bluetooth
-   host selector.
-4. Confirm USB is linked, 20 desktop shortcuts are registered, and misroutes remain zero.
+   rotary dial, and the bottom-left circle with three LEDs is the layer and
+   communication-mode touch sensor—not a Flight Check gesture.
+4. Confirm USB is present, Setup says **One receiver · shortcut ownership
+   available**, 20 desktop shortcuts are registered, and misroutes remain zero.
 5. Export a receipt only after all 19 daily signals pass.
 6. Stop Flight Check or return to Operate to release the interlock.
 

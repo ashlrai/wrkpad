@@ -54,6 +54,17 @@ For an Agent Board candidate, also run the checks in
 does not imply a desktop release, and neither tag may be reused for the other
 component.
 
+An Agent Board hardware record must also keep four commissioning facts
+independent: the human-observed Creator Micro 2 Pro **WIRED** channel with white
+underglow, sanitized Work Louder Input publisher/signature/Gatekeeper
+verification, one exclusive Agent Board shortcut receiver, and a fresh physical
+Flight Check. The first is only firmware-selected mode evidence; the second is
+only app-integrity evidence; the third is only bounded process-count evidence;
+none proves USB enumeration, Input Monitoring, device synchronization, native
+Codex RPC success, or the fourth. Receiver contention is recovered by a human
+fully quitting every Agent Board copy and reopening one intended build. Release
+automation must never kill those processes.
+
 For each intended provider and scope, also record the read-only hook status, content-bound plan, applied target and private backup, preservation of unrelated hooks, provider trust result, and one disposable fired-event receipt. Inspect both stdout and persisted state to confirm prompts, assistant content, tool data, transcript paths, credentials, and approval decisions are absent.
 
 A foreground `wrkpad serve` test proves only that process lifetime. Separately record the content-bound service plan, stable executable SHA-256, owned plist, loaded status, and authenticated health after the originating terminal closes. Hook installation alone does not keep HASP running.
@@ -75,4 +86,10 @@ The August 31, 2026 desk snapshot proves discovery, not lighting support:
 - current Input log firmware response: `v0.1.50`;
 - `device.status` and `v.oai.rgbcfg`: `Method not found`.
 
-Re-capture every item after an official firmware update. Never reuse this descriptor or firmware evidence as acceptance for a different desk, device, or release.
+The observed `v0.1.50` is older than the reviewed `v0.6.2` vendor candidate,
+but that comparison is qualification-planning evidence only. Do not update
+firmware until the official Input installation passes the sanitized publisher,
+signature, and Gatekeeper gate and the foreground operator approves the exact
+backup, candidate, and recovery plan. Re-capture every item after an official
+firmware update. Never reuse this descriptor or firmware evidence as acceptance
+for a different desk, device, or release.
