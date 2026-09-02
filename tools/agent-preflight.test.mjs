@@ -143,6 +143,41 @@ test('Codex Native restores signed Input before offering firmware qualification'
   assert.doesNotMatch(JSON.stringify(result), /Users|private/)
 })
 
+test('known Input resource mutation fails closed and orders human recovery before either route', () => {
+  for (const route of ['ashlr_layer', 'codex_native']) {
+    const result = buildPreflight({
+      route, source, stable: null,
+      appDoctorRaw: {
+        ...appDoctor,
+        inputInstallation: {
+          status: 'known_resource_mutation', version: '0.18.4',
+          resource: '/Users/example/private/window-info-retriever.scpt', raw: 'secret',
+        },
+        checks: appDoctor.checks.map((item) => item.name === 'Work Louder Input' ? { ...item, ok: false } : item),
+        readiness: { ...appDoctor.readiness, ashlrLayer: { status: 'blocked', reason: 'required_prerequisite_missing' } },
+      },
+      developmentBinary: '/missing/development/binary', runCommand: commandFixture,
+      observedAt: '2026-09-01T20:00:00.000Z',
+    })
+
+    const integrity = result.checks.find((item) => item.id === 'input_installation_integrity')
+    assert.equal(integrity.status, 'blocked')
+    assert.equal(integrity.evidence, 'status=known_resource_mutation; version=0.18.4')
+    assert.match(integrity.reason, /fully quit Input, preserve a stopped-state profile backup/)
+    const recovery = result.next_steps.find((item) => item.id === 'restore_signed_input')
+    assert.deepEqual(recovery.requires, [
+      'fully quit Work Louder Input',
+      'preserve a stopped-state profile backup before replacement',
+      'replace the modified app with one official signed Work Louder Input release',
+      'rerun the read-only doctor before reopening board controllers or considering firmware',
+    ])
+    assert.equal(result.next_steps.some((item) => item.id === 'qualify_native_firmware'), false)
+    assert.equal(result.next_steps.some((item) => item.id === 'reconcile_input_profile'), false)
+    assert.equal(result.next_steps.some((item) => item.id === 'complete_ashlr_flight_check'), false)
+    assert.doesNotMatch(JSON.stringify(result), /Users|private|secret|window-info-retriever/)
+  }
+})
+
 test('historical native RPC evidence is advisory and requires a fresh native check', () => {
   const result = buildPreflight({
     route: 'codex_native', source, stable: null,
@@ -167,6 +202,8 @@ test('historical native RPC evidence is advisory and requires a fresh native che
 test('hostile Input versions and receiver shapes fail closed', () => {
   for (const hostile of [
     { inputInstallation: { status: 'verified', version: null } },
+    { inputInstallation: { status: 'known_resource_mutation', version: null } },
+    { inputInstallation: { status: 'known_resource_mutation', version: '0.18.5' } },
     { inputInstallation: { status: 'missing', version: '0.18.4' } },
     { receiverRuntime: { status: 'exclusive', instanceCount: 1, distinctBuildCount: 1, currentAsarSha256: 'b'.repeat(64), candidateAsarSha256: 'c'.repeat(64), candidateMatchesCurrent: true } },
     { receiverRuntime: { status: 'contended_distinct_builds', instanceCount: 2, distinctBuildCount: 3, currentAsarSha256: 'b'.repeat(64), candidateAsarSha256: null, candidateMatchesCurrent: null } },

@@ -194,6 +194,7 @@ describe('operator interface', () => {
     window.agentBoard = {
       getStatus: vi.fn().mockResolvedValue({
         boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
+        ...trustedHardwareDiagnostics,
         inputProfile: correctedInputProfile,
         inputRuntime: { status: 'not_observed', profileIndex: null, layerIndex: null, observedAt: null, fresh: false },
         receiverIdentity: { appVersion: '0.1.0', packaged: true, appAsarSha256: 'a'.repeat(64) },
@@ -236,6 +237,7 @@ describe('operator interface', () => {
     window.agentBoard = {
       getStatus: vi.fn().mockResolvedValue({
         boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
+        ...trustedHardwareDiagnostics,
         inputProfile: correctedInputProfile,
         inputRuntime: { status: 'not_observed', profileIndex: null, layerIndex: null, observedAt: null, fresh: false },
         receiverIdentity: { appVersion: '0.1.0', packaged: true },
@@ -279,7 +281,9 @@ describe('operator interface', () => {
   it('fails closed when a saved recovery artifact is missing or changed', async () => {
     window.agentBoard = {
       getStatus: vi.fn().mockResolvedValue({
-        boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified', inputProfile: correctedInputProfile,
+        boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
+        ...trustedHardwareDiagnostics,
+        inputProfile: correctedInputProfile,
         inputRuntime: { status: 'not_observed', profileIndex: null, layerIndex: null, observedAt: null, fresh: false },
         codex: true, claude: true, ashlr: true, boardRoute: 'ashlr_layer', workspace: '/tmp', shortcutCount: 20,
         shortcutRegistrations: [], workspaceSnapshot: null,
@@ -333,6 +337,7 @@ describe('operator interface', () => {
     window.agentBoard = {
       getStatus: vi.fn().mockResolvedValue({
         boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
+        ...trustedHardwareDiagnostics,
         inputProfile: { cacheStatus: 'available', activeProfile: 'Default', activeLayer: 'Layer 1', encoderDirection: 'unrecognized' },
         inputRuntime: { status: 'unresolved_profile_layer', profileIndex: 2, layerIndex: 1, observedAt: '2026-09-01T19:33:00.000Z', fresh: true },
         receiverIdentity: null, codex: true, claude: true, ashlr: true, boardRoute: 'ashlr_layer', workspace: '/tmp', shortcutCount: 20,
@@ -742,6 +747,7 @@ describe('operator interface', () => {
     ['invalid_metadata', 'bundle metadata could not be verified'],
     ['publisher_unrecognized', 'Do not approve or work around an unexpected publisher'],
     ['invalid_signature', 'Do not ad-hoc sign or alter the app'],
+    ['known_resource_mutation', 'this installed copy is not trusted or verified'],
     ['gatekeeper_rejected', 'Do not bypass Gatekeeper or strip quarantine metadata'],
     ['probe_unavailable', 'Do not continue while trust is unknown'],
   ] as const)('shows bounded recovery guidance for Input status %s', async (inputStatus, expectedGuidance) => {
@@ -762,6 +768,36 @@ describe('operator interface', () => {
     render(<App />)
     fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
     expect(await screen.findByText(new RegExp(expectedGuidance, 'i'))).toBeTruthy()
+  })
+
+  it('keeps the known Input 0.18.4 resource mutation fail closed through stopped-state recovery', async () => {
+    window.agentBoard = {
+      getStatus: vi.fn().mockResolvedValue({
+        boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
+        inputInstallation: { status: 'known_resource_mutation', version: '0.18.4' },
+        receiverRuntime: trustedHardwareDiagnostics.receiverRuntime,
+        inputProfile: { cacheStatus: 'available', activeProfile: 'Ashlr Agent Board', activeLayer: 'Ashlr Daily', encoderDirection: 'reversed' },
+        codex: true, claude: true, ashlr: false, boardRoute: 'ashlr_layer', workspace: '/tmp', shortcutCount: 20,
+        shortcutRegistrations: [], workspaceSnapshot: null,
+      }),
+      getMissionControl: vi.fn().mockResolvedValue(initialUnavailableMission()),
+      focusAgentSlot: vi.fn(), setProfile: vi.fn(), setFlightCheck: vi.fn(), requestAction: vi.fn(), confirmAction: vi.fn(),
+      beginHold: vi.fn(), cancelHold: vi.fn(), chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(), onControl: vi.fn(() => () => {}),
+    } as unknown as NonNullable<typeof window.agentBoard>
+
+    render(<App />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
+    expect(await screen.findByText(/Input 0\.18\.4 · sealed helper changed · not verified · shortcuts disabled/i)).toBeTruthy()
+    expect(screen.getByText(/make a stopped-state backup, reinstall the official 0\.18\.4 DMG/i)).toBeTruthy()
+    expect(screen.getByText(/verify the fresh copy before launching it/i)).toBeTruthy()
+    expect(screen.getByText(/leave Input closed during commissioning/i)).toBeTruthy()
+    expect(screen.getByText(/never authorizes firmware work/i)).toBeTruthy()
+    expect(screen.getByText(/Profile repair, import, activation, and synchronization stay paused/i)).toBeTruthy()
+    expect(screen.getByText(/Blocked by Input integrity/i)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Create corrected Input profile/i })).toBeNull()
+    expect(screen.queryByText(/choose Import Profile/i)).toBeNull()
+    fireEvent.click(screen.getByRole('tab', { name: 'Flight Check' }))
+    expect((screen.getByRole('button', { name: /Daily profile/i }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('fails closed when Input trust and receiver ownership diagnostics are missing', async () => {

@@ -69,15 +69,26 @@ before importing a profile, opening an updater, or relying on Input for Flight
 Check. The diagnostic returns a sanitized status and optional bounded version;
 it does not expose the app path, signing output, or publisher identifier. An
 installed app with `invalid metadata`, `publisher unrecognized`, `invalid
-signature`, `Gatekeeper rejected`, `unsafe`, `multiple installations`, or
-`probe unavailable` is not a verified controller.
+signature`, `known resource mutation`, `Gatekeeper rejected`, `unsafe`,
+`multiple installations`, or `probe unavailable` is not a verified controller.
+
+On this desk, Input 0.18.4 later showed an exact sealed `window-info` helper
+change while it was running; which process caused the change is unproven. A
+`known resource mutation` result recognizes only that exact shape, while a fresh
+[official Input 0.18.4 release](https://github.com/worklouder/input-releases/releases/tag/v0.18.4)
+verified before launch. The installed copy remains untrusted and unverified.
+Fully quit Input, make the
+backup while Input remains stopped, reinstall the official 0.18.4 DMG, and
+verify the fresh installation before launching it. If the profile is already
+correct, leave Input closed during commissioning. This state never authorizes
+firmware work.
 
 If verification does not pass, stop configuration and firmware work. Fully quit
 Input manually, download a fresh installer from the official page, replace the
-unverified copy using Finder, reopen Input, and refresh Setup. Do not have an
-agent delete an application, bypass Gatekeeper, alter quarantine metadata, or
-kill a process. If both `/Applications` and the user's Applications folder
-contain Input, resolve the duplicate manually before continuing. Reinstallation
+unverified copy using Finder, and refresh Setup before reopening Input. Do not
+have an agent delete an application, bypass Gatekeeper, alter quarantine
+metadata, or kill a process. If both `/Applications` and the user's Applications
+folder contain Input, resolve the duplicate manually before continuing. Reinstallation
 does not prove profile state, Input Monitoring, device sync, or physical
 acceptance.
 

@@ -249,6 +249,16 @@ Work Louder Input installation passes publisher, signature, and Gatekeeper
 verification and a human approves the separate qualification. Bluetooth
 keyboard and trackpad traffic is unrelated to this USB commissioning path.
 
+The September 1 recheck found Input 0.18.4 with the expected bundle identity
+and publisher, but strict verification reported that its sealed
+`window-info-retriever.scpt` resource had changed while Input was running. A
+fresh [official 0.18.4 DMG](https://github.com/worklouder/input-releases/releases/tag/v0.18.4)
+passed strict signature and Gatekeeper checks before launch. Agent Board
+reports that exact installed-app shape as
+`known_resource_mutation`, keeps it unverified, and continues to block profile,
+Flight Check, and firmware work. This distinction is diagnostic evidence, not
+a signature exception.
+
 Automated source checks and local package creation do not prove installed hooks,
 provider receipt, physical gesture completion, RGB support, signed distribution,
 or user acceptance.

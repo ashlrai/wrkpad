@@ -34,6 +34,7 @@ for (const [name, mutation, failedGate] of [
   ['undeclared route', { boardRoute: 'unknown' }, 'route'],
   ['missing USB', { usbDetected: false }, 'usb'],
   ['untrusted Input', { inputInstallation: { status: 'invalid_signature', version: '0.18.4' } }, 'input'],
+  ['known Input resource mutation', { inputInstallation: { status: 'known_resource_mutation', version: '0.18.4' } }, 'input'],
   ['missing Input version', { inputInstallation: { status: 'verified', version: null } }, 'input'],
   ['wrong profile', { inputProfile: { ...ready.inputProfile, activeLayer: 'Other' } }, 'profile'],
   ['receiver contention', { receiverRuntime: { status: 'contended_distinct_builds', instanceCount: 2, distinctBuildCount: 2 } }, 'receiver'],

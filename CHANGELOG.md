@@ -34,6 +34,8 @@ All notable changes will be documented here. The project follows semantic versio
 - Privacy-bounded Input installation and Agent Board receiver diagnostics that
   gate Flight Check on a verified publisher/signature/Gatekeeper result and one
   exclusive shortcut receiver without exposing process or installation paths.
+- Exact, fail-closed detection of the observed Input 0.18.4 sealed helper
+  mutation, with sanitized recovery guidance and no trust or firmware bypass.
 
 ### Changed
 

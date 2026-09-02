@@ -90,7 +90,7 @@ export interface SystemStatus {
 }
 
 export interface InputInstallationStatus {
-  status: 'verified' | 'missing' | 'multiple_installations' | 'unsafe' | 'invalid_metadata' | 'publisher_unrecognized' | 'invalid_signature' | 'gatekeeper_rejected' | 'probe_unavailable'
+  status: 'verified' | 'missing' | 'multiple_installations' | 'unsafe' | 'invalid_metadata' | 'publisher_unrecognized' | 'invalid_signature' | 'known_resource_mutation' | 'gatekeeper_rejected' | 'probe_unavailable'
   version: string | null
 }
 

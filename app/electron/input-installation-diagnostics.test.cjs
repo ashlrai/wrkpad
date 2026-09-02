@@ -1,6 +1,6 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } = require('node:fs')
+const { mkdirSync, mkdtempSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const path = require('node:path')
 const {
@@ -14,7 +14,7 @@ const {
 } = require('./input-installation-diagnostics.cjs')
 
 function fixture() {
-  const root = mkdtempSync(path.join(tmpdir(), 'input-installation-'))
+  const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'input-installation-')))
   return {
     root,
     system: path.join(root, 'system', 'Input.app'),
@@ -76,7 +76,8 @@ test('verifies one exact publisher bundle with bounded fixed commands', () => {
       ['/usr/libexec/PlistBuddy', '-c', 'Print :CFBundleIdentifier'],
       ['/usr/libexec/PlistBuddy', '-c', 'Print :CFBundleShortVersionString'],
       ['/usr/bin/codesign', '-dvvv'],
-      ['/usr/bin/codesign', '--verify', '--deep', '--strict'],
+      ['/usr/bin/codesign', '--verify', '--deep', '--strict', '--verbose=1'],
+      ['/usr/bin/codesign', '-dvvv'],
       ['/usr/sbin/spctl', '--assess', '--type', 'execute'],
     ])
     assert.ok(calls.every(({ options }) => options.timeout === PROBE_TIMEOUT_MS))
@@ -125,6 +126,97 @@ test('rejects symlinked and non-directory candidates as unsafe', () => {
   }
 })
 
+test('rejects a candidate reached through a symlinked ancestor as unsafe', () => {
+  const files = fixture()
+  let calls = 0
+  try {
+    const realParent = path.join(files.root, 'real-parent')
+    const aliasParent = path.join(files.root, 'alias-parent')
+    const realCandidate = path.join(realParent, 'Input.app')
+    const aliasCandidate = path.join(aliasParent, 'Input.app')
+    createBundle(realCandidate)
+    symlinkSync(realParent, aliasParent)
+    assert.equal(inspectInputInstallation({
+      candidates: [aliasCandidate, files.user],
+      runner: () => { calls += 1 },
+    }).status, 'unsafe')
+    assert.equal(calls, 0)
+  } finally {
+    rmSync(files.root, { recursive: true, force: true })
+  }
+})
+
+test('fails closed when the bundle is swapped during any trust phase', () => {
+  for (const swapCommand of [
+    '/usr/libexec/PlistBuddy -c Print :CFBundleIdentifier',
+    '/usr/bin/codesign -dvvv',
+    '/usr/bin/codesign --verify --deep --strict --verbose=1',
+    '/usr/sbin/spctl --assess --type execute',
+  ]) {
+    const files = fixture()
+    try {
+      createBundle(files.system)
+      let swapped = false
+      const baseRunner = verifiedRunner()
+      const runner = (executable, args, options) => {
+        const key = `${executable} ${args.slice(0, -1).join(' ')}`
+        const output = baseRunner(executable, args, options)
+        if (!swapped && key === swapCommand) {
+          renameSync(files.system, `${files.system}.previous`)
+          createBundle(files.system)
+          swapped = true
+        }
+        return output
+      }
+      assert.equal(inspectInputInstallation({ candidates: [files.system, files.user], runner }).status, 'probe_unavailable')
+      assert.equal(swapped, true)
+    } finally {
+      rmSync(files.root, { recursive: true, force: true })
+    }
+  }
+})
+
+test('reconfirms the exact publisher after strict verification', () => {
+  const files = fixture()
+  let identities = 0
+  try {
+    createBundle(files.system)
+    const baseRunner = verifiedRunner()
+    const runner = (executable, args, options) => {
+      if (executable === '/usr/bin/codesign' && args[0] === '-dvvv') {
+        identities += 1
+        if (identities === 2) return { status: 0, stdout: '', stderr: 'TeamIdentifier=OTHERTEAM\n' }
+      }
+      return baseRunner(executable, args, options)
+    }
+    assert.equal(inspectInputInstallation({ candidates: [files.system, files.user], runner }).status, 'publisher_unrecognized')
+    assert.equal(identities, 2)
+  } finally {
+    rmSync(files.root, { recursive: true, force: true })
+  }
+})
+
+test('fails closed when tracked bundle content changes before publisher reconfirmation', () => {
+  const files = fixture()
+  let identities = 0
+  try {
+    createBundle(files.system)
+    const baseRunner = verifiedRunner()
+    const runner = (executable, args, options) => {
+      const output = baseRunner(executable, args, options)
+      if (executable === '/usr/bin/codesign' && args[0] === '-dvvv') {
+        identities += 1
+        if (identities === 2) writeFileSync(path.join(files.system, 'Contents', 'Info.plist'), 'mutated')
+      }
+      return output
+    }
+    assert.equal(inspectInputInstallation({ candidates: [files.system, files.user], runner }).status, 'probe_unavailable')
+    assert.equal(identities, 2)
+  } finally {
+    rmSync(files.root, { recursive: true, force: true })
+  }
+})
+
 test('requires exact bundle metadata and a bounded sanitized version', () => {
   const files = fixture()
   try {
@@ -161,11 +253,114 @@ test('distinguishes an unrecognized publisher from invalid signature integrity',
       status: 'invalid_signature', version: '0.18.4',
     })
     const invalidSeal = verifiedRunner([], {
-      '/usr/bin/codesign --verify --deep --strict': { status: 1, stdout: '', stderr: 'private modified file' },
+      '/usr/bin/codesign --verify --deep --strict --verbose=1': { status: 1, stdout: '', stderr: 'private modified file' },
     })
     assert.deepEqual(inspectInputInstallation({ candidates: [files.system, files.user], runner: invalidSeal }), {
       status: 'invalid_signature', version: '0.18.4',
     })
+  } finally {
+    rmSync(files.root, { recursive: true, force: true })
+  }
+})
+
+test('identifies only the exact known signed-resource mutation without trusting it', () => {
+  const files = fixture()
+  const calls = []
+  try {
+    createBundle(files.system)
+    const knownMutation = verifiedRunner(calls, {
+      '/usr/bin/codesign --verify --deep --strict --verbose=1': {
+        status: 1,
+        stdout: `file modified: ${files.system}/Contents/Resources/scripts/window-info-retriever.scpt\n`,
+        stderr: `${files.system}: a sealed resource is missing or invalid\n`,
+      },
+    })
+    assert.deepEqual(inspectInputInstallation({ candidates: [files.system, files.user], runner: knownMutation }), {
+      status: 'known_resource_mutation', version: '0.18.4',
+    })
+    assert.equal(calls.some(({ executable }) => executable === '/usr/sbin/spctl'), false)
+  } finally {
+    rmSync(files.root, { recursive: true, force: true })
+  }
+})
+
+test('does not classify the known mutation transcript on another Input version', () => {
+  const files = fixture()
+  try {
+    createBundle(files.system)
+    const futureVersion = verifiedRunner([], {
+      '/usr/libexec/PlistBuddy -c Print :CFBundleShortVersionString': {
+        status: 0, stdout: '0.18.5\n', stderr: '',
+      },
+      '/usr/bin/codesign --verify --deep --strict --verbose=1': {
+        status: 1,
+        stdout: `file modified: ${files.system}/Contents/Resources/scripts/window-info-retriever.scpt\n`,
+        stderr: `${files.system}: a sealed resource is missing or invalid\n`,
+      },
+    })
+    assert.deepEqual(inspectInputInstallation({ candidates: [files.system, files.user], runner: futureVersion }), {
+      status: 'invalid_signature', version: '0.18.5',
+    })
+  } finally {
+    rmSync(files.root, { recursive: true, force: true })
+  }
+})
+
+test('does not broaden the known mutation exception to near matches or multiple files', () => {
+  const files = fixture()
+  try {
+    createBundle(files.system)
+    const nearMatch = verifiedRunner([], {
+      '/usr/bin/codesign --verify --deep --strict --verbose=1': {
+        status: 1,
+        stdout: '',
+        stderr: `file modified: ${files.system}/Contents/Resources/scripts/window-info-retriever.scpt.backup\n`,
+      },
+    })
+    assert.equal(inspectInputInstallation({ candidates: [files.system, files.user], runner: nearMatch }).status, 'invalid_signature')
+
+    const multipleFiles = verifiedRunner([], {
+      '/usr/bin/codesign --verify --deep --strict --verbose=1': {
+        status: 1,
+        stdout: `file modified: ${files.system}/Contents/Resources/scripts/window-info-retriever.scpt\n`,
+        stderr: `file modified: ${files.system}/Contents/Resources/app.asar\n`,
+      },
+    })
+    assert.equal(inspectInputInstallation({ candidates: [files.system, files.user], runner: multipleFiles }).status, 'invalid_signature')
+
+    for (const additionalFinding of [
+      `file added: ${files.system}/Contents/Resources/unexpected.txt`,
+      `file missing: ${files.system}/Contents/Resources/expected.txt`,
+      `${files.system}: code object is not signed at all`,
+    ]) {
+      const combinedFailure = verifiedRunner([], {
+        '/usr/bin/codesign --verify --deep --strict --verbose=1': {
+          status: 1,
+          stdout: '',
+          stderr: `${files.system}: a sealed resource is missing or invalid\nfile modified: ${files.system}/Contents/Resources/scripts/window-info-retriever.scpt\n${additionalFinding}\n`,
+        },
+      })
+      assert.equal(inspectInputInstallation({ candidates: [files.system, files.user], runner: combinedFailure }).status, 'invalid_signature')
+    }
+  } finally {
+    rmSync(files.root, { recursive: true, force: true })
+  }
+})
+
+test('does not expose private verification output while rejecting a lookalike mutation', () => {
+  const files = fixture()
+  try {
+    createBundle(files.system)
+    const privateOutput = verifiedRunner([], {
+      '/usr/bin/codesign --verify --deep --strict --verbose=1': {
+        status: 1,
+        stdout: 'private account mason@example.test\n',
+        stderr: `private /Users/mason/Documents\nfile modified: ${files.system}/Contents/Resources/scripts/window-info-retriever.scpt\n`,
+      },
+    })
+    const inspected = inspectInputInstallation({ candidates: [files.system, files.user], runner: privateOutput })
+    assert.deepEqual(inspected, { status: 'invalid_signature', version: '0.18.4' })
+    assert.doesNotMatch(JSON.stringify(inspected), /mason|Documents|Input\.app|input-installation-/u)
   } finally {
     rmSync(files.root, { recursive: true, force: true })
   }

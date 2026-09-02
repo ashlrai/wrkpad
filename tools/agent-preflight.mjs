@@ -17,7 +17,7 @@ const CODEX_PROTOCOL_TRAFFIC_STATUSES = new Set(['recurring_unresolved_response'
 const REQUIRED_DOCTOR_CHECK_NAMES = new Set(['Creator Micro 2 USB', 'Work Louder Input'])
 const INPUT_CACHE_STATUSES = new Set(['available', 'missing', 'invalid', 'unsafe'])
 const INPUT_ENCODER_DIRECTIONS = new Set(['correct', 'reversed', 'unrecognized', 'unavailable'])
-const INPUT_INSTALLATION_STATUSES = new Set(['verified', 'missing', 'multiple_installations', 'unsafe', 'invalid_metadata', 'publisher_unrecognized', 'invalid_signature', 'gatekeeper_rejected', 'probe_unavailable'])
+const INPUT_INSTALLATION_STATUSES = new Set(['verified', 'missing', 'multiple_installations', 'unsafe', 'invalid_metadata', 'publisher_unrecognized', 'invalid_signature', 'known_resource_mutation', 'gatekeeper_rejected', 'probe_unavailable'])
 const RECEIVER_RUNTIME_STATUSES = new Set(['not_running', 'exclusive', 'contended_same_build', 'contended_distinct_builds', 'unavailable'])
 const READINESS_STATUSES = new Set(['pass', 'manual', 'blocked'])
 const NATIVE_REASONS = new Set(['firmware_rpc_missing', 'historical_firmware_rpc_missing', 'recent_native_connection_observed', 'native_connection_requires_verification'])
@@ -169,10 +169,12 @@ function projectAppDoctor(raw) {
   const rawInputInstallation = raw.inputInstallation && typeof raw.inputInstallation === 'object' ? raw.inputInstallation : null
   const projectedInputStatus = INPUT_INSTALLATION_STATUSES.has(rawInputInstallation?.status) ? rawInputInstallation.status : 'probe_unavailable'
   const inputVersion = boundedVersion(rawInputInstallation?.version)
-  const inputVersionRequired = ['verified', 'publisher_unrecognized', 'invalid_signature', 'gatekeeper_rejected'].includes(projectedInputStatus)
+  const inputVersionRequired = ['verified', 'publisher_unrecognized', 'invalid_signature', 'known_resource_mutation', 'gatekeeper_rejected'].includes(projectedInputStatus)
   const inputVersionForbidden = ['missing', 'multiple_installations', 'unsafe', 'invalid_metadata', 'probe_unavailable'].includes(projectedInputStatus)
+  const knownMutationVersionInvalid = projectedInputStatus === 'known_resource_mutation' && inputVersion !== '0.18.4'
   const inputShapeValid = !(inputVersionRequired && inputVersion === null)
     && !(inputVersionForbidden && rawInputInstallation?.version !== null)
+    && !knownMutationVersionInvalid
   const inputInstallation = {
     status: inputShapeValid ? projectedInputStatus : 'probe_unavailable',
     version: inputShapeValid ? inputVersion : null,
@@ -379,6 +381,7 @@ export function buildPreflight({
   ]
   const ashlrPrerequisitesReady = appDoctor?.requiredReady === true
   const inputInstallationReady = appDoctor?.inputInstallation?.status === 'verified'
+  const knownInputResourceMutation = appDoctor?.inputInstallation?.status === 'known_resource_mutation'
   const ashlrReceiverReady = appDoctor?.receiverRuntime?.status === 'exclusive'
   let ashlrProfileObserved = false
   let ashlrProfileReady = false
@@ -390,7 +393,9 @@ export function buildPreflight({
     `status=${appDoctor?.inputInstallation?.status ?? 'probe_unavailable'}; version=${appDoctor?.inputInstallation?.version ?? 'unavailable'}`,
     inputInstallationReady
       ? 'the exact vendor publisher, bundle signature, and Gatekeeper assessment passed'
-      : 'presence alone is insufficient; restore one official signed Work Louder Input installation before configuration or firmware work',
+      : knownInputResourceMutation
+        ? 'the known vendor resource mutation invalidates the signed bundle; fully quit Input, preserve a stopped-state profile backup, replace it with one official signed vendor copy, and rerun doctor before configuration or firmware work'
+        : 'presence alone is insufficient; restore one official signed Work Louder Input installation before configuration or firmware work',
     inputInstallationReady ? 'agent' : 'human',
     inputInstallationReady ? 'read' : 'local_write',
   ))
@@ -493,7 +498,9 @@ export function buildPreflight({
   }
   nextSteps.push(!inputInstallationReady
     ? nextStep(
-      'restore_signed_input', 'human', 'local_write', ['download the official Work Louder Input release', 'verify there is one intended installation', 'preserve profile backups before replacement'],
+      'restore_signed_input', 'human', 'local_write', knownInputResourceMutation
+        ? ['fully quit Work Louder Input', 'preserve a stopped-state profile backup before replacement', 'replace the modified app with one official signed Work Louder Input release', 'rerun the read-only doctor before reopening board controllers or considering firmware']
+        : ['download the official Work Louder Input release', 'verify there is one intended installation', 'preserve profile backups before replacement'],
       'the desktop doctor verifies the exact vendor publisher, signature integrity, and Gatekeeper assessment',
       'profile activation, device synchronization, firmware compatibility, shortcut ownership, Input Monitoring, or physical acceptance',
     )

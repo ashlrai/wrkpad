@@ -33,8 +33,18 @@ firmware compatibility, or RGB.
 Setup accepts Input only when it says **publisher, signature, and Gatekeeper
 verified**. The app deliberately shows a sanitized reason such as `invalid
 signature`, `publisher unrecognized`, `Gatekeeper rejected`, `multiple
-installations`, `unsafe`, or `probe unavailable`; it does not display raw
-signing output, a local app path, or publisher identifiers.
+installations`, `unsafe`, `known resource mutation`, or `probe unavailable`; it
+does not display raw signing output, a local app path, or publisher identifiers.
+
+On this desk, Input 0.18.4 later showed an exact sealed `window-info` helper
+change while it was running; which process caused the change is unproven. The
+bounded `known resource mutation` result identifies only that exact shape, while
+a fresh [official Input 0.18.4 release](https://github.com/worklouder/input-releases/releases/tag/v0.18.4)
+verified before launch. It does not trust or verify the installed copy. Fully
+quit Input, make a backup while it remains stopped, reinstall the official 0.18.4
+DMG, and verify the fresh installation before launching it. If the current
+profile is already correct, leave Input closed during commissioning. This
+result never authorizes firmware work.
 
 For any result other than verified:
 
@@ -45,8 +55,8 @@ For any result other than verified:
 4. Replace the unverified installation in Finder. If Input exists in both
    `/Applications` and the user's Applications folder, keep one intended
    official installation and resolve the duplicate manually.
-5. Reopen Input, refresh Setup, and require the verified status before profile
-   import, device synchronization, or firmware qualification.
+5. Refresh Setup while Input remains closed and require the verified status
+   before launching Input, importing a profile, or synchronizing the device.
 
 Do not bypass Gatekeeper, strip quarantine metadata, ad-hoc sign Input, or let
 an agent remove application bundles. A verified installation proves publisher,

@@ -109,6 +109,32 @@ test('required Input check passes only an exact verified installation receipt', 
   assert.doesNotMatch(JSON.stringify(invalid), /private|Users|modified|false pass/)
 })
 
+test('known Input resource mutation stays blocked and orders signed-app recovery before controller work', () => {
+  const result = evaluateDoctor({
+    ...requiredProbes,
+    ...missingOptionalProbes,
+    boardRoute: 'codex_native',
+    nativeCodex: { ok: false, code: 'firmware_rpc_missing', detail: 'RPC 404', fresh: true },
+    inputInstallation: {
+      status: 'known_resource_mutation', version: '0.18.4',
+      resource: '/Users/private/window-info-retriever.scpt', raw: 'secret verification output',
+    },
+  })
+
+  assert.equal(result.ok, false)
+  assert.deepEqual(result.inputInstallation, { status: 'known_resource_mutation', version: '0.18.4' })
+  assert.deepEqual(result.checks[1], {
+    name: 'Work Louder Input', ok: false, detail: 'Input.app has the known modified signed resource v0.18.4',
+    category: 'required', severity: 'error', blocking: true, code: 'known_resource_mutation',
+  })
+  assert.equal(result.readiness.prerequisites.status, 'blocked')
+  assert.equal(result.readiness.ashlrLayer.status, 'blocked')
+  assert.match(result.nextAction, /fully quit Input, preserve a stopped-state profile backup, replace it with one official signed vendor copy, then rerun the doctor/)
+  assert.match(result.nextAction, /before reopening other board controllers/)
+  assert.match(result.nextAction, /Do not repair or re-sign the app/)
+  assert.doesNotMatch(JSON.stringify(result), /Users|private|secret|window-info-retriever/)
+})
+
 test('malformed Input installation evidence fails closed without leaking fields', () => {
   const result = evaluateDoctor({
     ...requiredProbes,
@@ -124,6 +150,8 @@ test('malformed Input installation evidence fails closed without leaking fields'
 test('Input installation versions must match the exact status shape', () => {
   for (const inputInstallation of [
     { status: 'verified', version: null },
+    { status: 'known_resource_mutation', version: null },
+    { status: 'known_resource_mutation', version: '0.18.5' },
     { status: 'missing', version: '0.18.4' },
     { status: 'probe_unavailable' },
   ]) {

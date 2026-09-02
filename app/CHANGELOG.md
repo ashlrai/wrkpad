@@ -77,9 +77,15 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 - Cache only identity-stable bounded receiver hashes and the short-lived Input
   integrity result so recurring status refreshes do not stall physical control
   handling; development builds now fail closed around packaged peers.
+- Treat the observed Input 0.18.4 sealed window-info helper mutation as an explicit
+  unverified state with stopped-state backup, reinstall, and pre-launch
+  verification guidance; it never authorizes firmware work.
 
 ### Security
 
+- Bind Input metadata, publisher, signature, and Gatekeeper probes to one
+  canonical unchanged bundle fingerprint; reject direct or ancestor symlinks
+  and reconfirm publisher identity after strict verification.
 - Route automatic and one-press Git inspection through a fixed, hardened Git
   runner that disables repository fsmonitor, external diff, textconv, optional
   locks, pagers, prompts, and inherited `GIT_*` process injection.

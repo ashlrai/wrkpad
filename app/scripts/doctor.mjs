@@ -56,7 +56,7 @@ const MANUAL_CHECKS = [
 ]
 const INPUT_RUNTIME_STATUSES = new Set(['unresolved_profile_layer', 'not_observed', 'log_missing', 'log_unsafe', 'log_unavailable'])
 const CODEX_PROTOCOL_TRAFFIC_STATUSES = new Set(['recurring_unresolved_response', 'not_observed', 'log_missing', 'log_unsafe', 'log_unavailable'])
-const INPUT_INSTALLATION_STATUSES = new Set(['verified', 'missing', 'multiple_installations', 'unsafe', 'invalid_metadata', 'publisher_unrecognized', 'invalid_signature', 'gatekeeper_rejected', 'probe_unavailable'])
+const INPUT_INSTALLATION_STATUSES = new Set(['verified', 'missing', 'multiple_installations', 'unsafe', 'invalid_metadata', 'publisher_unrecognized', 'invalid_signature', 'known_resource_mutation', 'gatekeeper_rejected', 'probe_unavailable'])
 const RECEIVER_RUNTIME_STATUSES = new Set(['exclusive', 'contended_same_build', 'contended_distinct_builds', 'not_running', 'unavailable'])
 const SHA256 = /^[0-9a-f]{64}$/
 const SAFE_VERSION = /^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$/
@@ -69,9 +69,10 @@ const boundedIsoTimestamp = (value) => {
 const projectInputInstallation = (raw) => {
   const status = INPUT_INSTALLATION_STATUSES.has(raw?.status) ? raw.status : 'probe_unavailable'
   const version = typeof raw?.version === 'string' && SAFE_VERSION.test(raw.version) ? raw.version : null
-  const versionRequired = ['verified', 'publisher_unrecognized', 'invalid_signature', 'gatekeeper_rejected'].includes(status)
+  const versionRequired = ['verified', 'publisher_unrecognized', 'invalid_signature', 'known_resource_mutation', 'gatekeeper_rejected'].includes(status)
   const versionForbidden = ['missing', 'multiple_installations', 'unsafe', 'invalid_metadata', 'probe_unavailable'].includes(status)
-  if ((versionRequired && !version) || (versionForbidden && raw?.version !== null)) {
+  const knownMutationVersionInvalid = status === 'known_resource_mutation' && version !== '0.18.4'
+  if ((versionRequired && !version) || (versionForbidden && raw?.version !== null) || knownMutationVersionInvalid) {
     return { status: 'probe_unavailable', version: null }
   }
   return { status, version }
@@ -87,6 +88,7 @@ const inputCheck = (installation) => {
     invalid_metadata: 'Input.app metadata is invalid',
     publisher_unrecognized: `Input.app publisher is unrecognized${version}`,
     invalid_signature: `Input.app signature integrity failed${version}`,
+    known_resource_mutation: `Input.app has the known modified signed resource${version}`,
     gatekeeper_rejected: `Input.app was rejected by Gatekeeper${version}`,
     probe_unavailable: 'Input.app integrity probe unavailable',
   }
@@ -96,6 +98,7 @@ const inputCheck = (installation) => {
 const inputRecoveryAction = (status) => {
   if (status === 'missing') return 'Install the signed Work Louder Input app from the vendor, then rerun the doctor.'
   if (status === 'multiple_installations') return 'A human must review both Input.app installations, keep one verified signed vendor copy, and rerun the doctor. No application was removed automatically.'
+  if (status === 'known_resource_mutation') return 'Stop Input, profile synchronization, and firmware qualification. A human must fully quit Input, preserve a stopped-state profile backup, replace it with one official signed vendor copy, then rerun the doctor before reopening other board controllers. Do not repair or re-sign the app; no application was changed automatically.'
   if (status === 'probe_unavailable') return 'A human must verify the signed Work Louder Input installation manually, then rerun the read-only doctor; no application was changed.'
   return 'Stop Input and firmware qualification. A human must replace or repair Input.app from the signed vendor distribution, then rerun the doctor; no application was changed automatically.'
 }
