@@ -140,6 +140,22 @@ test('hostile Input runtime projection fails closed without exposing private fie
   assert.doesNotMatch(JSON.stringify(result), /Users|private|secret|999/)
 })
 
+test('recognized unresolved status with malformed fields cannot pass', () => {
+  const result = buildPreflight({
+    route: 'ashlr_layer', source, stable: null,
+    appDoctorRaw: {
+      ...appDoctor,
+      inputRuntime: { status: 'unresolved_profile_layer', profileIndex: 999, layerIndex: -1, observedAt: 'private/path', fresh: true },
+    },
+    developmentBinary: '/missing/development/binary', runCommand: commandFixture,
+    observedAt: '2026-09-01T20:00:00.000Z',
+  })
+  const runtime = result.checks.find((item) => item.id === 'input_runtime')
+  assert.equal(runtime.status, 'warn')
+  assert.equal(runtime.evidence, 'reason=invalid; bounded Input runtime evidence unavailable')
+  assert.doesNotMatch(JSON.stringify(result), /private\/path|999/)
+})
+
 test('preflight output never publishes executable firmware or permission steps', () => {
   for (const route of ['ashlr_layer', 'codex_native']) {
     const result = buildPreflight({

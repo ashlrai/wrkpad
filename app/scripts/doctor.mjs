@@ -92,11 +92,14 @@ export function evaluateDoctor(probes, options = {}) {
     && inputProfile.activeLayer === 'Ashlr Daily'
     && inputProfile.encoderDirection === 'correct'
   const rawInputRuntime = probes.inputRuntime ?? {}
-  const inputRuntimeStatus = INPUT_RUNTIME_STATUSES.has(rawInputRuntime.status) ? rawInputRuntime.status : 'not_observed'
+  const inputRuntimeStatus = INPUT_RUNTIME_STATUSES.has(rawInputRuntime.status) ? rawInputRuntime.status : 'log_unavailable'
   const runtimeProfileIndex = Number.isInteger(rawInputRuntime.profileIndex) && rawInputRuntime.profileIndex >= 0 && rawInputRuntime.profileIndex <= 31 ? rawInputRuntime.profileIndex : null
   const runtimeLayerIndex = Number.isInteger(rawInputRuntime.layerIndex) && rawInputRuntime.layerIndex >= 0 && rawInputRuntime.layerIndex <= 15 ? rawInputRuntime.layerIndex : null
   const runtimeObservedAt = boundedIsoTimestamp(rawInputRuntime.observedAt)
-  const unresolvedRuntimeObserved = inputRuntimeStatus === 'unresolved_profile_layer'
+  const unresolvedRuntimeShapeValid = inputRuntimeStatus !== 'unresolved_profile_layer'
+    || (runtimeProfileIndex !== null && runtimeLayerIndex !== null && runtimeObservedAt !== null)
+  const projectedRuntimeStatus = unresolvedRuntimeShapeValid ? inputRuntimeStatus : 'log_unavailable'
+  const unresolvedRuntimeObserved = projectedRuntimeStatus === 'unresolved_profile_layer'
     && rawInputRuntime.fresh === true && runtimeProfileIndex !== null && runtimeLayerIndex !== null && runtimeObservedAt !== null
   const ashlrReason = failedRequiredIndex !== -1
     ? 'required_prerequisite_missing'
@@ -129,10 +132,10 @@ export function evaluateDoctor(probes, options = {}) {
       dailyProfileReady,
     },
     inputRuntime: {
-      status: inputRuntimeStatus,
-      profileIndex: runtimeProfileIndex,
-      layerIndex: runtimeLayerIndex,
-      observedAt: runtimeObservedAt,
+      status: projectedRuntimeStatus,
+      profileIndex: projectedRuntimeStatus === 'unresolved_profile_layer' ? runtimeProfileIndex : null,
+      layerIndex: projectedRuntimeStatus === 'unresolved_profile_layer' ? runtimeLayerIndex : null,
+      observedAt: projectedRuntimeStatus === 'unresolved_profile_layer' ? runtimeObservedAt : null,
       fresh: unresolvedRuntimeObserved,
     },
     manualChecks,

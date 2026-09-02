@@ -202,8 +202,19 @@ test('malformed Input timestamps cannot become fresh advisories', () => {
     boardRoute: 'ashlr_layer',
     inputRuntime: { status: 'unresolved_profile_layer', profileIndex: 2, layerIndex: 1, observedAt: 'private/path', fresh: true },
   })
+  assert.equal(result.inputRuntime.status, 'log_unavailable')
   assert.equal(result.inputRuntime.observedAt, null)
   assert.equal(result.inputRuntime.fresh, false)
   assert.equal(result.readiness.ashlrLayer.reason, 'physical_acceptance_required')
+  assert.doesNotMatch(JSON.stringify(result), /private\/path/)
+})
+
+test('unknown Input runtime status fails closed', () => {
+  const result = evaluateDoctor({
+    ...requiredProbes,
+    ...missingOptionalProbes,
+    inputRuntime: { status: 'private/path', profileIndex: 2, layerIndex: 1, observedAt: '2026-09-01T19:33:00.000Z', fresh: true },
+  })
+  assert.deepEqual(result.inputRuntime, { status: 'log_unavailable', profileIndex: null, layerIndex: null, observedAt: null, fresh: false })
   assert.doesNotMatch(JSON.stringify(result), /private\/path/)
 })

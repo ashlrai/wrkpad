@@ -159,6 +159,9 @@ function projectAppDoctor(raw) {
   const runtimeProfileIndex = Number.isInteger(rawRuntime?.profileIndex) && rawRuntime.profileIndex >= 0 && rawRuntime.profileIndex <= 31 ? rawRuntime.profileIndex : null
   const runtimeLayerIndex = Number.isInteger(rawRuntime?.layerIndex) && rawRuntime.layerIndex >= 0 && rawRuntime.layerIndex <= 15 ? rawRuntime.layerIndex : null
   const runtimeObservedAt = boundedIsoTimestamp(rawRuntime?.observedAt)
+  const projectedRuntimeStatus = runtimeStatus === 'unresolved_profile_layer' && (runtimeProfileIndex === null || runtimeLayerIndex === null || runtimeObservedAt === null)
+    ? 'invalid'
+    : runtimeStatus
   return {
     declaredRoute: ['ashlr_layer', 'codex_native'].includes(raw.route) ? raw.route : 'unknown',
     inputProfile: raw.inputProfile && typeof raw.inputProfile === 'object' ? {
@@ -169,11 +172,11 @@ function projectAppDoctor(raw) {
       dailyProfileReady: raw.inputProfile.dailyProfileReady === true,
     } : null,
     inputRuntime: rawRuntime ? {
-      status: runtimeStatus,
+      status: projectedRuntimeStatus,
       profileIndex: runtimeProfileIndex,
       layerIndex: runtimeLayerIndex,
       observedAt: runtimeObservedAt,
-      fresh: runtimeStatus === 'unresolved_profile_layer' && rawRuntime.fresh === true && runtimeProfileIndex !== null && runtimeLayerIndex !== null && runtimeObservedAt !== null,
+      fresh: projectedRuntimeStatus === 'unresolved_profile_layer' && rawRuntime.fresh === true,
     } : null,
     requiredReady: required.length > 0 && required.every((item) => item.ok === true),
     nativeStatus: raw.readiness?.codexNative?.status ?? 'unknown',

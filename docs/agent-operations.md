@@ -82,7 +82,8 @@ proof of source identity, review, provenance, signing, or release.
    synchronization. If `input_runtime` reports a recent unresolved-index event,
    treat it as advisory log evidence that may predate the cache. A fresh
    physical Flight Check may supersede it; if the board remains silent, use the
-   Input-only recovery procedure and never delete or transform `KV_OAI_*`.
+   [Input-only reconciliation](../app/docs/troubleshooting.md#input-only-reconciliation)
+   and never delete or transform `KV_OAI_*`.
 6. Arm Daily Flight Check. Wait for the screen to say actions are suppressed,
    then have the operator complete all 19 gestures on the physical board.
 7. Operate from Agent Board. Slot selection may foreground Codex Desktop or
