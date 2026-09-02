@@ -43,24 +43,47 @@ Use this single recovery procedure when the physical check remains silent, the
 cache is wrong, or Agent Board shows recent unresolved-index log evidence:
 
 1. Stop Flight Check so the action interlock returns to a known state.
-2. If Setup reports reversed or unverified dial directions, use **Create
-   corrected Input profile** with an ordinary export. The artifact does not
-   activate itself or write to the device.
-3. Fully quit Agent Board, Codex, and every other board controller, then power
-   cycle the board.
-4. Open Input alone. Import the artifact only when Step 2 created one, use **Set
-   as current profile** for **Ashlr Agent Board Corrected**, and select **Ashlr
+2. In Input's profile chooser, hover an ordinary Creator Micro 2 profile and
+   choose **Export Profile**. Keep it as rollback. If Setup reports reversed or
+   unverified dial directions, return to Agent Board and use **Create corrected
+   Input profile** with that export. The artifact does not activate itself or
+   write to the device. A resumed handoff re-verifies the exact bounded artifact
+   by SHA-256 before reveal; the copied checklist includes its filename and
+   checksum but omits the full local path. Dismissing that handoff removes only
+   the startup reminder and proves no recovery step. Use **Reveal artifact in
+   Finder** or **Copy recovery checklist** before quitting the instruction
+   surfaces.
+3. Use Command-Q to fully quit Agent Board, Codex/ChatGPT, Claude, and every
+   other board controller; closing a window is not enough. Power-cycle the board.
+4. Open Input alone, choose **Import Profile**, and select the corrected
+   artifact. If **Import Profile** is absent, Input already has six profiles:
+   export a backup and remove only an unused ordinary profile. Never delete or
+   transform a protected `KV_OAI_*` profile or layer.
+5. Avoid ambiguous same-name copies: export and remove only an older ordinary
+   **Ashlr Agent Board Corrected** profile before importing its replacement. On
+   the imported row choose **Set as current profile**, then select **Ashlr
    Daily**.
-5. Fully quit and relaunch Input alone. Confirm the same current profile; a
-   `layout updated` message is not acceptance.
-6. Confirm Agent Board has Input Monitoring authority, then reopen the exact
-   intended receiver build.
-7. Run a fresh physical Flight Check without simulating shortcuts from the
+6. Wait for Input to finish. `layout updated` is not acceptance. If Input says
+   `update error, retry`, keep Input as the only board controller and retry; do
+   not continue from an error.
+7. Use Command-Q to fully quit Input and relaunch it alone. Confirm **Ashlr Agent
+   Board Corrected** is still current with **Ashlr Daily** selected.
+8. Reopen Agent Board, choose **Open Input Monitoring settings**, and manually
+   verify the exact receiver build shown in Setup is enabled. Agent Board keeps
+   this permission labeled human-unverified because it cannot read the protected
+   macOS permission database.
+9. Run a fresh physical Flight Check without simulating shortcuts from the
    keyboard.
 
 Recent unresolved-index evidence may predate the current cache, so it is an
 advisory rather than proof of the current board state. Do not reset, delete or
 transform a protected `KV_OAI_*` layer, or flash firmware from that evidence.
+
+If Setup reports recurring Codex-protocol responses reaching Input, treat that
+as current controller co-presence only. It does not identify HID ownership or
+prove why a shortcut was silent, but it does mean the Input-only reconciliation
+window is not exclusive. End Flight Check and establish the human-guided
+Input-only window above; Agent Board does not quit applications automatically.
 
 If Flight Check receives zero raw signals, use the top-right black rotary dial.
 The top-left white control is the joystick and the bottom-left circle is the

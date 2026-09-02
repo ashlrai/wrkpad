@@ -13,6 +13,13 @@ const APP_DOCTOR = join(REPO_ROOT, 'app', 'scripts', 'doctor.mjs')
 const MAX_OUTPUT_BYTES = 256 * 1024
 const ROUTES = new Set(['ashlr_layer', 'codex_native'])
 const INPUT_RUNTIME_STATUSES = new Set(['unresolved_profile_layer', 'not_observed', 'log_missing', 'log_unsafe', 'log_unavailable'])
+const CODEX_PROTOCOL_TRAFFIC_STATUSES = new Set(['recurring_unresolved_response', 'not_observed', 'log_missing', 'log_unsafe', 'log_unavailable'])
+const REQUIRED_DOCTOR_CHECK_NAMES = new Set(['Creator Micro 2 USB', 'Work Louder Input'])
+const INPUT_CACHE_STATUSES = new Set(['available', 'missing', 'invalid', 'unsafe'])
+const INPUT_ENCODER_DIRECTIONS = new Set(['correct', 'reversed', 'unrecognized', 'unavailable'])
+const READINESS_STATUSES = new Set(['pass', 'manual', 'blocked'])
+const NATIVE_REASONS = new Set(['firmware_rpc_missing', 'recent_native_connection_observed', 'native_connection_requires_verification'])
+const ASHLR_REASONS = new Set(['required_prerequisite_missing', 'encoder_direction_reversed', 'input_profile_requires_activation', 'recent_unresolved_profile_layer_observed', 'recurring_codex_protocol_traffic', 'physical_acceptance_required'])
 const boundedIsoTimestamp = (value) => {
   if (typeof value !== 'string' || value.length > 40 || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) return null
   const parsed = new Date(value)
@@ -154,6 +161,11 @@ function projectAppDoctor(raw) {
   const required = Array.isArray(raw.checks)
     ? raw.checks.filter((item) => item.category === 'required')
     : []
+  const requiredNames = new Set(required.map((item) => item?.name).filter((name) => typeof name === 'string'))
+  const requiredReady = required.length === REQUIRED_DOCTOR_CHECK_NAMES.size
+    && requiredNames.size === REQUIRED_DOCTOR_CHECK_NAMES.size
+    && [...REQUIRED_DOCTOR_CHECK_NAMES].every((name) => requiredNames.has(name))
+    && required.every((item) => item.ok === true)
   const rawRuntime = raw.inputRuntime && typeof raw.inputRuntime === 'object' ? raw.inputRuntime : null
   const runtimeStatus = rawRuntime && INPUT_RUNTIME_STATUSES.has(rawRuntime.status) ? rawRuntime.status : rawRuntime ? 'invalid' : null
   const runtimeProfileIndex = Number.isInteger(rawRuntime?.profileIndex) && rawRuntime.profileIndex >= 0 && rawRuntime.profileIndex <= 31 ? rawRuntime.profileIndex : null
@@ -162,14 +174,34 @@ function projectAppDoctor(raw) {
   const projectedRuntimeStatus = runtimeStatus === 'unresolved_profile_layer' && (runtimeProfileIndex === null || runtimeLayerIndex === null || runtimeObservedAt === null)
     ? 'invalid'
     : runtimeStatus
+  const rawCodexTraffic = rawRuntime?.codexProtocolTraffic && typeof rawRuntime.codexProtocolTraffic === 'object'
+    ? rawRuntime.codexProtocolTraffic
+    : null
+  const codexTrafficStatus = rawCodexTraffic && CODEX_PROTOCOL_TRAFFIC_STATUSES.has(rawCodexTraffic.status)
+    ? rawCodexTraffic.status
+    : rawCodexTraffic ? 'invalid' : null
+  const codexTrafficObservedAt = boundedIsoTimestamp(rawCodexTraffic?.observedAt)
+  const projectedCodexTrafficStatus = codexTrafficStatus === 'recurring_unresolved_response' && codexTrafficObservedAt === null
+    ? 'invalid'
+    : codexTrafficStatus
+  const rawProfile = raw.inputProfile && typeof raw.inputProfile === 'object' ? raw.inputProfile : null
+  const cacheStatus = INPUT_CACHE_STATUSES.has(rawProfile?.cacheStatus) ? rawProfile.cacheStatus : 'invalid'
+  const encoderDirection = INPUT_ENCODER_DIRECTIONS.has(rawProfile?.encoderDirection) ? rawProfile.encoderDirection : 'unavailable'
+  const dailyProfileMatch = rawProfile?.dailyProfileMatch === true
+  const dailyLayerMatch = rawProfile?.dailyLayerMatch === true
+  const dailyProfileReady = cacheStatus === 'available' && dailyProfileMatch && dailyLayerMatch && encoderDirection === 'correct'
+  const nativeStatus = READINESS_STATUSES.has(raw.readiness?.codexNative?.status) ? raw.readiness.codexNative.status : 'unknown'
+  const nativeReason = NATIVE_REASONS.has(raw.readiness?.codexNative?.reason) ? raw.readiness.codexNative.reason : 'native_readiness_unavailable'
+  const ashlrStatus = READINESS_STATUSES.has(raw.readiness?.ashlrLayer?.status) ? raw.readiness.ashlrLayer.status : 'manual'
+  const ashlrReason = ASHLR_REASONS.has(raw.readiness?.ashlrLayer?.reason) ? raw.readiness.ashlrLayer.reason : 'physical_acceptance_required'
   return {
     declaredRoute: ['ashlr_layer', 'codex_native'].includes(raw.route) ? raw.route : 'unknown',
-    inputProfile: raw.inputProfile && typeof raw.inputProfile === 'object' ? {
-      cacheStatus: raw.inputProfile.cacheStatus ?? 'unknown',
-      dailyProfileMatch: raw.inputProfile.dailyProfileMatch === true,
-      dailyLayerMatch: raw.inputProfile.dailyLayerMatch === true,
-      encoderDirection: raw.inputProfile.encoderDirection ?? 'unavailable',
-      dailyProfileReady: raw.inputProfile.dailyProfileReady === true,
+    inputProfile: rawProfile ? {
+      cacheStatus,
+      dailyProfileMatch,
+      dailyLayerMatch,
+      encoderDirection,
+      dailyProfileReady,
     } : null,
     inputRuntime: rawRuntime ? {
       status: projectedRuntimeStatus,
@@ -177,12 +209,17 @@ function projectAppDoctor(raw) {
       layerIndex: runtimeLayerIndex,
       observedAt: runtimeObservedAt,
       fresh: projectedRuntimeStatus === 'unresolved_profile_layer' && rawRuntime.fresh === true,
+      codexProtocolTraffic: rawCodexTraffic ? {
+        status: projectedCodexTrafficStatus,
+        observedAt: codexTrafficObservedAt,
+        fresh: projectedCodexTrafficStatus === 'recurring_unresolved_response' && rawCodexTraffic.fresh === true,
+      } : null,
     } : null,
-    requiredReady: required.length > 0 && required.every((item) => item.ok === true),
-    nativeStatus: raw.readiness?.codexNative?.status ?? 'unknown',
-    nativeReason: raw.readiness?.codexNative?.reason ?? 'native_readiness_unavailable',
-    ashlrStatus: raw.readiness?.ashlrLayer?.status ?? 'manual',
-    ashlrReason: raw.readiness?.ashlrLayer?.reason ?? 'physical_acceptance_required',
+    requiredReady,
+    nativeStatus,
+    nativeReason,
+    ashlrStatus,
+    ashlrReason,
   }
 }
 
@@ -284,11 +321,20 @@ export function buildPreflight({
       'a state receipt does not prove a fresh provider event or physical signal',
     ),
   ]
+  const ashlrPrerequisitesReady = appDoctor?.requiredReady === true
+  let ashlrProfileObserved = false
+  let ashlrProfileReady = false
+  let ashlrInputOnlyWindowNeeded = false
 
   if (route === 'ashlr_layer') {
     const profile = appDoctor?.inputProfile
+    ashlrProfileObserved = Boolean(profile)
+    ashlrProfileReady = profile?.dailyProfileReady === true
     const runtime = appDoctor?.inputRuntime
     const runtimeUnavailable = ['log_missing', 'log_unsafe', 'log_unavailable', 'invalid'].includes(runtime?.status)
+    const codexTraffic = runtime?.codexProtocolTraffic
+    ashlrInputOnlyWindowNeeded = codexTraffic?.status === 'recurring_unresolved_response' && codexTraffic.fresh === true
+    const codexTrafficUnavailable = ['log_missing', 'log_unsafe', 'log_unavailable', 'invalid'].includes(codexTraffic?.status)
     checks.push(check(
       'input_profile',
       profile?.dailyProfileReady ? 'pass' : profile?.encoderDirection === 'reversed' ? 'blocked' : 'warn',
@@ -306,6 +352,16 @@ export function buildPreflight({
       runtime?.status === 'unresolved_profile_layer' && runtime.fresh
         ? 'Input recently logged an unresolved index combination; it may predate the current cache and does not prove current device state'
         : runtimeUnavailable ? 'runtime evidence is unavailable or unsafe; do not infer an error-free Input session' : runtime ? 'no recent unresolved Input profile/layer event requires an advisory' : 'run the desktop doctor directly for bounded Input runtime evidence',
+    ))
+    checks.push(check(
+      'input_codex_protocol_traffic',
+      codexTraffic?.status === 'recurring_unresolved_response' && codexTraffic.fresh || codexTrafficUnavailable ? 'warn' : codexTraffic ? 'pass' : 'warn',
+      codexTraffic?.status === 'recurring_unresolved_response'
+        ? `reason=recurring_unresolved_response; fresh=${codexTraffic.fresh}`
+        : codexTrafficUnavailable ? `reason=${codexTraffic.status}; bounded Codex-protocol traffic evidence unavailable` : codexTraffic ? `reason=${codexTraffic.status}; no current recurring traffic projected` : 'bounded Codex-protocol traffic evidence unavailable',
+      codexTraffic?.status === 'recurring_unresolved_response' && codexTraffic.fresh
+        ? 'Input received recurring Codex-protocol responses for which it had no active resolver; this is co-presence evidence, not ownership, and Input-only reconciliation is not exclusive'
+        : codexTrafficUnavailable ? 'traffic evidence is unavailable or unsafe; do not infer exclusive Input ownership' : codexTraffic ? 'no current recurring Codex-protocol traffic requires an advisory' : 'run the desktop doctor directly for bounded protocol traffic evidence',
     ))
     checks.push(check(
       'route_readiness',
@@ -352,11 +408,36 @@ export function buildPreflight({
     ))
   }
   nextSteps.push(route === 'ashlr_layer'
-    ? nextStep(
-      'complete_ashlr_flight_check', 'human', 'permission', ['active corrected Input profile', 'Input Monitoring granted', 'actions suppressed'],
-      'the named daily shortcut route emitted all expected physical gestures',
-      'native Codex RGB, firmware compatibility, provider authority, or consequential-action approval',
-    )
+    ? !ashlrPrerequisitesReady
+      ? nextStep(
+        'resolve_ashlr_prerequisites', 'human', 'local_write', ['connect the Creator Micro 2 over USB', 'install the signed Work Louder Input app', 'rerun the read-only desktop doctor'],
+        'the bounded desktop prerequisite probes are available and passing',
+        'profile activation, device synchronization, Input Monitoring, physical acceptance, native Codex RGB, or release readiness',
+      )
+      : !ashlrProfileObserved
+        ? nextStep(
+          'inspect_input_profile', 'agent', 'read', [],
+          'the bounded desktop doctor projects sanitized Input profile evidence',
+          'profile activation, device synchronization, Input Monitoring, physical acceptance, or firmware compatibility',
+          { executable: 'node', args: ['app/scripts/doctor.mjs', '--json'], cwd: '$REPO_ROOT' },
+        )
+        : ashlrInputOnlyWindowNeeded
+          ? nextStep(
+            'establish_input_only_recovery_window', 'human', 'local_write', ['end Flight Check', 'save the recovery checklist and rollback export', 'fully quit every board controller before opening Work Louder Input alone'],
+            'the operator can perform the Input-only reconciliation and rerun preflight after reopening Agent Board',
+            'HID ownership, profile activation, device synchronization, Input Monitoring, physical acceptance, native Codex RGB, or firmware compatibility',
+          )
+          : !ashlrProfileReady
+            ? nextStep(
+              'reconcile_input_profile', 'human', 'device_write', ['ordinary profile export saved as rollback', 'Codex, Agent Board, and competing controllers fully quit', 'Work Louder Input is the only board controller'],
+              'the corrected profile is imported, set current, and still selected after Input relaunch',
+              'device synchronization, Input Monitoring permission, physical shortcut receipt, native Codex RGB, or firmware compatibility',
+            )
+            : nextStep(
+              'complete_ashlr_flight_check', 'human', 'permission', ['active corrected Input profile', 'Input Monitoring granted', 'actions suppressed'],
+              'the named daily shortcut route emitted all expected physical gestures',
+              'native Codex RGB, firmware compatibility, provider authority, or consequential-action approval',
+            )
     : nextStep(
       'qualify_native_firmware', 'human', 'firmware', ['vendor-matched stable image', 'recorded checksum', 'stable power', 'recovery plan', 'Codex, Agent Board, and competing HID controllers quit; signed Work Louder Input is sole owner'],
       'the exact firmware and Codex build complete rgbcfg then thstatus and physical acceptance',

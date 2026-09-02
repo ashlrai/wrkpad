@@ -65,6 +65,24 @@ installed, and Entire telemetry is disabled by default. Never install it,
 rewrite another contributor's Git hooks, enable telemetry, or restore a
 checkpoint without that contributor's explicit action.
 
+## Independent review and CODEOWNERS recovery
+
+Protected branches require code-owner approval, resolved conversations, and
+approval after the latest push. A pull-request author or latest pusher must not
+approve their own change or use an administrator bypass.
+
+If the only eligible code owner authored the pull request or made its latest
+push:
+
+1. Do not weaken or bypass protection for the feature pull request.
+2. Ask a different trusted collaborator to author a separate governance pull
+   request that adds a second named code owner or maintainer team.
+3. The existing code owner reviews that governance pull request under normal
+   protection.
+4. After it merges, rebase the feature pull request onto the updated default
+   branch.
+5. Request approval from the newly eligible code owner after the final push.
+
 ## Definition of done
 
 A change is complete when source, tests, documentation, examples, and error behavior agree. Green CI proves only the checked source artifact; it does not prove a public release, installed hook, hardware takeover, provider acceptance, or physical acceptance.

@@ -13,8 +13,8 @@ const source = {
 const appDoctor = {
   schema: 'ai.ashlr.agent-board.doctor/v1',
   checks: [
-    { category: 'required', ok: true },
-    { category: 'required', ok: true },
+    { name: 'Creator Micro 2 USB', category: 'required', ok: true },
+    { name: 'Work Louder Input', category: 'required', ok: true },
   ],
   readiness: {
     codexNative: { status: 'blocked', reason: 'firmware_rpc_missing' },
@@ -27,7 +27,10 @@ const appDoctor = {
     encoderDirection: 'correct',
     dailyProfileReady: true,
   },
-  inputRuntime: { status: 'not_observed', profileIndex: null, layerIndex: null, observedAt: null, fresh: false },
+  inputRuntime: {
+    status: 'not_observed', profileIndex: null, layerIndex: null, observedAt: null, fresh: false,
+    codexProtocolTraffic: { status: 'not_observed', observedAt: null, fresh: false },
+  },
 }
 
 function commandFixture(_executable, args) {
@@ -76,6 +79,8 @@ test('Ashlr Layer stays manual until physical acceptance', () => {
   assert.equal(result.checks.find((item) => item.id === 'route_readiness').actor, 'human')
   assert.ok(result.next_steps.some((item) => item.id === 'install_stable_binary'))
   assert.equal(result.checks.find((item) => item.id === 'input_profile').status, 'pass')
+  assert.ok(result.next_steps.some((item) => item.id === 'complete_ashlr_flight_check'))
+  assert.equal(result.next_steps.some((item) => item.id === 'reconcile_input_profile'), false)
 })
 
 test('Ashlr Layer blocks the known reversed dial mapping', () => {
@@ -92,6 +97,47 @@ test('Ashlr Layer blocks the known reversed dial mapping', () => {
 
   assert.equal(result.overall, 'blocked')
   assert.equal(result.checks.find((item) => item.id === 'input_profile').reason, 'the read-only cache identifies the known reversed dial mapping')
+  assert.ok(result.next_steps.some((item) => item.id === 'reconcile_input_profile'))
+  assert.equal(result.next_steps.some((item) => item.id === 'complete_ashlr_flight_check'), false)
+})
+
+test('Ashlr Layer never recommends a device write when desktop prerequisites are missing', () => {
+  const result = buildPreflight({
+    route: 'ashlr_layer', source, stable: null,
+    appDoctorRaw: {
+      ...appDoctor,
+      checks: [{ name: 'Creator Micro 2 USB', category: 'required', ok: false }],
+      inputProfile: null,
+    },
+    developmentBinary: '/missing/development/binary', runCommand: commandFixture,
+    observedAt: '2026-09-01T20:00:00.000Z',
+  })
+
+  assert.ok(result.next_steps.some((item) => item.id === 'resolve_ashlr_prerequisites'))
+  assert.equal(result.next_steps.some((item) => item.safety === 'device_write'), false)
+  assert.equal(result.next_steps.some((item) => item.id === 'complete_ashlr_flight_check'), false)
+})
+
+test('Ashlr Layer rejects incomplete required checks and inconsistent hostile profile fields', () => {
+  const result = buildPreflight({
+    route: 'ashlr_layer', source, stable: null,
+    appDoctorRaw: {
+      ...appDoctor,
+      checks: [{ name: 'Creator Micro 2 USB', category: 'required', ok: true }],
+      inputProfile: {
+        cacheStatus: 'available\nforged', dailyProfileMatch: true, dailyLayerMatch: true,
+        encoderDirection: 'correct\nforged', dailyProfileReady: true,
+      },
+    },
+    developmentBinary: '/missing/development/binary', runCommand: commandFixture,
+    observedAt: '2026-09-01T20:00:00.000Z',
+  })
+
+  assert.equal(result.checks.find((item) => item.id === 'agent_board_doctor').status, 'blocked')
+  assert.equal(result.checks.find((item) => item.id === 'input_profile').evidence.includes('forged'), false)
+  assert.ok(result.next_steps.some((item) => item.id === 'resolve_ashlr_prerequisites'))
+  assert.equal(result.next_steps.some((item) => item.id === 'complete_ashlr_flight_check'), false)
+  assert.equal(result.next_steps.some((item) => item.safety === 'device_write'), false)
 })
 
 test('Ashlr Layer exposes recent unresolved Input evidence as a bounded advisory', () => {
@@ -122,6 +168,62 @@ test('Ashlr Layer warns when bounded Input runtime evidence is unsafe', () => {
   const runtime = result.checks.find((item) => item.id === 'input_runtime')
   assert.equal(runtime.status, 'warn')
   assert.match(runtime.reason, /do not infer an error-free Input session/)
+})
+
+test('Ashlr Layer exposes recurring Codex-protocol traffic as a bounded warning', () => {
+  const result = buildPreflight({
+    route: 'ashlr_layer', source, stable: null,
+    appDoctorRaw: {
+      ...appDoctor,
+      inputRuntime: {
+        ...appDoctor.inputRuntime,
+        codexProtocolTraffic: {
+          status: 'recurring_unresolved_response',
+          observedAt: '2026-09-02T00:26:10.000Z',
+          fresh: true,
+          rpcId: 456,
+          raw: '/Users/example/private',
+        },
+      },
+      readiness: { ...appDoctor.readiness, ashlrLayer: { status: 'manual', reason: 'recurring_codex_protocol_traffic' } },
+    },
+    developmentBinary: '/missing/development/binary', runCommand: commandFixture,
+    observedAt: '2026-09-02T00:26:20.000Z',
+  })
+
+  const traffic = result.checks.find((item) => item.id === 'input_codex_protocol_traffic')
+  assert.equal(traffic.status, 'warn')
+  assert.equal(traffic.evidence, 'reason=recurring_unresolved_response; fresh=true')
+  assert.match(traffic.reason, /co-presence evidence, not ownership/)
+  assert.equal(result.checks.find((item) => item.id === 'route_readiness').status, 'manual')
+  assert.ok(result.next_steps.some((item) => item.id === 'establish_input_only_recovery_window'))
+  assert.equal(result.next_steps.some((item) => item.id === 'complete_ashlr_flight_check'), false)
+  assert.equal(result.next_steps.some((item) => item.safety === 'device_write'), false)
+  assert.doesNotMatch(JSON.stringify(result), /456|Users|private/)
+})
+
+test('malformed Codex-protocol traffic fails closed without leaking fields', () => {
+  const result = buildPreflight({
+    route: 'ashlr_layer', source, stable: null,
+    appDoctorRaw: {
+      ...appDoctor,
+      inputRuntime: {
+        ...appDoctor.inputRuntime,
+        codexProtocolTraffic: {
+          status: 'recurring_unresolved_response',
+          observedAt: '/Users/example/private',
+          fresh: true,
+        },
+      },
+    },
+    developmentBinary: '/missing/development/binary', runCommand: commandFixture,
+    observedAt: '2026-09-02T00:26:20.000Z',
+  })
+
+  const traffic = result.checks.find((item) => item.id === 'input_codex_protocol_traffic')
+  assert.equal(traffic.status, 'warn')
+  assert.equal(traffic.evidence, 'reason=invalid; bounded Codex-protocol traffic evidence unavailable')
+  assert.doesNotMatch(JSON.stringify(result), /Users|private/)
 })
 
 test('hostile Input runtime projection fails closed without exposing private fields', () => {

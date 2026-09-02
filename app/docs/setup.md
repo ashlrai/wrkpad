@@ -110,13 +110,22 @@ from the user-facing left, right, press action list.
 
 To create and activate the daily profile safely:
 
-1. In Input, export a fresh ordinary Creator Micro 2 profile that contains no
-   protected `KV_OAI_*` layer. Keep this unmodified export outside the repository
-   as rollback.
+1. In Input's profile chooser, hover a fresh ordinary Creator Micro 2 profile
+   and choose **Export Profile**. The action is an icon with that tooltip in
+   Input 0.18.4. Keep this unmodified export outside the repository as rollback;
+   never use a protected `KV_OAI_*` profile as the source.
 2. In Agent Board Setup, choose **Create corrected Input profile**, select that
    export, and save the newly generated file. This offline flow does not open
-   Input, change its cache, or write to the board. For development and audit,
-   the equivalent CLI is:
+   Input, change its cache, or write to the board. Agent Board also saves one
+   private bounded handoff with the artifact path, checksum, and timestamp. On
+   every resume, Agent Board reopens the bounded regular file without following
+   symlinks and verifies its SHA-256 before offering to reveal it. **Copy
+   recovery checklist** includes only the artifact filename and checksum, not
+   the full local path. Dismissing the saved handoff removes only this startup
+   reminder; it does not delete the artifact or prove any recovery step. Use
+   **Reveal artifact in Finder** or **Copy recovery checklist** before quitting
+   the apps that display these instructions. For development and audit, the
+   equivalent CLI is:
 
 ```bash
 npm run profile:generate -- source-profile.json ashlr-agent-board.json daily
@@ -125,15 +134,28 @@ npm run profile:generate -- source-profile.json ashlr-agent-board.json daily
 3. Inspect the generated **Ashlr Agent Board Corrected** profile name, **Ashlr
    Daily** layer, Mic mapping, and
    dial mapping before importing it into Input.
-4. Quit Agent Board, Codex/ChatGPT, Claude, and every other board controller.
-   Open Input alone, then import the generated JSON. Importing performs a board
-   write but does not make the new profile current.
-5. In the profile chooser, use **Set as current profile** for **Ashlr Agent
-   Board Corrected**, fully quit Input, relaunch it alone, and confirm the same
-   profile remains current. Input's `layout updated` message alone is not
-   acceptance; same-name imports can also leave ambiguous duplicates.
-6. Reopen Agent Board and require its read-only cache receipt to report **Ashlr
+4. Use Command-Q to fully quit Agent Board, Codex/ChatGPT, Claude, and every
+   other board controller; closing a window is not enough. Power-cycle the
+   Creator Micro 2, open Input alone, choose **Import Profile**, and select the
+   generated JSON. Importing performs a board write but does not make the new
+   profile current. In Input 0.18.4, **Import Profile** is hidden when six
+   profiles already exist. If it is absent, export a backup and remove only an
+   unused ordinary profile; never delete or transform a protected `KV_OAI_*`
+   profile or layer.
+5. Resolve an existing same-name corrected profile before importing another:
+   export it as rollback, then remove only that ordinary corrected copy. On the
+   newly imported **Ashlr Agent Board Corrected** row, choose **Set as current
+   profile** and select **Ashlr Daily**. Wait for Input to finish. If it reports
+   `update error, retry`, keep Input as the only board controller and retry; do
+   not continue from an error.
+6. Use Command-Q to fully quit Input, relaunch it alone, and confirm **Ashlr
+   Agent Board Corrected** is still current with **Ashlr Daily** selected.
+   Input's `layout updated` message alone is not acceptance.
+7. Reopen Agent Board and require its read-only cache receipt to report **Ashlr
    Agent Board Corrected**, **Ashlr Daily**, and the corrected directions. Then
+   use **Open Input Monitoring settings** and manually verify the exact receiver
+   build shown in Setup is enabled. Agent Board does not claim it can read this
+   macOS permission. Then
    run a fresh daily Flight Check. If it receives zero signals or any misroute,
    stop the check and restore the exported profile before attempting firmware.
 

@@ -10,7 +10,8 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
   declared route, read-only marker, and separate prerequisite, native, and
   Ashlr Layer readiness.
 - Public project documentation, contribution guidance, support boundaries, and release criteria.
-- Source-SHA and SHA-256 manifest for explicitly unsigned preview artifacts.
+- Source-SHA and SHA-256 audit manifest for ephemeral unsigned package checks;
+  public CI does not upload the application binary.
 - Fixed-data, action-disabled public screenshot harness with synthetic agent
   states and no local paths, device claims, or remote authority.
 - Local-first Electron mission control for Creator Micro 2 on macOS.
@@ -38,9 +39,14 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
   joystick, and firmware-owned Bluetooth host selector.
 - A bounded, read-only Input cache receipt that identifies the active profile,
   layer, and known reversed encoder mapping without exposing macros or paths.
+- Privacy-safe detection of recurring Codex-protocol responses reaching Input,
+  reported as controller co-presence rather than HID ownership or root cause.
 - An in-app, offline profile-repair flow that validates an ordinary export and
   saves a uniquely named, allowlisted, mode-`0600` corrected artifact without
   opening Input, changing its cache, or writing the device.
+- A bounded private recovery handoff, resumable in Setup with the exact
+  Input-only checklist, Finder reveal, checklist copy, and permission-settings
+  navigation while preserving all human/device-write gates.
 - One shared bounded identity contract for the desk-verified `303A:8298` device
   and the read-only `303A:8297` candidate.
 

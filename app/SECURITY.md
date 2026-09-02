@@ -14,7 +14,8 @@ execution are especially important.
 
 No Agent Board release is currently published. Security fixes target the default
 branch until the first namespaced `agent-board-v*` release exists; a source or
-unsigned preview build is not a supported binary release.
+unsigned local or CI audit build is not a supported binary release. Public CI
+does not upload the unsigned application package.
 
 ## Report a vulnerability privately
 

@@ -100,6 +100,11 @@ export interface InputRuntimeStatus {
   layerIndex: number | null
   observedAt: string | null
   fresh: boolean
+  codexProtocolTraffic?: {
+    status: 'recurring_unresolved_response' | 'not_observed' | 'log_missing' | 'log_unsafe' | 'log_unavailable'
+    observedAt: string | null
+    fresh: boolean
+  }
 }
 
 export interface ReceiverIdentity {
@@ -121,6 +126,8 @@ export interface ProfileRepairResult {
   message: string
   filePath?: string
   sha256?: string
+  handoffPersisted?: boolean
+  recoverySteps?: string[]
 }
 
 export interface CodexNativeMicroStatus {

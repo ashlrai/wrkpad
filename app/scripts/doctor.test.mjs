@@ -12,7 +12,10 @@ const requiredProbes = {
     activeLayer: 'Ashlr Daily',
     encoderDirection: 'correct',
   },
-  inputRuntime: { status: 'not_observed', profileIndex: null, layerIndex: null, observedAt: null, fresh: false },
+  inputRuntime: {
+    status: 'not_observed', profileIndex: null, layerIndex: null, observedAt: null, fresh: false,
+    codexProtocolTraffic: { status: 'not_observed', observedAt: null, fresh: false },
+  },
 }
 
 const missingOptionalProbes = {
@@ -177,6 +180,7 @@ test('doctor projects recent unresolved Input evidence without raw logs or a cur
   assert.deepEqual(result.inputRuntime, {
     status: 'unresolved_profile_layer', profileIndex: 2, layerIndex: 1,
     observedAt: '2026-09-01T19:33:00.000Z', fresh: true,
+    codexProtocolTraffic: { status: 'log_unavailable', observedAt: null, fresh: false },
   })
   assert.equal(result.readiness.ashlrLayer.reason, 'recent_unresolved_profile_layer_observed')
   assert.match(result.modeGuidance.ashlrLayer, /may predate the current cache/)
@@ -193,6 +197,57 @@ test('deterministic cache repair outranks advisory log evidence', () => {
   })
   assert.equal(result.readiness.ashlrLayer.reason, 'encoder_direction_reversed')
   assert.match(result.nextAction, /Create and activate the corrected Input profile/)
+})
+
+test('doctor projects recurring Codex-protocol traffic as manual co-presence evidence', () => {
+  const result = evaluateDoctor({
+    ...requiredProbes,
+    ...missingOptionalProbes,
+    boardRoute: 'ashlr_layer',
+    inputRuntime: {
+      ...requiredProbes.inputRuntime,
+      codexProtocolTraffic: {
+        status: 'recurring_unresolved_response',
+        observedAt: '2026-09-02T00:26:10.000Z',
+        fresh: true,
+        rpcId: 456,
+        raw: 'private log text',
+      },
+    },
+  })
+
+  assert.deepEqual(result.inputRuntime.codexProtocolTraffic, {
+    status: 'recurring_unresolved_response',
+    observedAt: '2026-09-02T00:26:10.000Z',
+    fresh: true,
+  })
+  assert.equal(result.readiness.ashlrLayer.status, 'manual')
+  assert.equal(result.readiness.ashlrLayer.reason, 'recurring_codex_protocol_traffic')
+  assert.match(result.modeGuidance.ashlrLayer, /co-presence evidence, not ownership/)
+  assert.match(result.nextAction, /human must establish an Input-only window/)
+  assert.doesNotMatch(JSON.stringify(result), /456|private log text/)
+})
+
+test('malformed recurring traffic cannot become a fresh advisory', () => {
+  const result = evaluateDoctor({
+    ...requiredProbes,
+    ...missingOptionalProbes,
+    boardRoute: 'ashlr_layer',
+    inputRuntime: {
+      ...requiredProbes.inputRuntime,
+      codexProtocolTraffic: {
+        status: 'recurring_unresolved_response',
+        observedAt: 'private/path',
+        fresh: true,
+      },
+    },
+  })
+
+  assert.deepEqual(result.inputRuntime.codexProtocolTraffic, {
+    status: 'log_unavailable', observedAt: null, fresh: false,
+  })
+  assert.equal(result.readiness.ashlrLayer.reason, 'physical_acceptance_required')
+  assert.doesNotMatch(JSON.stringify(result), /private\/path/)
 })
 
 test('malformed Input timestamps cannot become fresh advisories', () => {
@@ -215,6 +270,9 @@ test('unknown Input runtime status fails closed', () => {
     ...missingOptionalProbes,
     inputRuntime: { status: 'private/path', profileIndex: 2, layerIndex: 1, observedAt: '2026-09-01T19:33:00.000Z', fresh: true },
   })
-  assert.deepEqual(result.inputRuntime, { status: 'log_unavailable', profileIndex: null, layerIndex: null, observedAt: null, fresh: false })
+  assert.deepEqual(result.inputRuntime, {
+    status: 'log_unavailable', profileIndex: null, layerIndex: null, observedAt: null, fresh: false,
+    codexProtocolTraffic: { status: 'log_unavailable', observedAt: null, fresh: false },
+  })
   assert.doesNotMatch(JSON.stringify(result), /private\/path/)
 })

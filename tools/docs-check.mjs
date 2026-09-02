@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { platform } from 'node:os'
 import { dirname, extname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -108,10 +108,34 @@ export function validateCanonicalCommands(root) {
   return failures
 }
 
+export function validateUnsignedDistributionPolicy(root) {
+  const directory = resolve(root, '.github', 'workflows')
+  if (!existsSync(directory)) return []
+  const failures = []
+  const publicationPatterns = [
+    /actions\/upload-artifact/i,
+    /\bgh\s+release\b/i,
+    /action-gh-release/i,
+    /^\s*(?:contents|packages):\s*write\s*$/im,
+  ]
+  for (const file of readdirSync(directory).filter((name) => /\.ya?ml$/i.test(name))) {
+    const source = readFileSync(resolve(directory, file), 'utf8')
+    const expectedUnsigned = /unsigned/i.test(source)
+      || /developer_id_signed\s*=\s*false/i.test(source)
+      || /notarized\s*=\s*false/i.test(source)
+    if (!expectedUnsigned) continue
+    for (const pattern of publicationPatterns) {
+      if (pattern.test(source)) failures.push(`${file}: expected-unsigned workflow must not publish or upload artifacts`)
+    }
+  }
+  return [...new Set(failures)]
+}
+
 function main() {
   const failures = [
     ...validateMarkdown(REPO_ROOT, markdownFiles(REPO_ROOT)),
     ...validateCanonicalCommands(REPO_ROOT),
+    ...validateUnsignedDistributionPolicy(REPO_ROOT),
   ]
   if (failures.length > 0) {
     for (const failure of failures) console.error(failure)

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 
-import { githubSlug, localLinks, markdownAnchors, validateMarkdown } from './docs-check.mjs'
+import { githubSlug, localLinks, markdownAnchors, validateMarkdown, validateUnsignedDistributionPolicy } from './docs-check.mjs'
 
 test('GitHub-style heading anchors are stable and deduplicated', () => {
   assert.equal(githubSlug('Run the read-only preflight'), 'run-the-read-only-preflight')
@@ -33,4 +33,18 @@ test('Markdown validation reports missing files and anchors', (t) => {
 
   writeFileSync(join(root, 'README.md'), '[bad](docs/guide.md#absent)\n')
   assert.deepEqual(validateMarkdown(root, ['README.md', 'docs/guide.md']), ['README.md: missing anchor docs/guide.md#absent'])
+})
+
+test('expected-unsigned workflows cannot upload or publish artifacts', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'wrkpad-release-policy-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const workflows = join(root, '.github', 'workflows')
+  mkdirSync(workflows, { recursive: true })
+  writeFileSync(join(workflows, 'safe.yml'), 'name: Unsigned audit\nsteps:\n  - run: echo developer_id_signed=false\n')
+  assert.deepEqual(validateUnsignedDistributionPolicy(root), [])
+
+  writeFileSync(join(workflows, 'unsafe.yml'), 'name: Unsigned preview\nsteps:\n  - uses: actions/upload-artifact@v7\n')
+  assert.deepEqual(validateUnsignedDistributionPolicy(root), [
+    'unsafe.yml: expected-unsigned workflow must not publish or upload artifacts',
+  ])
 })

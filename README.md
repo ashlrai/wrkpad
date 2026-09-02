@@ -84,8 +84,8 @@ marks missing observers and optional CLIs as unavailable.
 - No prompt submission from an Agent slot.
 - No claim that a planned color is visible through opaque black keycaps; the
   screen is the authoritative legend.
-- No signed or notarized public macOS binary yet. CI's preview artifact includes
-  a source-SHA/checksum manifest, is explicitly unsigned, and is not a release.
+- No Developer ID-signed or notarized public macOS binary yet. CI builds and
+  validates an expected-unsigned package without uploading or publishing it.
 
 See [device interoperability](protocol/device-interoperability.md), [ownership
 and recovery](docs/ownership-and-recovery.md), and [release readiness](docs/release.md).

@@ -53,6 +53,7 @@ const MANUAL_CHECKS = [
   },
 ]
 const INPUT_RUNTIME_STATUSES = new Set(['unresolved_profile_layer', 'not_observed', 'log_missing', 'log_unsafe', 'log_unavailable'])
+const CODEX_PROTOCOL_TRAFFIC_STATUSES = new Set(['recurring_unresolved_response', 'not_observed', 'log_missing', 'log_unsafe', 'log_unavailable'])
 const boundedIsoTimestamp = (value) => {
   if (typeof value !== 'string' || value.length > 40 || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) return null
   const parsed = new Date(value)
@@ -101,6 +102,17 @@ export function evaluateDoctor(probes, options = {}) {
   const projectedRuntimeStatus = unresolvedRuntimeShapeValid ? inputRuntimeStatus : 'log_unavailable'
   const unresolvedRuntimeObserved = projectedRuntimeStatus === 'unresolved_profile_layer'
     && rawInputRuntime.fresh === true && runtimeProfileIndex !== null && runtimeLayerIndex !== null && runtimeObservedAt !== null
+  const rawCodexTraffic = rawInputRuntime.codexProtocolTraffic && typeof rawInputRuntime.codexProtocolTraffic === 'object'
+    ? rawInputRuntime.codexProtocolTraffic
+    : null
+  const codexTrafficStatus = rawCodexTraffic && CODEX_PROTOCOL_TRAFFIC_STATUSES.has(rawCodexTraffic.status)
+    ? rawCodexTraffic.status
+    : 'log_unavailable'
+  const codexTrafficObservedAt = boundedIsoTimestamp(rawCodexTraffic?.observedAt)
+  const codexTrafficShapeValid = codexTrafficStatus !== 'recurring_unresolved_response' || codexTrafficObservedAt !== null
+  const projectedCodexTrafficStatus = codexTrafficShapeValid ? codexTrafficStatus : 'log_unavailable'
+  const recurringCodexTrafficObserved = projectedCodexTrafficStatus === 'recurring_unresolved_response'
+    && rawCodexTraffic?.fresh === true && codexTrafficObservedAt !== null
   const ashlrReason = failedRequiredIndex !== -1
     ? 'required_prerequisite_missing'
     : inputProfile.encoderDirection === 'reversed'
@@ -109,7 +121,9 @@ export function evaluateDoctor(probes, options = {}) {
         ? 'input_profile_requires_activation'
         : unresolvedRuntimeObserved
           ? 'recent_unresolved_profile_layer_observed'
-          : 'physical_acceptance_required'
+          : recurringCodexTrafficObserved
+            ? 'recurring_codex_protocol_traffic'
+            : 'physical_acceptance_required'
   const manualChecks = MANUAL_CHECKS.map((check) => ({
     ...check,
     category: 'manual',
@@ -137,6 +151,11 @@ export function evaluateDoctor(probes, options = {}) {
       layerIndex: projectedRuntimeStatus === 'unresolved_profile_layer' ? runtimeLayerIndex : null,
       observedAt: projectedRuntimeStatus === 'unresolved_profile_layer' ? runtimeObservedAt : null,
       fresh: unresolvedRuntimeObserved,
+      codexProtocolTraffic: {
+        status: projectedCodexTrafficStatus,
+        observedAt: projectedCodexTrafficStatus === 'recurring_unresolved_response' ? codexTrafficObservedAt : null,
+        fresh: recurringCodexTrafficObserved,
+      },
     },
     manualChecks,
     readiness: {
@@ -159,6 +178,8 @@ export function evaluateDoctor(probes, options = {}) {
         : 'Native Codex requires an explicit connected receipt; process presence alone is not enough.',
       ashlrLayer: unresolvedRuntimeObserved
         ? 'Input recently logged an unresolved profile/layer combination. This event is advisory and may predate the current cache; a fresh physical Flight Check can supersede it.'
+        : recurringCodexTrafficObserved
+          ? 'Input is receiving recurring Codex-protocol responses for which it had no active resolver. This is co-presence evidence, not ownership; Input-only reconciliation is not exclusive.'
         : 'The Ashlr shortcut route remains independently commissionable through Work Louder Input and the physical Flight Check.',
     },
     nextAction:
@@ -171,6 +192,8 @@ export function evaluateDoctor(probes, options = {}) {
               ? 'Use Set as current profile for Ashlr Agent Board Corrected and verify Ashlr Daily before Flight Check.'
               : unresolvedRuntimeObserved && route === 'ashlr_layer'
                 ? 'Review the recent unresolved Input profile/layer event. If the board remains silent, complete the Input-only reconciliation before firmware qualification.'
+                : recurringCodexTrafficObserved && route === 'ashlr_layer'
+                  ? 'A human must establish an Input-only window before reconciliation; no application was quit and protocol traffic does not prove ownership.'
                 : manualChecks[0].detail
         : REQUIRED_CHECKS[failedRequiredIndex].nextAction,
   }
@@ -242,6 +265,7 @@ function printHuman(result) {
   console.log(`\n${result.ok ? 'Doctor passed required checks.' : 'Doctor failed required checks.'}`)
   console.log(`Declared route: ${result.route}`)
   if (result.inputRuntime.fresh) console.log(`Input runtime: unresolved profile ${result.inputRuntime.profileIndex} / layer ${result.inputRuntime.layerIndex} observed recently`)
+  if (result.inputRuntime.codexProtocolTraffic.fresh) console.log('Input runtime: recurring Codex-protocol responses observed; co-presence only, ownership unproven')
   console.log(`Next: ${result.nextAction}`)
 }
 

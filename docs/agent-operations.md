@@ -84,6 +84,17 @@ proof of source identity, review, provenance, signing, or release.
    physical Flight Check may supersede it; if the board remains silent, use the
    [Input-only reconciliation](../app/docs/troubleshooting.md#input-only-reconciliation)
    and never delete or transform `KV_OAI_*`.
+   A fresh `input_codex_protocol_traffic` warning means recurring Codex-protocol
+   responses are reaching Input. Treat it as co-presence, not HID ownership or
+   root cause, and require a human Input-only window; never auto-quit controllers.
+   If Agent Board generated a corrected artifact, preserve its private recovery
+   handoff before the operator quits Codex and Agent Board. The private local
+   receipt contains only the artifact path, SHA-256, and creation time; copied
+   guidance omits the full path. Resume re-hashes the bounded regular artifact
+   without following symlinks. Dismissing the reminder proves no recovery step,
+   and the receipt does not prove import, current-profile selection, device
+   synchronization, permission, or physical acceptance. On the next launch,
+   resume the numbered checklist in Setup.
 6. Arm Daily Flight Check. Wait for the screen to say actions are suppressed,
    then have the operator complete all 19 gestures on the physical board.
 7. Operate from Agent Board. Slot selection may foreground Codex Desktop or
@@ -124,6 +135,8 @@ Physical receipt: <accepted, failed, or not performed>
 Public release: <artifact/tag or not performed>
 Remaining human gates: <permission, firmware, trust, physical, approval>
 Rollback: <artifact or procedure, or explicitly unavailable>
+Input recovery: <not needed, artifact filename plus checksum saved in a private
+local handoff, imported, or physically accepted; never infer a later stage>
 ```
 
 This format prevents a green source check from silently becoming a claim about

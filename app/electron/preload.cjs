@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron')
 contextBridge.exposeInMainWorld('agentBoard', {
   getStatus: () => ipcRenderer.invoke('board:getStatus'),
   getMissionControl: () => ipcRenderer.invoke('board:getMissionControl'),
+  getRecoveryGuide: () => ipcRenderer.invoke('board:getRecoveryGuide'),
   setBoardRoute: (boardRoute) => ipcRenderer.invoke('board:setBoardRoute', boardRoute),
   focusAgentSlot: (slot) => ipcRenderer.invoke('board:focusAgentSlot', slot),
   setProfile: (profile) => ipcRenderer.invoke('board:setProfile', profile),
@@ -14,6 +15,10 @@ contextBridge.exposeInMainWorld('agentBoard', {
   cancelHold: (actionId, token) => ipcRenderer.invoke('board:cancelHold', actionId, token),
   chooseWorkspace: () => ipcRenderer.invoke('board:chooseWorkspace'),
   createCorrectedInputProfile: () => ipcRenderer.invoke('board:createCorrectedInputProfile'),
+  revealRecoveryArtifact: () => ipcRenderer.invoke('board:revealRecoveryArtifact'),
+  copyRecoveryChecklist: () => ipcRenderer.invoke('board:copyRecoveryChecklist'),
+  dismissRecoveryHandoff: () => ipcRenderer.invoke('board:dismissRecoveryHandoff'),
+  openInputMonitoringSettings: () => ipcRenderer.invoke('board:openInputMonitoringSettings'),
   saveFlightReceipt: (receipt) => ipcRenderer.invoke('board:saveFlightReceipt', receipt),
   onControl: (callback) => {
     const listener = (_event, signal) => callback(signal)

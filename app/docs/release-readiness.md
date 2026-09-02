@@ -46,10 +46,12 @@ find release -maxdepth 3 -type d -name '*.app' -print
 
 Record an `app.asar` checksum and the exact source SHA. The command creates a directory target only; it does not create a DMG, sign, notarize, staple, upload, or update users.
 
-The manual unsigned-preview workflow uploads the archive with a companion
-manifest containing its SHA-256, exact source SHA, and explicit
-`signed=false`/`notarized=false` declarations. The manifest improves preview
-traceability; it is not a signature, notarization receipt, or release provenance.
+The manual unsigned-package audit builds on an ephemeral GitHub runner and
+checks the bundle identifier, version, architecture, source SHA, `app.asar`
+checksum, and expected `developer_id_signed=false`/`notarized=false` state. It does not
+upload an application archive or publish an installable binary. Its temporary
+manifest is diagnostic evidence only, not a signature, notarization receipt,
+release artifact, or provenance attestation.
 
 ## Public distribution gate
 

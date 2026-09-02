@@ -1,4 +1,4 @@
-const { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain } = require('electron')
+const { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, shell } = require('electron')
 const { spawn } = require('node:child_process')
 const { createHash, randomUUID } = require('node:crypto')
 const { existsSync, renameSync, writeFileSync } = require('node:fs')
@@ -9,6 +9,7 @@ const { inspectCodexMicroLogs } = require('./codex-micro-diagnostics.cjs')
 const { inspectInputProfile } = require('./input-profile-diagnostics.cjs')
 const { inspectInputRuntime } = require('./input-runtime-diagnostics.cjs')
 const { writeGeneratedProfile } = require('./input-profile-generator.cjs')
+const { buildRecoveryChecklist, observeRecoveryArtifact, readRecoveryReceipt, recoveryChecklistText, recoveryReceiptPath, removeRecoveryReceipt, writeRecoveryReceipt } = require('./recovery-receipt.cjs')
 const { holdSatisfied } = require('./approval-guard.cjs')
 const { evaluateFlightSignals } = require('./flight-receipt.cjs')
 const { createFlightSession } = require('./flight-session.cjs')
@@ -31,6 +32,7 @@ const approvals = new Map()
 const flightSession = createFlightSession()
 
 function settingsPath() { return appSettingsPath(app.getPath('appData')) }
+function handoffPath() { return recoveryReceiptPath(settingsPath()) }
 function readSettings() { return readWorkspaceSettings(settingsPath(), app.getPath('home')) }
 function saveWorkspace(workspace) { saveWorkspaceSettings(settingsPath(), workspace, app.getPath('home')) }
 function saveBoardRoute(boardRoute) { saveBoardRouteSettings(settingsPath(), boardRoute, app.getPath('home')) }
@@ -158,6 +160,11 @@ ipcMain.handle('board:getStatus', trustedIpc(async () => {
   }
 }))
 ipcMain.handle('board:getMissionControl', trustedIpc(() => missionControl()))
+ipcMain.handle('board:getRecoveryGuide', trustedIpc(() => {
+  const handoff = readRecoveryReceipt(handoffPath())
+  const artifact = observeRecoveryArtifact(handoff)
+  return { handoff, artifact, steps: buildRecoveryChecklist(handoff, artifact) }
+}))
 ipcMain.handle('board:setBoardRoute', trustedIpc((_event, boardRoute) => {
   if (!validBoardRoute(boardRoute)) throw new TypeError('Unsupported board route declaration')
   saveBoardRoute(boardRoute)
@@ -215,11 +222,25 @@ ipcMain.handle('board:createCorrectedInputProfile', trustedIpc(async () => {
 
   try {
     const artifact = writeGeneratedProfile(source.filePaths[0], destination.filePath, 'daily')
+    let handoffPersisted = true
+    try {
+      writeRecoveryReceipt(handoffPath(), {
+        artifactPath: artifact.outputPath,
+        sha256: artifact.sha256,
+        createdAt: new Date().toISOString(),
+      })
+    } catch {
+      handoffPersisted = false
+    }
     return {
       status: 'saved',
       filePath: artifact.outputPath,
       sha256: artifact.sha256,
-      message: 'Corrected profile saved. Input and the Creator Micro were not modified.',
+      handoffPersisted,
+      ...(!handoffPersisted ? { recoverySteps: buildRecoveryChecklist(null) } : {}),
+      message: handoffPersisted
+        ? 'Corrected profile and private recovery handoff saved. Input and the Creator Micro were not modified.'
+        : 'Corrected profile saved, but the private recovery handoff could not be saved. Keep this window open or record the artifact path before quitting. Input and the Creator Micro were not modified.',
     }
   } catch (error) {
     const reason = error?.code === 'EEXIST'
@@ -232,6 +253,36 @@ ipcMain.handle('board:createCorrectedInputProfile', trustedIpc(async () => {
             ? error.message
             : 'The corrected profile could not be created from that export.'
     return { status: 'failed', message: `${reason} No existing file, Input setting, or device setting changed.` }
+  }
+}))
+ipcMain.handle('board:revealRecoveryArtifact', trustedIpc(() => {
+  const handoff = readRecoveryReceipt(handoffPath())
+  const artifact = observeRecoveryArtifact(handoff)
+  if (!handoff || !artifact.available) {
+    return { ok: false, message: `The saved recovery artifact is ${artifact.status.replaceAll('_', ' ')}. Locate and verify it or create a new corrected artifact; no file was opened.` }
+  }
+  shell.showItemInFolder(handoff.artifactPath)
+  return { ok: true, message: 'The corrected profile is selected in Finder.' }
+}))
+ipcMain.handle('board:copyRecoveryChecklist', trustedIpc(() => {
+  const handoff = readRecoveryReceipt(handoffPath())
+  const artifact = observeRecoveryArtifact(handoff)
+  clipboard.writeText(recoveryChecklistText(handoff, artifact))
+  return { ok: true, message: handoff ? 'Recovery checklist, artifact filename, and checksum copied without the full local path.' : 'Recovery checklist copied.' }
+}))
+ipcMain.handle('board:dismissRecoveryHandoff', trustedIpc(() => {
+  const removed = removeRecoveryReceipt(handoffPath())
+  return removed
+    ? { ok: true, message: 'The saved startup reminder was dismissed. The profile artifact and Input configuration were not changed.' }
+    : { ok: false, message: 'The saved reminder could not be dismissed safely. No artifact or Input setting changed.' }
+}))
+ipcMain.handle('board:openInputMonitoringSettings', trustedIpc(async () => {
+  if (process.platform !== 'darwin') return { ok: false, message: 'Open your operating system’s input-monitoring permission settings manually.' }
+  try {
+    await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent')
+    return { ok: true, message: 'Input Monitoring settings opened. Verify the exact receiver shown in Setup manually.' }
+  } catch {
+    return { ok: false, message: 'Input Monitoring settings could not be opened. Open System Settings → Privacy & Security → Input Monitoring manually.' }
   }
 }))
 ipcMain.handle('board:saveFlightReceipt', trustedIpc(async (_event, receipt) => {

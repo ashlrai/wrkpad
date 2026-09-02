@@ -28,6 +28,7 @@ const initialMission: MissionControlSnapshot = {
   agents: Array.from({ length: 6 }, (_, index) => ({ slot: index + 1, provider: null, state: 'off', title: 'Available slot', updatedAt: null })),
   fleet: null, unassignedActiveSessions: 0, operatorNotices: [],
 }
+const initialRecoveryGuide: AgentBoardRecoveryGuide = { handoff: null, artifact: { status: 'invalid', available: false }, steps: [] }
 const formatClock = (date: Date) => date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 const normalizeControl = (control: ControlId): ControlId => control === 'cmd6' ? 'cmd5' : control
 
@@ -61,6 +62,7 @@ function App() {
   const [flightVariant, setFlightVariant] = useState<FlightVariant>('daily')
   const [routeSaving, setRouteSaving] = useState(false)
   const [routeError, setRouteError] = useState<string | null>(null)
+  const [recoveryGuide, setRecoveryGuide] = useState<AgentBoardRecoveryGuide>(initialRecoveryGuide)
   const holdTimer = useRef<number | null>(null)
   const holdAttempt = useRef(0)
   const holdPending = useRef(false)
@@ -86,6 +88,16 @@ function App() {
   }, [bridge])
   const refreshMission = useCallback(async () => {
     if (bridge?.getMissionControl) setMission(await bridge.getMissionControl())
+  }, [bridge])
+  const refreshRecoveryGuide = useCallback(async () => {
+    if (!bridge?.getRecoveryGuide) return null
+    try {
+      const guide = await bridge.getRecoveryGuide()
+      setRecoveryGuide(guide)
+      return guide
+    } catch {
+      return null
+    }
   }, [bridge])
 
   const internalResult = (title: string, message: string) => setResult({
@@ -206,6 +218,14 @@ function App() {
     })
     return () => { window.clearInterval(interval); window.clearInterval(missionInterval); unsubscribe?.() }
   }, [bridge, executeControl, flightActive, flightVariant, refreshMission, refreshStatus])
+
+  useEffect(() => {
+    let current = true
+    void refreshRecoveryGuide().then((guide) => {
+      if (current && guide?.handoff) setView('setup')
+    })
+    return () => { current = false }
+  }, [refreshRecoveryGuide])
 
   const focusAgentSlot = useCallback(async (slot: number) => {
     setSelectedAgentSlot(slot)
@@ -558,7 +578,7 @@ function App() {
         exportPath={flightExport} status={status} variant={flightVariant} phase={flightPhase} onStart={startFlightCheck}
         onStop={() => void stopFlightCheck()} onRestart={() => void restartFlightCheck()} onExport={exportFlightReceipt}
         onSetup={() => void changeView('setup')} onOperate={() => void changeView('operate')}
-      /> : <SetupView status={status} routeSaving={routeSaving} routeError={routeError} onRouteChange={(route) => void declareBoardRoute(route)} onOperate={() => changeView('operate')} onFlightCheck={() => void changeView('flight')} />}
+      /> : <SetupView status={status} recoveryGuide={recoveryGuide} onRefreshRecoveryGuide={refreshRecoveryGuide} routeSaving={routeSaving} routeError={routeError} onRouteChange={(route) => void declareBoardRoute(route)} onOperate={() => changeView('operate')} onFlightCheck={() => void changeView('flight')} />}
 
       <footer className="footer-bar">
         <div><span className={status.boardConnected ? 'footer-led ready' : 'footer-led'} /> {hardware.mechanicalSwitches} SWITCHES · 1 TOUCH · 1 DIAL · 1 PLANAR STICK</div>
@@ -769,6 +789,8 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
   const preflightReady = dailyPreflightReady || diagnosticPreflightReady
   const profileBlocked = !correctedInputProfileObservedForVariant(currentInputProfile, variant)
   const runCannotPass = problems.length > 0
+  const concurrentCodexTraffic = status.inputRuntime?.codexProtocolTraffic?.status === 'recurring_unresolved_response'
+    && status.inputRuntime.codexProtocolTraffic.fresh
   const phaseLabel = active ? 'ACTIONS SUPPRESSED' : phase === 'arming' ? 'ARMING INTERLOCK' : phase === 'disarming' ? 'RELEASING INTERLOCK' : phase === 'error' ? 'INTERLOCK UNVERIFIED' : 'ACTIONS ENABLED'
   const blockedCompletion = routesComplete && !complete
   const showNoSignalRecovery = noSignalRecoveryNeeded(active, startedAt, events, clock)
@@ -818,7 +840,9 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
         </div>
         {showNoSignalRecovery && <div className="no-signal-recovery" role="status">
           <strong>No physical shortcut arrived</strong>
-          <p>Use the top-right rotary dial—not the bottom-left Bluetooth host selector. End this check, quit competing board controllers, then open Work Louder Input alone. Use <b>Set as current profile</b> for <b>Ashlr Agent Board Corrected</b>, verify <b>Ashlr Daily</b>, fully relaunch Input, and run a fresh check. Do not jump to firmware from one zero-signal receipt.</p>
+          <p>{concurrentCodexTraffic
+            ? <>Input is currently receiving recurring Codex-protocol responses, so this check is not an exclusive Input-only window. This proves co-presence, not ownership or cause. End the check, then follow the recovery checklist; no application was automatically quit.</>
+            : <>Use the top-right rotary dial—not the bottom-left Bluetooth host selector. End this check, quit competing board controllers, then open Work Louder Input alone. Use <b>Set as current profile</b> for <b>Ashlr Agent Board Corrected</b>, verify <b>Ashlr Daily</b>, fully relaunch Input, and run a fresh check. Do not jump to firmware from one zero-signal receipt.</>}</p>
           <button type="button" onClick={onSetup}>Open recovery checklist</button>
         </div>}
         {exportPath && <div className="exported-receipt"><Check size={14} /><span>Receipt saved</span><code title={exportPath}>{exportPath}</code></div>}
@@ -830,13 +854,18 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
   </section>
 }
 
-function SetupView({ status, routeSaving, routeError, onRouteChange, onOperate, onFlightCheck }: { status: SystemStatus; routeSaving: boolean; routeError: string | null; onRouteChange: (route: BoardRoute) => void; onOperate: () => void; onFlightCheck: () => void }) {
+function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, routeSaving, routeError, onRouteChange, onOperate, onFlightCheck }: { status: SystemStatus; recoveryGuide: AgentBoardRecoveryGuide; onRefreshRecoveryGuide: () => Promise<AgentBoardRecoveryGuide | null>; routeSaving: boolean; routeError: string | null; onRouteChange: (route: BoardRoute) => void; onOperate: () => void; onFlightCheck: () => void }) {
   const [repairBusy, setRepairBusy] = useState(false)
   const [repairResult, setRepairResult] = useState<ProfileRepairResult | null>(null)
+  const [recoveryAction, setRecoveryAction] = useState<AgentBoardRecoveryActionResult | null>(null)
+  const [dismissConfirm, setDismissConfirm] = useState(false)
+  const recoveryFocus = useRef<HTMLElement | null>(null)
   const nativeCodexMicro = status.nativeCodexMicro ?? initialStatus.nativeCodexMicro
   const inputProfile = status.inputProfile ?? initialStatus.inputProfile
   const inputRuntime = status.inputRuntime ?? initialStatus.inputRuntime
   const recentRuntimeEvidence = inputRuntime.status === 'unresolved_profile_layer' && inputRuntime.fresh
+  const recentCodexTraffic = inputRuntime.codexProtocolTraffic?.status === 'recurring_unresolved_response'
+    && inputRuntime.codexProtocolTraffic.fresh
   const observedInputProfile = inputProfile.activeProfile && inputProfile.activeLayer
     ? `${inputProfile.activeProfile} · ${inputProfile.activeLayer}`
     : inputProfile.activeProfile
@@ -862,6 +891,14 @@ function SetupView({ status, routeSaving, routeError, onRouteChange, onOperate, 
     { number: '06', title: 'Verify the declared physical route', detail: status.boardRoute === 'codex_native' ? 'Quit Work Louder Input and quit this Agent Board app. Open Codex alone, then verify Settings → Creator Micro.' : 'Run all 19 daily gestures. The first gesture uses the top-right rotary dial; the bottom-left circle only selects a Bluetooth host.', state: status.boardRoute === 'codex_native' ? 'Manual Codex verification required' : `${status.shortcutCount}/${hardware.bindableSignals} desktop endpoints registered · physical layer unverified`, ready: false },
   ]
   const repairNeeded = inputRecoveryState === 'profile_repair'
+  const handoffPersistenceFailed = repairResult?.status === 'saved' && repairResult.handoffPersisted === false
+  const recoveryHandoff = handoffPersistenceFailed ? null : recoveryGuide.handoff
+  const recoverySteps = handoffPersistenceFailed ? repairResult.recoverySteps ?? [] : recoveryGuide.steps
+  const artifactAvailable = !handoffPersistenceFailed && recoveryGuide.artifact?.available === true
+  const showRecoveryGuide = status.boardRoute === 'ashlr_layer' || Boolean(recoveryHandoff)
+  useEffect(() => {
+    if (recoveryHandoff) recoveryFocus.current?.focus()
+  }, [recoveryHandoff])
   const createRepairProfile = async () => {
     if (repairBusy) return
     if (!window.agentBoard?.createCorrectedInputProfile) {
@@ -870,12 +907,49 @@ function SetupView({ status, routeSaving, routeError, onRouteChange, onOperate, 
     }
     setRepairBusy(true)
     setRepairResult(null)
+    setRecoveryAction(null)
     try {
-      setRepairResult(await window.agentBoard.createCorrectedInputProfile())
+      const nextResult = await window.agentBoard.createCorrectedInputProfile()
+      setRepairResult(nextResult)
+      if (nextResult.status === 'saved' && nextResult.handoffPersisted !== false) await onRefreshRecoveryGuide()
     } catch {
       setRepairResult({ status: 'failed', message: 'Profile repair could not start. No file, Input setting, or device setting changed.' })
     } finally {
       setRepairBusy(false)
+    }
+  }
+  const revealRecoveryArtifact = async () => {
+    const action = window.agentBoard?.revealRecoveryArtifact
+    if (!action) return setRecoveryAction({ ok: false, message: 'This build cannot reveal the saved artifact. Use the full path shown above.' })
+    try { setRecoveryAction(await action()) } catch { setRecoveryAction({ ok: false, message: 'Finder could not be opened. Use the full artifact path shown above.' }) }
+  }
+  const copyRecoveryChecklist = async () => {
+    const action = window.agentBoard?.copyRecoveryChecklist
+    if (!action) return setRecoveryAction({ ok: false, message: 'This build cannot copy the checklist. Keep this recovery card open.' })
+    try { setRecoveryAction(await action()) } catch { setRecoveryAction({ ok: false, message: 'The checklist could not be copied. Keep this recovery card open.' }) }
+  }
+  const openInputMonitoringSettings = async () => {
+    const action = window.agentBoard?.openInputMonitoringSettings
+    if (!action) return setRecoveryAction({ ok: false, message: 'Open System Settings → Privacy & Security → Input Monitoring manually.' })
+    try { setRecoveryAction(await action()) } catch { setRecoveryAction({ ok: false, message: 'Open System Settings → Privacy & Security → Input Monitoring manually.' }) }
+  }
+  const dismissRecoveryHandoff = async () => {
+    if (!dismissConfirm) {
+      setDismissConfirm(true)
+      setRecoveryAction({ ok: false, message: 'Confirm once more to dismiss only the saved startup reminder. The profile artifact and Input configuration will remain unchanged.' })
+      return
+    }
+    const action = window.agentBoard?.dismissRecoveryHandoff
+    if (!action) return setRecoveryAction({ ok: false, message: 'This build cannot dismiss the saved reminder safely.' })
+    try {
+      const result = await action()
+      setRecoveryAction(result)
+      if (result.ok) {
+        setDismissConfirm(false)
+        await onRefreshRecoveryGuide()
+      }
+    } catch {
+      setRecoveryAction({ ok: false, message: 'The saved reminder could not be dismissed. No artifact or Input setting changed.' })
     }
   }
   return <section className="setup-view">
@@ -895,14 +969,31 @@ function SetupView({ status, routeSaving, routeError, onRouteChange, onOperate, 
             <strong>Repair artifact ready—nothing activated yet.</strong>
             <code title={repairResult.filePath}>{repairResult.filePath}</code>
             <small>SHA-256 {repairResult.sha256}</small>
-            <p>Before importing, quit Agent Board, Codex/ChatGPT, Claude, and every other board controller. Open Input alone, import this file, activate <b>Ashlr Agent Board Corrected</b>, then fully quit and relaunch Input. Confirm the corrected profile is still current before reopening Agent Board; require its read-only cache receipt and a fresh Flight Check. Input's “layout updated” message alone is not acceptance.</p>
+            <p>{repairResult.message}</p>
+            <p>In Input alone, choose <b>Import Profile</b> for this file, choose <b>Set as current profile</b> on <b>Ashlr Agent Board Corrected</b>, select <b>Ashlr Daily</b>, then fully quit and relaunch Input. “layout updated” alone is not acceptance.</p>
           </div>}
           {repairResult?.status === 'failed' && <div className="profile-repair-result failed" role="alert"><strong>Repair not created.</strong><p>{repairResult.message}</p></div>}
           {repairResult?.status === 'canceled' && <div className="profile-repair-result" role="status"><p>{repairResult.message}</p></div>}
         </section>}
-        {inputRecoveryState === 'runtime_log_advisory' && <section className="profile-repair input-reconciliation" aria-labelledby="input-reconciliation-title">
-          <div><span className="eyebrow">RECENT INPUT LOG EVIDENCE / ADVISORY</span><h3 id="input-reconciliation-title">Input recently logged an unresolved combination.</h3></div>
-          <p>At <b>{inputRuntime.observedAt ? formatClock(new Date(inputRuntime.observedAt)) : 'an unknown time'}</b>, Input logged profile <b>{inputRuntime.profileIndex}</b> with layer <b>{inputRuntime.layerIndex}</b> as unresolved. This event may predate the current cache and does not prove the board is still in that state. A fresh physical Flight Check may supersede it. If the board remains silent, follow the Input-only reconciliation in Troubleshooting before considering firmware; do not reset or delete protected layers from this evidence.</p>
+        {showRecoveryGuide && <section className="recovery-handoff" aria-labelledby="input-reconciliation-title" tabIndex={-1} ref={recoveryFocus}>
+          <div className="recovery-handoff-heading"><span className="eyebrow">INPUT-ONLY RECONCILIATION / HUMAN-GUIDED</span><h3 id="input-reconciliation-title">{recoveryHandoff ? artifactAvailable ? 'Resume the saved recovery handoff.' : 'The saved artifact needs attention.' : 'Keep these steps visible before you quit.'}</h3><p>{recoveryHandoff ? 'This private receipt does not prove import, activation, synchronization, permission, or physical acceptance.' : 'This is the complete safe sequence. Agent Board never quits apps, changes Input, grants permission, writes the board, or updates firmware for you.'}</p></div>
+          {recentRuntimeEvidence && <p className="recovery-advisory"><b>Advisory only:</b> Input logged profile {inputRuntime.profileIndex} / layer {inputRuntime.layerIndex} as unresolved at {inputRuntime.observedAt ? formatClock(new Date(inputRuntime.observedAt)) : 'an unknown time'}. It may predate the current cache and does not replace these steps.</p>}
+          {recentCodexTraffic && <p className="recovery-advisory"><b>Input-only window is not exclusive:</b> recurring Codex-protocol responses are currently reaching Input. This is co-presence evidence, not an ownership or root-cause claim. No application was automatically quit.</p>}
+          {recoveryHandoff && <div className={artifactAvailable ? 'recovery-artifact' : 'recovery-artifact missing'}>
+            <span>{artifactAvailable ? 'Corrected artifact verified' : `Artifact ${recoveryGuide.artifact?.status?.replaceAll('_', ' ') ?? 'unavailable'}`}</span><code title={recoveryHandoff.artifactPath}>{recoveryHandoff.artifactPath}</code><small>SHA-256 {recoveryHandoff.sha256}</small>
+          </div>}
+          {recoverySteps.length > 0
+            ? <ol className="recovery-checklist">{recoverySteps.map((step, index) => <li key={`${index}-${step}`}><span>{step}</span></li>)}</ol>
+            : <p className="recovery-advisory" role="status">Loading the local recovery checklist…</p>}
+          <div className="recovery-actions">
+            {recoveryHandoff && artifactAvailable && <button type="button" onClick={() => void revealRecoveryArtifact()}><FolderOpen size={15} /> Reveal artifact in Finder</button>}
+            <button type="button" onClick={() => void copyRecoveryChecklist()}><Command size={15} /> Copy recovery checklist</button>
+            <button type="button" onClick={() => void openInputMonitoringSettings()}><ShieldCheck size={15} /> Open Input Monitoring settings</button>
+            {recoveryHandoff && <button type="button" className="dismiss-handoff" onClick={() => void dismissRecoveryHandoff()}><X size={15} /> {dismissConfirm ? 'Confirm dismiss reminder' : 'Dismiss saved handoff'}</button>}
+          </div>
+          {recoveryAction && <p className={recoveryAction.ok ? 'recovery-action-result' : 'recovery-action-result failed'} role={recoveryAction.ok ? 'status' : 'alert'}>{recoveryAction.message}</p>}
+          <p className="recovery-proof-boundary"><ShieldCheck size={14} /> Permission remains manually verified. Cache observation is not device synchronization, and only a fresh physical Flight Check accepts the shortcut route.</p>
+          <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{recoveryHandoff ? artifactAvailable ? 'A private Input recovery handoff is ready to resume.' : 'The saved Input recovery artifact is missing or changed. Verify it or create a new corrected artifact before import.' : ''}</p>
         </section>}
       </div>
       <aside className="hardware-truth">

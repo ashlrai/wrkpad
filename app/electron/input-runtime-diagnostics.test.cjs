@@ -4,6 +4,7 @@ const { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } = require('
 const { tmpdir } = require('node:os')
 const path = require('node:path')
 const {
+  CODEX_TRAFFIC_FRESHNESS_MS,
   FRESHNESS_MS,
   MAX_LOG_TAIL_BYTES,
   classifyInputRuntimeLog,
@@ -12,6 +13,9 @@ const {
 
 const signal = (timestamp, profile = 2, layer = 1, suffix = '') =>
   `[${timestamp}] [error] |window_service| cannot find specific profile index: ${profile} and layer index: ${layer} combination${suffix}`
+const codexResponse = (timestamp, resolverId = 123, payloadId = resolverId, method = 'v.oai.rgbcfg') =>
+  `[${timestamp}] [warn]  |wl_device_comm|       No resolver found for id: ${resolverId} response: {"error":{"code":404,"message":"Method not found"},"id":${payloadId},"method":"${method}"}`
+const noTraffic = { status: 'not_observed', observedAt: null, fresh: false }
 
 function writeFixedLog(home, text) {
   const directory = path.join(home, 'Library', 'Logs', 'input')
@@ -34,6 +38,7 @@ test('returns only bounded indexes and sanitized timing for the newest exact sig
     layerIndex: 1,
     observedAt: newest.toISOString(),
     fresh: true,
+    codexProtocolTraffic: noTraffic,
   })
   assert.equal(JSON.stringify(classified).includes('/Users/example/secret'), false)
 })
@@ -47,6 +52,48 @@ test('rejects near matches, invalid dates, and unbounded indexes', () => {
   ].join('\n')
   assert.deepEqual(classifyInputRuntimeLog(text), {
     status: 'not_observed', profileIndex: null, layerIndex: null, observedAt: null, fresh: false,
+    codexProtocolTraffic: noTraffic,
+  })
+})
+
+test('reports only recurring exact Codex-protocol responses without RPC identifiers', () => {
+  const now = new Date(2026, 8, 1, 20, 26, 20, 0)
+  const observed = new Date(2026, 8, 1, 20, 26, 10, 0)
+  const classified = classifyInputRuntimeLog([
+    codexResponse('2026-09-01 20:26:00.000', 123),
+    'private path /Users/example/secret',
+    codexResponse('2026-09-01 20:26:10.000', 456),
+  ].join('\n'), now)
+
+  assert.deepEqual(classified.codexProtocolTraffic, {
+    status: 'recurring_unresolved_response',
+    observedAt: observed.toISOString(),
+    fresh: true,
+  })
+  assert.doesNotMatch(JSON.stringify(classified), /123|456|Users|secret/)
+})
+
+test('does not infer recurring traffic from one response, mismatched ids, or nearby methods', () => {
+  const classified = classifyInputRuntimeLog([
+    codexResponse('2026-09-01 20:26:00.000', 123),
+    codexResponse('2026-09-01 20:26:10.000', 456, 789),
+    codexResponse('2026-09-01 20:26:15.000', 234, 234, 'v.oai.thstatus'),
+  ].join('\n'), new Date(2026, 8, 1, 20, 26, 20, 0))
+
+  assert.deepEqual(classified.codexProtocolTraffic, noTraffic)
+})
+
+test('retains recurring traffic evidence but marks it stale outside the short window', () => {
+  const observed = new Date(2026, 8, 1, 20, 26, 10, 0)
+  const classified = classifyInputRuntimeLog([
+    codexResponse('2026-09-01 20:26:00.000'),
+    codexResponse('2026-09-01 20:26:10.000', 456),
+  ].join('\n'), new Date(observed.getTime() + CODEX_TRAFFIC_FRESHNESS_MS + 1))
+
+  assert.deepEqual(classified.codexProtocolTraffic, {
+    status: 'recurring_unresolved_response',
+    observedAt: observed.toISOString(),
+    fresh: false,
   })
 })
 
@@ -99,6 +146,7 @@ test('distinguishes a missing fixed log without exposing its path', () => {
   try {
     assert.deepEqual(inspectInputRuntime(home), {
       status: 'log_missing', profileIndex: null, layerIndex: null, observedAt: null, fresh: false,
+      codexProtocolTraffic: { status: 'log_missing', observedAt: null, fresh: false },
     })
   } finally {
     rmSync(home, { recursive: true, force: true })
