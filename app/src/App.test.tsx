@@ -2,6 +2,8 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
+import type { PhysicalSignalEnvelope } from './board'
+import { dailyFlightSteps } from './flight-check'
 
 const correctedInputProfile = {
   cacheStatus: 'available' as const,
@@ -915,5 +917,210 @@ describe('operator interface', () => {
     await waitFor(() => expect(restartFlightCheck).toHaveBeenCalledWith('daily'))
     expect(setFlightCheck.mock.calls).toEqual([[true, 'daily']])
     expect(await screen.findByRole('heading', { name: 'Dial left' })).toBeTruthy()
+  })
+
+  it('invalidates an active Flight Check when Input trust changes and requires a fresh restart', async () => {
+    const startedAt = '2026-09-01T19:00:00.000Z'
+    const restartedAt = '2026-09-01T19:01:00.000Z'
+    const trustedStatus = {
+      boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified' as const,
+      ...trustedHardwareDiagnostics,
+      inputProfile: correctedInputProfile,
+      codex: true, claude: true, ashlr: false, boardRoute: 'ashlr_layer' as const, workspace: '/tmp', shortcutCount: 20,
+      shortcutRegistrations: [], workspaceSnapshot: null,
+    }
+    let inputMutated = false
+    const getStatus = vi.fn().mockImplementation(() => Promise.resolve(inputMutated
+      ? { ...trustedStatus, inputInstallation: { status: 'known_resource_mutation' as const, version: '0.18.4' } }
+      : trustedStatus))
+    const setFlightCheck = vi.fn().mockResolvedValue({ acknowledged: true, active: true, startedAt })
+    let resolveRestart: ((value: { acknowledged: boolean; active: boolean; startedAt: string | null }) => void) | undefined
+    const restartFlightCheck = vi.fn().mockImplementation(() => new Promise<{ acknowledged: boolean; active: boolean; startedAt: string | null }>((resolve) => { resolveRestart = resolve }))
+    let resolveSave: ((value: string | null) => void) | undefined
+    const saveFlightReceipt = vi.fn().mockImplementation(() => new Promise<string | null>((resolve) => { resolveSave = resolve }))
+    let controlHandler: ((signal: PhysicalSignalEnvelope) => void) | undefined
+    window.agentBoard = {
+      getStatus,
+      getMissionControl: vi.fn().mockResolvedValue(initialUnavailableMission()),
+      focusAgentSlot: vi.fn(), setProfile: vi.fn(), setFlightCheck, restartFlightCheck,
+      requestAction: vi.fn(), confirmAction: vi.fn(), beginHold: vi.fn(), cancelHold: vi.fn(),
+      chooseWorkspace: vi.fn(), saveFlightReceipt,
+      onControl: vi.fn((callback) => { controlHandler = callback; return () => {} }),
+    } as unknown as NonNullable<typeof window.agentBoard>
+
+    render(<App />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Flight Check' }))
+    const daily = await screen.findByRole('button', { name: 'Daily profile' })
+    await waitFor(() => expect((daily as HTMLButtonElement).disabled).toBe(false))
+    vi.useFakeTimers()
+    await act(async () => {
+      fireEvent.click(daily)
+      await Promise.resolve()
+    })
+    expect(screen.getByRole('heading', { name: 'Dial left' })).toBeTruthy()
+
+    let sequence = 0
+    act(() => {
+      for (const step of dailyFlightSteps) {
+        for (let repeat = 0; repeat < (step.requiredCount ?? 1); repeat += 1) {
+          for (const signalId of step.signals) {
+            sequence += 1
+            controlHandler?.({
+              schemaVersion: 1, sequence, signalId, source: 'global-shortcut',
+              accelerator: `test-${signalId}`, receivedAt: new Date(Date.parse(startedAt) + sequence).toISOString(),
+              monotonicNs: String(sequence),
+            })
+          }
+        }
+      }
+    })
+    expect(screen.getByText('ACCEPTANCE PASSED')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Export receipt/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Start operating/i })).toBeTruthy()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Export receipt/i }))
+      await Promise.resolve()
+    })
+    expect(saveFlightReceipt).toHaveBeenCalledOnce()
+
+    inputMutated = true
+    await act(async () => {
+      vi.advanceTimersByTime(12_000)
+      await Promise.resolve()
+    })
+    expect(screen.getByText('THIS RUN CANNOT PASS')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'A live acceptance gate changed' })).toBeTruthy()
+    expect(screen.getByText(/Recover every gate, then end and restart/i)).toBeTruthy()
+    expect(screen.queryByText('ACCEPTANCE PASSED')).toBeNull()
+    expect(screen.queryByRole('button', { name: /Export receipt/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Start operating/i })).toBeNull()
+    expect((screen.getByRole('button', { name: /End invalidated check/i }) as HTMLButtonElement).disabled).toBe(false)
+    await act(async () => {
+      resolveSave?.('/tmp/stale-flight-receipt.json')
+      await Promise.resolve()
+    })
+    expect(screen.queryByText('Receipt saved')).toBeNull()
+
+    inputMutated = false
+    await act(async () => {
+      vi.advanceTimersByTime(12_000)
+      await Promise.resolve()
+    })
+    expect(screen.getByText('THIS RUN CANNOT PASS')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'A live acceptance gate changed' })).toBeTruthy()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /End and restart/i }))
+      await Promise.resolve()
+    })
+    expect(restartFlightCheck).toHaveBeenCalledWith('daily')
+    expect(screen.queryByText('ACCEPTANCE PASSED')).toBeNull()
+    expect(screen.queryByRole('button', { name: /Export receipt/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Start operating/i })).toBeNull()
+    expect(screen.getByText('THIS RUN CANNOT PASS')).toBeTruthy()
+    await act(async () => {
+      resolveRestart?.({ acknowledged: true, active: true, startedAt: restartedAt })
+      await Promise.resolve()
+    })
+    expect(screen.queryByText('THIS RUN CANNOT PASS')).toBeNull()
+    expect(screen.getByRole('heading', { name: 'Dial left' })).toBeTruthy()
+  })
+
+  it('fails closed when the fresh post-arm status receipt is rejected', async () => {
+    const trustedStatus = {
+      boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified' as const,
+      ...trustedHardwareDiagnostics, inputProfile: correctedInputProfile,
+      codex: true, claude: true, ashlr: false, boardRoute: 'ashlr_layer' as const, workspace: '/tmp', shortcutCount: 20,
+      shortcutRegistrations: [], workspaceSnapshot: null,
+    }
+    const getStatus = vi.fn()
+      .mockResolvedValueOnce(trustedStatus)
+      .mockRejectedValueOnce(new Error('status unavailable'))
+    window.agentBoard = {
+      getStatus, getMissionControl: vi.fn().mockResolvedValue(initialUnavailableMission()),
+      focusAgentSlot: vi.fn(), setProfile: vi.fn(),
+      setFlightCheck: vi.fn().mockResolvedValue({ acknowledged: true, active: true, startedAt: '2026-09-01T19:10:00.000Z' }),
+      restartFlightCheck: vi.fn(), requestAction: vi.fn(), confirmAction: vi.fn(), beginHold: vi.fn(), cancelHold: vi.fn(),
+      chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(), onControl: vi.fn(() => () => {}),
+    } as unknown as NonNullable<typeof window.agentBoard>
+
+    render(<App />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Flight Check' }))
+    const daily = await screen.findByRole('button', { name: 'Daily profile' })
+    await waitFor(() => expect((daily as HTMLButtonElement).disabled).toBe(false))
+    await act(async () => {
+      fireEvent.click(daily)
+      await Promise.resolve()
+    })
+
+    expect(await screen.findByText('THIS RUN CANNOT PASS')).toBeTruthy()
+    expect(screen.getByText(/HARDWARE ACCEPTANCE \/ INTERLOCK UNVERIFIED/i)).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Restore safe state/i })).toBeTruthy()
+    expect(screen.queryByText('ACCEPTANCE PASSED')).toBeNull()
+    expect(screen.queryByRole('button', { name: /Export receipt/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Start operating/i })).toBeNull()
+  })
+
+  it('preserves sticky invalidation when stopping the interlock fails', async () => {
+    const trustedStatus = {
+      boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified' as const,
+      ...trustedHardwareDiagnostics, inputProfile: correctedInputProfile,
+      codex: true, claude: true, ashlr: false, boardRoute: 'ashlr_layer' as const, workspace: '/tmp', shortcutCount: 20,
+      shortcutRegistrations: [], workspaceSnapshot: null,
+    }
+    let inputMutated = false
+    const getStatus = vi.fn().mockImplementation(() => Promise.resolve(inputMutated
+      ? { ...trustedStatus, inputInstallation: { status: 'known_resource_mutation' as const, version: '0.18.4' } }
+      : trustedStatus))
+    let stopAttempts = 0
+    const setFlightCheck = vi.fn().mockImplementation((active: boolean) => {
+      if (active) return Promise.resolve({ acknowledged: true, active: true, startedAt: '2026-09-01T19:20:00.000Z' })
+      stopAttempts += 1
+      return Promise.resolve(stopAttempts === 1
+        ? { acknowledged: false, active: true, startedAt: '2026-09-01T19:20:00.000Z' }
+        : { acknowledged: true, active: false, startedAt: null })
+    })
+    window.agentBoard = {
+      getStatus, getMissionControl: vi.fn().mockResolvedValue(initialUnavailableMission()),
+      focusAgentSlot: vi.fn(), setProfile: vi.fn(), setFlightCheck, restartFlightCheck: vi.fn(),
+      requestAction: vi.fn(), confirmAction: vi.fn(), beginHold: vi.fn(), cancelHold: vi.fn(),
+      chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(), onControl: vi.fn(() => () => {}),
+    } as unknown as NonNullable<typeof window.agentBoard>
+
+    render(<App />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Flight Check' }))
+    const daily = await screen.findByRole('button', { name: 'Daily profile' })
+    await waitFor(() => expect((daily as HTMLButtonElement).disabled).toBe(false))
+    vi.useFakeTimers()
+    await act(async () => {
+      fireEvent.click(daily)
+      await Promise.resolve()
+    })
+    expect(screen.getByRole('heading', { name: 'Dial left' })).toBeTruthy()
+
+    inputMutated = true
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(12_000)
+    })
+    expect(screen.getByText('THIS RUN CANNOT PASS')).toBeTruthy()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /End invalidated check/i }))
+      await Promise.resolve()
+    })
+    expect(setFlightCheck).toHaveBeenLastCalledWith(false, 'daily')
+
+    inputMutated = false
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(12_000)
+    })
+    expect(screen.getByText('THIS RUN CANNOT PASS')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /End invalidated check/i })).toBeTruthy()
+    expect(screen.queryByText('ACCEPTANCE PASSED')).toBeNull()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /End invalidated check/i }))
+      await Promise.resolve()
+    })
+    expect(screen.queryByText('THIS RUN CANNOT PASS')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Daily profile' })).toBeTruthy()
   })
 })

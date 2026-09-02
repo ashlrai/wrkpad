@@ -80,12 +80,17 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 - Treat the observed Input 0.18.4 sealed window-info helper mutation as an explicit
   unverified state with stopped-state backup, reinstall, and pre-launch
   verification guidance; it never authorizes firmware work.
+- Make live Flight Check acceptance revocable and generation-bound: a gate
+  regression, superseding stop/restart, stale status response, or in-flight
+  export can no longer preserve or recreate a passing receipt.
 
 ### Security
 
 - Bind Input metadata, publisher, signature, and Gatekeeper probes to one
   canonical unchanged bundle fingerprint; reject direct or ancestor symlinks
   and reconfirm publisher identity after strict verification.
+- Bound all Input integrity retries to one ten-second monotonic budget and run a
+  final strict signature check after Gatekeeper before reporting verification.
 - Route automatic and one-press Git inspection through a fixed, hardened Git
   runner that disables repository fsmonitor, external diff, textconv, optional
   locks, pagers, prompts, and inherited `GIT_*` process injection.

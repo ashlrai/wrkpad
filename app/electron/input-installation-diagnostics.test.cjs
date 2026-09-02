@@ -27,6 +27,12 @@ function createBundle(candidate) {
   writeFileSync(path.join(candidate, 'Contents', 'Info.plist'), 'fixture')
 }
 
+function writeKnownHelper(candidate, contents = 'known helper fixture') {
+  const helper = path.join(candidate, 'Contents', 'Resources', 'scripts', 'window-info-retriever.scpt')
+  mkdirSync(path.dirname(helper), { recursive: true })
+  writeFileSync(helper, contents)
+}
+
 function verifiedRunner(calls = [], overrides = {}) {
   return (executable, args, options) => {
     calls.push({ executable, args, options })
@@ -79,6 +85,7 @@ test('verifies one exact publisher bundle with bounded fixed commands', () => {
       ['/usr/bin/codesign', '--verify', '--deep', '--strict', '--verbose=1'],
       ['/usr/bin/codesign', '-dvvv'],
       ['/usr/sbin/spctl', '--assess', '--type', 'execute'],
+      ['/usr/bin/codesign', '--verify', '--deep', '--strict', '--verbose=1'],
     ])
     assert.ok(calls.every(({ options }) => options.timeout === PROBE_TIMEOUT_MS))
     assert.doesNotMatch(JSON.stringify(inspectInputInstallation({ candidates: [files.system, files.user], runner: verifiedRunner() })), /Users|example|Input\.app/)
@@ -212,6 +219,146 @@ test('fails closed when tracked bundle content changes before publisher reconfir
     }
     assert.equal(inspectInputInstallation({ candidates: [files.system, files.user], runner }).status, 'probe_unavailable')
     assert.equal(identities, 2)
+  } finally {
+    rmSync(files.root, { recursive: true, force: true })
+  }
+})
+
+test('cannot verify when the known helper mutates immediately after the first strict check', () => {
+  const files = fixture()
+  let strictChecks = 0
+  try {
+    createBundle(files.system)
+    writeKnownHelper(files.system)
+    const baseRunner = verifiedRunner()
+    const runner = (executable, args, options) => {
+      const output = baseRunner(executable, args, options)
+      if (executable === '/usr/bin/codesign' && args[0] === '--verify') {
+        strictChecks += 1
+        if (strictChecks === 1) writeKnownHelper(files.system, 'mutated after first strict check')
+      }
+      return output
+    }
+    const inspected = inspectInputInstallation({ candidates: [files.system, files.user], runner })
+    assert.equal(inspected.status, 'probe_unavailable')
+    assert.notEqual(inspected.status, 'verified')
+    assert.equal(strictChecks, 1)
+  } finally {
+    rmSync(files.root, { recursive: true, force: true })
+  }
+})
+
+test('cannot verify when the known helper mutates during Gatekeeper or the final strict check', () => {
+  for (const mutationPhase of ['gatekeeper', 'final_signature']) {
+    const files = fixture()
+    let strictChecks = 0
+    try {
+      createBundle(files.system)
+      writeKnownHelper(files.system)
+      const baseRunner = verifiedRunner()
+      const runner = (executable, args, options) => {
+        const output = baseRunner(executable, args, options)
+        if (executable === '/usr/bin/codesign' && args[0] === '--verify') {
+          strictChecks += 1
+          if (mutationPhase === 'final_signature' && strictChecks === 2) {
+            writeKnownHelper(files.system, 'mutated during final strict check')
+          }
+        }
+        if (mutationPhase === 'gatekeeper' && executable === '/usr/sbin/spctl') {
+          writeKnownHelper(files.system, 'mutated during Gatekeeper')
+        }
+        return output
+      }
+      const inspected = inspectInputInstallation({ candidates: [files.system, files.user], runner })
+      assert.equal(inspected.status, 'probe_unavailable')
+      assert.notEqual(inspected.status, 'verified')
+    } finally {
+      rmSync(files.root, { recursive: true, force: true })
+    }
+  }
+})
+
+test('requires the final strict signature result after Gatekeeper', () => {
+  const files = fixture()
+  let strictChecks = 0
+  try {
+    createBundle(files.system)
+    const baseRunner = verifiedRunner()
+    const runner = (executable, args, options) => {
+      if (executable === '/usr/bin/codesign' && args[0] === '--verify') {
+        strictChecks += 1
+        if (strictChecks === 2) return { status: 1, stdout: '', stderr: 'final private signature failure' }
+      }
+      return baseRunner(executable, args, options)
+    }
+    assert.deepEqual(inspectInputInstallation({ candidates: [files.system, files.user], runner }), {
+      status: 'invalid_signature', version: '0.18.4',
+    })
+    assert.equal(strictChecks, 2)
+  } finally {
+    rmSync(files.root, { recursive: true, force: true })
+  }
+})
+
+test('one monotonic deadline bounds helper retries and every subprocess timeout', () => {
+  const files = fixture()
+  let clock = 0
+  let retries = 0
+  const timeouts = []
+  try {
+    createBundle(files.system)
+    writeKnownHelper(files.system)
+    const baseRunner = verifiedRunner()
+    const runner = (executable, args, options) => {
+      timeouts.push(options.timeout)
+      clock += options.timeout === 2_000 ? 2_000 : 4_000
+      const output = baseRunner(executable, args, options)
+      if (executable === '/usr/libexec/PlistBuddy' && args[1] === 'Print :CFBundleIdentifier') {
+        retries += 1
+        writeKnownHelper(files.system, `retry ${retries}`)
+      }
+      return output
+    }
+    assert.deepEqual(inspectInputInstallation({
+      candidates: [files.system, files.user], runner, now: () => clock,
+    }), { status: 'probe_unavailable', version: null })
+    assert.deepEqual(timeouts, [5_000, 5_000, 2_000])
+    assert.equal(clock, 10_000)
+    assert.equal(retries, 3)
+  } finally {
+    rmSync(files.root, { recursive: true, force: true })
+  }
+})
+
+test('a helper retry restarts all evidence and can stabilize inside the shared deadline', () => {
+  const files = fixture()
+  let clock = 0
+  let metadataReads = 0
+  let helperChanged = false
+  const timeouts = []
+  try {
+    createBundle(files.system)
+    writeKnownHelper(files.system)
+    const baseRunner = verifiedRunner()
+    const runner = (executable, args, options) => {
+      timeouts.push(options.timeout)
+      clock += 100
+      const output = baseRunner(executable, args, options)
+      if (executable === '/usr/libexec/PlistBuddy') metadataReads += 1
+      if (!helperChanged && executable === '/usr/libexec/PlistBuddy' && args[1] === 'Print :CFBundleIdentifier') {
+        helperChanged = true
+        writeKnownHelper(files.system, 'stable after one retry')
+      }
+      return output
+    }
+    assert.deepEqual(inspectInputInstallation({
+      candidates: [files.system, files.user], runner, now: () => clock,
+    }), { status: 'verified', version: '0.18.4' })
+    assert.equal(helperChanged, true)
+    assert.equal(metadataReads, 3)
+    assert.equal(timeouts.length, 8)
+    assert.ok(timeouts.every((timeout) => timeout > 0 && timeout <= PROBE_TIMEOUT_MS))
+    assert.equal(clock, 800)
   } finally {
     rmSync(files.root, { recursive: true, force: true })
   }

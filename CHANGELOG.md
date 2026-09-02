@@ -53,11 +53,17 @@ All notable changes will be documented here. The project follows semantic versio
 - Move Flight Check admission and export truth into the trusted main process,
   fail closed on missing diagnostic evidence, and keep recurring receiver
   identity probes responsive through bounded file-identity caching.
+- Bind every Flight Check start, restart, stop, and receipt to one monotonic
+  generation so superseded admissions and stale exports cannot revive an old
+  passing run.
 
 ### Fixed
 
 - Keep macOS USB parsers and Unix durability helpers out of unsupported platform
   builds so strict Linux and Windows lint gates remain portable.
+- Permanently invalidate the current physical-acceptance run when any live gate
+  changes, while keeping a safe unconditional stop available and requiring a
+  fresh post-arm status receipt before the UI can pass.
 
 ### Safety boundary
 

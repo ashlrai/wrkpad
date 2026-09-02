@@ -18,7 +18,7 @@ test('main synchronizes receiver ownership before registering shortcuts', () => 
 
 test('main independently revalidates every Flight Check admission and receipt', () => {
   assert.match(source, /async function verifyFlightGates\(variant, forceInput = true\)/)
-  assert.match(source, /const admission = await verifyFlightGates\(variant, true\)/)
+  assert.match(source, /verifyGates: \(\) => verifyFlightGates\(variant, true\)/)
   assert.match(source, /configuration: \{ registrations: shortcutRegistrations, registeredCount, admission: admission\.evidence, gates: admission\.gates \}/)
 })
 

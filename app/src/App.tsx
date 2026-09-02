@@ -103,6 +103,16 @@ const hardwareIds: Partial<Record<ControlId, string>> = {
   joyUp: 'JOY_UP', joyRight: 'JOY_RIGHT', joyDown: 'JOY_DOWN', joyLeft: 'JOY_LEFT',
 }
 
+const STATUS_REFRESH_TIMEOUT_MS = 8_000
+
+const flightLiveGatesReady = (status: SystemStatus, variant: FlightVariant) =>
+  status.boardRoute === 'ashlr_layer'
+  && status.boardConnected
+  && status.shortcutCount === hardware.bindableSignals
+  && verifiedInputInstallation(status.inputInstallation ?? initialStatus.inputInstallation)
+  && exclusiveReceiverRuntime(status.receiverRuntime ?? initialStatus.receiverRuntime)
+  && correctedInputProfileObservedForVariant(status.inputProfile ?? initialStatus.inputProfile, variant)
+
 function App() {
   const bridge = window.agentBoard
   const [profileId, setProfileId] = useState<ProfileId>('codex')
@@ -124,6 +134,7 @@ function App() {
   const [flightStartedAt, setFlightStartedAt] = useState<string | null>(null)
   const [flightExport, setFlightExport] = useState<string | null>(null)
   const [flightVariant, setFlightVariant] = useState<FlightVariant>('daily')
+  const [flightInvalidatedRun, setFlightInvalidatedRun] = useState<number | null>(null)
   const [routeSaving, setRouteSaving] = useState(false)
   const [routeError, setRouteError] = useState<string | null>(null)
   const [recoveryGuide, setRecoveryGuide] = useState<AgentBoardRecoveryGuide>(initialRecoveryGuide)
@@ -134,6 +145,7 @@ function App() {
   const lastSignal = useRef<Partial<Record<ControlId, number>>>({})
   const flightExpected = useRef<ControlId[]>([])
   const flightRequest = useRef(0)
+  const flightRun = useRef<{ request: number; underTest: boolean; invalidated: boolean; variant: FlightVariant }>({ request: 0, underTest: false, invalidated: false, variant: 'daily' })
   const statusRequest = useRef(0)
   const routeMutation = useRef(0)
   const flightActive = flightPhase === 'active'
@@ -149,11 +161,30 @@ function App() {
   const receiverExclusive = exclusiveReceiverRuntime(receiverRuntime)
 
   const refreshStatus = useCallback(async () => {
-    if (!bridge) return
+    if (!bridge) return null
     const request = ++statusRequest.current
     const mutation = routeMutation.current
-    const nextStatus = await bridge.getStatus()
-    if (request === statusRequest.current && mutation === routeMutation.current) setStatus(nextStatus)
+    const flightGeneration = flightRequest.current
+    let timeout: number | undefined
+    try {
+      const nextStatus = await Promise.race<SystemStatus | null>([
+        bridge.getStatus(),
+        new Promise<null>((resolve) => { timeout = window.setTimeout(() => resolve(null), STATUS_REFRESH_TIMEOUT_MS) }),
+      ])
+      if (!nextStatus || request !== statusRequest.current || mutation !== routeMutation.current || flightGeneration !== flightRequest.current) return null
+      const run = flightRun.current
+      if (run.underTest && !flightLiveGatesReady(nextStatus, run.variant)) {
+        flightRun.current = { ...run, invalidated: true }
+        setFlightInvalidatedRun(run.request)
+        setFlightExport(null)
+      }
+      setStatus(nextStatus)
+      return nextStatus
+    } catch {
+      return null
+    } finally {
+      if (timeout !== undefined) window.clearTimeout(timeout)
+    }
   }, [bridge])
   const refreshMission = useCallback(async () => {
     if (bridge?.getMissionControl) setMission(await bridge.getMissionControl())
@@ -408,6 +439,8 @@ function App() {
       return
     }
     const request = ++flightRequest.current
+    flightRun.current = { request, underTest: true, invalidated: true, variant }
+    setFlightInvalidatedRun(null)
     setFlightSignals([])
     setFlightEvents([])
     setFlightExport(null)
@@ -419,32 +452,54 @@ function App() {
     cancelHold()
     setFlightPhase('arming')
     if (!bridge) {
-      if (request === flightRequest.current) setFlightPhase('error')
+      if (request === flightRequest.current) {
+        flightRun.current = { request, underTest: false, invalidated: false, variant }
+        setFlightPhase('error')
+      }
       return
     }
     try {
       const acknowledgement = await bridge.setFlightCheck(true, variant)
       if (request !== flightRequest.current) return
       if (!acknowledgement.acknowledged || !acknowledgement.active) {
+        flightRun.current = { request, underTest: false, invalidated: false, variant }
         setFlightPhase('error')
         return
       }
       setFlightStartedAt(acknowledgement.startedAt)
+      const confirmedStatus = await refreshStatus()
+      if (request !== flightRequest.current) return
+      if (!confirmedStatus || !flightLiveGatesReady(confirmedStatus, variant)) {
+        flightRun.current = { request, underTest: true, invalidated: true, variant }
+        setFlightInvalidatedRun(request)
+        setFlightPhase('error')
+        return
+      }
+      flightRun.current = { request, underTest: true, invalidated: false, variant }
+      setFlightInvalidatedRun(null)
       setFlightPhase('active')
     } catch {
-      if (request === flightRequest.current) setFlightPhase('error')
+      if (request === flightRequest.current) {
+        flightRun.current = { request, underTest: false, invalidated: false, variant }
+        setFlightPhase('error')
+      }
     }
   }
 
   const stopFlightCheck = async () => {
+    const priorRun = flightRun.current
+    const failurePhase = flightPhase === 'active' ? 'active' : 'error'
     const request = ++flightRequest.current
+    flightRun.current = { ...priorRun, request }
+    if (priorRun.invalidated) setFlightInvalidatedRun(request)
     if (!bridge) { setFlightPhase('error'); return false }
     setFlightPhase('disarming')
     try {
       const acknowledgement = await bridge.setFlightCheck(false, flightVariant)
       if (request !== flightRequest.current) return false
       if (!acknowledgement.acknowledged || acknowledgement.active) {
-        setFlightPhase('active')
+        setFlightPhase(failurePhase)
+        void refreshStatus()
         return false
       }
       setFlightSignals([])
@@ -452,10 +507,15 @@ function App() {
       setFlightStartedAt(null)
       setFlightExport(null)
       flightExpected.current = []
+      flightRun.current = { request, underTest: false, invalidated: false, variant: flightVariant }
+      setFlightInvalidatedRun(null)
       setFlightPhase('inactive')
       return true
     } catch {
-      if (request === flightRequest.current) setFlightPhase('active')
+      if (request === flightRequest.current) {
+        setFlightPhase(failurePhase)
+        void refreshStatus()
+      }
       return false
     }
   }
@@ -469,7 +529,15 @@ function App() {
 
   const restartFlightCheck = async () => {
     if (!bridge?.restartFlightCheck || flightPhase !== 'active') return
+    if (!flightLiveGatesReady(status, flightVariant)) return
     const request = ++flightRequest.current
+    flightRun.current = { request, underTest: true, invalidated: true, variant: flightVariant }
+    setFlightInvalidatedRun(request)
+    setFlightSignals([])
+    setFlightEvents([])
+    setFlightStartedAt(null)
+    setFlightExport(null)
+    flightExpected.current = []
     setFlightPhase('arming')
     try {
       const acknowledgement = await bridge.restartFlightCheck(flightVariant)
@@ -478,11 +546,18 @@ function App() {
         setFlightPhase('error')
         return
       }
-      setFlightSignals([])
-      setFlightEvents([])
       setFlightStartedAt(acknowledgement.startedAt)
-      setFlightExport(null)
       flightExpected.current = stepsForVariant(flightVariant)[0].signals
+      const confirmedStatus = await refreshStatus()
+      if (request !== flightRequest.current) return
+      if (!confirmedStatus || !flightLiveGatesReady(confirmedStatus, flightVariant)) {
+        flightRun.current = { request, underTest: true, invalidated: true, variant: flightVariant }
+        setFlightInvalidatedRun(request)
+        setFlightPhase('error')
+        return
+      }
+      flightRun.current = { request, underTest: true, invalidated: false, variant: flightVariant }
+      setFlightInvalidatedRun(null)
       setFlightPhase('active')
     } catch {
       if (request === flightRequest.current) setFlightPhase('error')
@@ -490,7 +565,9 @@ function App() {
   }
 
   const exportFlightReceipt = async () => {
-    if (!bridge || !flightStartedAt) return
+    if (!bridge || !flightStartedAt || flightPhase !== 'active') return
+    if (flightRun.current.invalidated || flightInvalidatedRun === flightRequest.current || !flightLiveGatesReady(status, flightVariant)) return
+    const request = flightRequest.current
     const selectedSteps = stepsForVariant(flightVariant)
     const acceptance = flightAcceptance(flightVariant, flightEvents, status.boardConnected, status.shortcutCount, hardware.bindableSignals)
     const missing = selectedSteps.filter((step) => !flightStepComplete(step, flightEvents)).flatMap((step) => step.signals)
@@ -514,7 +591,11 @@ function App() {
       })),
       events: flightEvents,
     })
-    if (response) setFlightExport(response)
+    if (response
+      && request === flightRequest.current
+      && flightRun.current.request === request
+      && flightRun.current.underTest
+      && !flightRun.current.invalidated) setFlightExport(response)
   }
 
   useEffect(() => cancelHold, [activeControl, cancelHold, profileId, view])
@@ -651,7 +732,8 @@ function App() {
         </div>
       </> : view === 'flight' ? <FlightCheckView
         active={flightActive} events={flightEvents} startedAt={flightStartedAt}
-        exportPath={flightExport} status={status} variant={flightVariant} phase={flightPhase} onStart={startFlightCheck}
+        exportPath={flightExport} status={status} variant={flightVariant} phase={flightPhase}
+        liveGateInvalidated={flightInvalidatedRun === flightRequest.current} onStart={startFlightCheck}
         onStop={() => void stopFlightCheck()} onRestart={() => void restartFlightCheck()} onExport={exportFlightReceipt}
         onSetup={() => void changeView('setup')} onOperate={() => void changeView('operate')}
       /> : <SetupView status={status} recoveryGuide={recoveryGuide} onRefreshRecoveryGuide={refreshRecoveryGuide} routeSaving={routeSaving} routeError={routeError} onRouteChange={(route) => void declareBoardRoute(route)} onOperate={() => changeView('operate')} onFlightCheck={() => void changeView('flight')} />}
@@ -836,9 +918,10 @@ function ActionConsole({ activeControl, action, result, approval, isRunning, hol
   </aside>
 }
 
-function FlightCheckView({ active, events, startedAt, exportPath, status, variant, phase, onStart, onStop, onRestart, onExport, onSetup, onOperate }: {
+function FlightCheckView({ active, events, startedAt, exportPath, status, variant, phase, liveGateInvalidated, onStart, onStop, onRestart, onExport, onSetup, onOperate }: {
   active: boolean; events: FlightEvent[]; startedAt: string | null; exportPath: string | null; status: SystemStatus; variant: 'daily' | 'diagnostic'
   phase: 'inactive' | 'arming' | 'active' | 'disarming' | 'error'
+  liveGateInvalidated: boolean
   onStart: (variant: 'daily' | 'diagnostic') => void; onStop: () => void; onRestart: () => void; onExport: () => void; onSetup: () => void; onOperate: () => void
 }) {
   const [clock, setClock] = useState(0)
@@ -852,7 +935,6 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
   const completedGestures = selectedSteps.filter((step) => flightStepComplete(step, events)).length
   const completedSignals = selectedSteps.filter((step) => flightStepComplete(step, events)).reduce((count, step) => count + step.signals.length, 0)
   const acceptance = flightAcceptance(variant, events, status.boardConnected, status.shortcutCount, hardware.bindableSignals)
-  const complete = acceptance.passed
   const routesComplete = acceptance.routesComplete
   const nextStep = selectedSteps.find((step) => !flightStepComplete(step, events))
   const progress = Math.round((completedSignals / expectedSignals) * 100)
@@ -864,12 +946,17 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
   const inputInstallationDescription = describeInputInstallation(inputInstallation)
   const inputInstallationReady = verifiedInputInstallation(inputInstallation)
   const receiverExclusive = exclusiveReceiverRuntime(receiverRuntime)
-  const hardwareReady = !nativeRoute && status.boardConnected && inputInstallationReady && receiverExclusive && status.shortcutCount === hardware.bindableSignals
+  const hardwareReady = status.boardRoute === 'ashlr_layer' && status.boardConnected && inputInstallationReady && receiverExclusive && status.shortcutCount === hardware.bindableSignals
   const dailyPreflightReady = hardwareReady && correctedInputProfileObservedForVariant(currentInputProfile, 'daily')
   const diagnosticPreflightReady = hardwareReady && correctedInputProfileObservedForVariant(currentInputProfile, 'diagnostic')
   const preflightReady = dailyPreflightReady || diagnosticPreflightReady
+  const selectedVariantReady = variant === 'daily' ? dailyPreflightReady : diagnosticPreflightReady
+  const runUnderTest = phase !== 'inactive' || startedAt !== null || events.length > 0
+  const currentGateFailure = runUnderTest && !selectedVariantReady
+  const runInvalidated = liveGateInvalidated || currentGateFailure
+  const complete = phase === 'active' && acceptance.passed && selectedVariantReady && !runInvalidated
   const profileBlocked = !correctedInputProfileObservedForVariant(currentInputProfile, variant)
-  const runCannotPass = problems.length > 0
+  const runCannotPass = problems.length > 0 || runInvalidated
   const concurrentCodexTraffic = status.inputRuntime?.codexProtocolTraffic?.status === 'recurring_unresolved_response'
     && status.inputRuntime.codexProtocolTraffic.fresh
   const phaseLabel = active ? 'ACTIONS SUPPRESSED' : phase === 'arming' ? 'ARMING INTERLOCK' : phase === 'disarming' ? 'RELEASING INTERLOCK' : phase === 'error' ? 'INTERLOCK UNVERIFIED' : 'ACTIONS ENABLED'
@@ -885,9 +972,9 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
       <div className="flight-sequence">
         <div className="flight-prompt">
           <div className={complete ? 'prompt-icon complete' : active ? 'prompt-icon live' : 'prompt-icon'}>{complete ? <Check /> : active ? <Activity /> : <Keyboard />}</div>
-          <div><span className="eyebrow">{complete ? 'ACCEPTANCE PASSED' : runCannotPass ? 'THIS RUN CANNOT PASS' : blockedCompletion ? 'ACCEPTANCE FAILED' : active ? 'NEXT PHYSICAL GESTURE' : phase === 'arming' ? 'WAIT FOR INTERLOCK' : 'READY WHEN YOU ARE'}</span><h3>{complete ? `${expectedSignals} routed signals received` : runCannotPass ? 'A signal arrived out of order' : blockedCompletion ? 'Resolve the recorded blockers and restart' : active && nextStep ? nextStep.label : preflightReady ? 'Start a clean receipt' : 'Complete preflight first'}</h3><p>{complete ? (variant === 'diagnostic' ? 'The disposable diagnostic path reported ACT10 and ACT11 inside one paired Mic gesture.' : 'The daily path reported one ACT10 Mic event while ACT11 remained silent.') : runCannotPass ? `${problems.length} misroute recorded. Restart to clear this failed evidence; continuing cannot produce a passing receipt.` : blockedCompletion ? `${problems.length} misroutes; USB ${status.boardConnected ? 'present' : 'absent'}; shortcuts ${status.shortcutCount}/${hardware.bindableSignals}.` : active && nextStep ? nextStep.instruction : phase === 'arming' ? 'Do not touch the board until the main process acknowledges action suppression.' : preflightReady ? 'This clears prior observations and temporarily turns every shortcut into a no-op test signal.' : receiverRuntime.status === 'unavailable' ? 'Agent Board could not verify shortcut receiver ownership, so Flight Check is disabled. Refresh Setup; do not assume this copy owns the shortcuts.' : !receiverExclusive ? 'Multiple Agent Board receivers are running, so shortcut ownership is disabled. Fully quit every copy manually, then reopen one exact build.' : !inputInstallationReady ? inputInstallationDescription.guidance : profileBlocked ? status.inputProfile?.encoderDirection === 'reversed' ? 'The active Input receipt has clockwise and counterclockwise reversed. Open Setup and create the corrected profile before Flight Check.' : 'Flight Check requires Ashlr Agent Board Corrected, Ashlr Daily, and a corrected encoder receipt. Open Setup to finish profile recovery.' : `USB must be present and all ${hardware.bindableSignals} desktop endpoints must be registered before physical acceptance starts.`}</p></div>
+          <div><span className="eyebrow">{complete ? 'ACCEPTANCE PASSED' : runCannotPass ? 'THIS RUN CANNOT PASS' : blockedCompletion ? 'ACCEPTANCE FAILED' : active ? 'NEXT PHYSICAL GESTURE' : phase === 'arming' ? 'WAIT FOR INTERLOCK' : 'READY WHEN YOU ARE'}</span><h3>{complete ? `${expectedSignals} routed signals received` : runInvalidated ? 'A live acceptance gate changed' : runCannotPass ? 'A signal arrived out of order' : blockedCompletion ? 'Resolve the recorded blockers and restart' : active && nextStep ? nextStep.label : preflightReady ? 'Start a clean receipt' : 'Complete preflight first'}</h3><p>{complete ? (variant === 'diagnostic' ? 'The disposable diagnostic path reported ACT10 and ACT11 inside one paired Mic gesture.' : 'The daily path reported one ACT10 Mic event while ACT11 remained silent.') : runInvalidated ? 'USB, Input trust, receiver ownership, the declared route, the exact selected profile, or desktop endpoint readiness changed during this run. Recover every gate, then end and restart; this run cannot become passing.' : runCannotPass ? `${problems.length} misroute recorded. Restart to clear this failed evidence; continuing cannot produce a passing receipt.` : blockedCompletion ? `${problems.length} misroutes; USB ${status.boardConnected ? 'present' : 'absent'}; shortcuts ${status.shortcutCount}/${hardware.bindableSignals}.` : active && nextStep ? nextStep.instruction : phase === 'arming' ? 'Do not touch the board until the main process acknowledges action suppression.' : preflightReady ? 'This clears prior observations and temporarily turns every shortcut into a no-op test signal.' : receiverRuntime.status === 'unavailable' ? 'Agent Board could not verify shortcut receiver ownership, so Flight Check is disabled. Refresh Setup; do not assume this copy owns the shortcuts.' : !receiverExclusive ? 'Multiple Agent Board receivers are running, so shortcut ownership is disabled. Fully quit every copy manually, then reopen one exact build.' : !inputInstallationReady ? inputInstallationDescription.guidance : profileBlocked ? status.inputProfile?.encoderDirection === 'reversed' ? 'The active Input receipt has clockwise and counterclockwise reversed. Open Setup and create the corrected profile before Flight Check.' : 'Flight Check requires Ashlr Agent Board Corrected, Ashlr Daily, and a corrected encoder receipt. Open Setup to finish profile recovery.' : `USB must be present and all ${hardware.bindableSignals} desktop endpoints must be registered before physical acceptance starts.`}</p></div>
           {phase === 'inactive' && !complete && <div className="flight-start-actions"><button type="button" disabled={!dailyPreflightReady} onClick={() => onStart('daily')}><Play size={15} /> Daily profile</button><button type="button" disabled={!diagnosticPreflightReady} onClick={() => onStart('diagnostic')}>20-signal diagnostic</button></div>}
-          {active && runCannotPass && <button type="button" className="stop-flight" onClick={onRestart}><RotateCcw size={15} /> End and restart</button>}
+          {active && runCannotPass && <div className="flight-start-actions"><button type="button" className="stop-flight" disabled={!selectedVariantReady} onClick={onRestart}><RotateCcw size={15} /> {selectedVariantReady ? 'End and restart' : 'Recover gates to restart'}</button><button type="button" className="stop-flight" onClick={onStop}><CircleStop size={15} /> End invalidated check</button></div>}
           {active && !complete && !runCannotPass && <button type="button" className="stop-flight" onClick={onStop}><CircleStop size={15} /> End check</button>}
           {phase === 'error' && <button type="button" className="stop-flight" onClick={onStop}><CircleStop size={15} /> Restore safe state</button>}
           {complete && <button type="button" onClick={onExport}><Download size={15} /> Export receipt</button>}
@@ -928,7 +1015,7 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
             : <>Use the top-right rotary dial—not the bottom-left layer and connection selector. End this check, quit competing board controllers, then open Work Louder Input alone. Use <b>Set as current profile</b> for <b>Ashlr Agent Board Corrected</b>, verify <b>Ashlr Daily</b>, fully relaunch Input, and run a fresh check. Do not jump to firmware from one zero-signal receipt.</>}</p>
           <button type="button" onClick={onSetup}>Open recovery checklist</button>
         </div>}
-        {exportPath && <div className="exported-receipt"><Check size={14} /><span>Receipt saved</span><code title={exportPath}>{exportPath}</code></div>}
+        {exportPath && !runInvalidated && <div className="exported-receipt"><Check size={14} /><span>Receipt saved</span><code title={exportPath}>{exportPath}</code></div>}
         {!status.boardConnected && <button type="button" className="flight-secondary" onClick={onSetup}>Open connection setup</button>}
         {complete && <button type="button" className="flight-secondary" onClick={onOperate}>Start operating</button>}
         <p className="flight-caveat"><ShieldCheck size={13} /> {variant === 'diagnostic' ? 'Diagnostic mode requires a disposable layer with ACT10 and ACT11 mapped separately; deactivate it afterward.' : 'Daily mode expects ACT10 once and ACT11 silenced.'} A passing receipt does not validate native Codex RGB or authorize consequential actions.</p>

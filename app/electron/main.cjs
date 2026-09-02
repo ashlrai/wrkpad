@@ -15,6 +15,7 @@ const { buildRecoveryChecklist, observeRecoveryArtifact, readRecoveryReceipt, re
 const { holdSatisfied } = require('./approval-guard.cjs')
 const { evaluateFlightSignals } = require('./flight-receipt.cjs')
 const { createFlightSession } = require('./flight-session.cjs')
+const { createFlightOperationCoordinator, saveBoundFlightReceipt } = require('./flight-operations.cjs')
 const { evaluateFlightGates } = require('./flight-gates.cjs')
 const { inspectWorkspace } = require('./workspace-inspector.cjs')
 const { appForProvider, collectMissionControl } = require('./mission-control.cjs')
@@ -35,6 +36,7 @@ let missionCache = null; let missionCacheAt = 0; let missionInFlight = null
 let inputInstallationCache = null; let inputInstallationCacheAt = 0
 const approvals = new Map()
 const flightSession = createFlightSession()
+const flightOperations = createFlightOperationCoordinator(flightSession)
 const cachedReceiverAsarHash = createCachedAsarHasher({ ttlMs: 30_000, maxEntries: 32 })
 
 function settingsPath() { return appSettingsPath(app.getPath('appData')) }
@@ -58,7 +60,7 @@ function createWindow() {
   mainWindow.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false))
   mainWindow.loadURL(rendererUrl)
   mainWindow.on('closed', () => {
-    flightSession.reset()
+    flightOperations.reset()
     approvals.clear()
     mainWindow = null
   })
@@ -115,7 +117,7 @@ function synchronizeShortcutOwnership() {
   if (!receiverOwnsShortcuts(receiverRuntime)) {
     if (shortcutRegistrations.length) globalShortcut.unregisterAll()
     shortcutRegistrations = []
-    flightSession.reset()
+    flightOperations.reset()
     approvals.clear()
     return receiverRuntime
   }
@@ -260,23 +262,16 @@ ipcMain.handle('board:focusAgentSlot', trustedIpc(async (_event, slot) => {
 }))
 ipcMain.handle('board:setProfile', trustedIpc((_event, profile) => { if (PROFILE_IDS.has(profile)) currentProfile = profile; return currentProfile }))
 ipcMain.handle('board:setFlightCheck', trustedIpc(async (_event, active, variant) => {
-  if (active === true) {
-    const admission = await verifyFlightGates(variant, true)
-    if (!admission.ready) return { acknowledged: false, active: false, startedAt: null }
-  }
-  const state = active === true ? flightSession.start() : flightSession.stop()
-  if (state.active) approvals.clear()
-  return { acknowledged: true, active: state.active, startedAt: state.startedAt }
+  const state = active === true
+    ? await flightOperations.start(() => verifyFlightGates(variant, true))
+    : flightOperations.stop()
+  if (state.acknowledged && state.active) approvals.clear()
+  return state
 }))
 ipcMain.handle('board:restartFlightCheck', trustedIpc(async (_event, variant) => {
-  const admission = await verifyFlightGates(variant, true)
-  if (!admission.ready) {
-    flightSession.stop()
-    return { acknowledged: false, active: false, startedAt: null }
-  }
-  const state = flightSession.restart()
-  if (state.active) approvals.clear()
-  return { acknowledged: state.active, active: state.active, startedAt: state.startedAt }
+  const state = await flightOperations.restart(() => verifyFlightGates(variant, true))
+  if (state.acknowledged && state.active) approvals.clear()
+  return state
 }))
 ipcMain.handle('board:chooseWorkspace', trustedIpc(async () => {
   const result = await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory', 'createDirectory'], title: 'Choose the Agent Board working directory' })
@@ -368,8 +363,6 @@ ipcMain.handle('board:openInputMonitoringSettings', trustedIpc(async () => {
   }
 }))
 ipcMain.handle('board:saveFlightReceipt', trustedIpc(async (_event, receipt) => {
-  const flight = flightSession.snapshot()
-  if (!flight.active || !flight.startedAt) return null
   if (!receipt || typeof receipt !== 'object' || Array.isArray(receipt)) return null
   if (Buffer.byteLength(JSON.stringify(receipt), 'utf8') > 200_000) return null
   if (!Array.isArray(receipt.receivedSignals) || !Array.isArray(receipt.missingSignals) || !Array.isArray(receipt.events)) return null
@@ -378,34 +371,43 @@ ipcMain.handle('board:saveFlightReceipt', trustedIpc(async (_event, receipt) => 
   if (![...receipt.receivedSignals, ...receipt.missingSignals].every((signal) => allowedSignals.has(signal))) return null
   if (!receipt.events.every((item) => item && allowedSignals.has(item.signal) && typeof item.receivedAt === 'string')) return null
   const variant = receipt.profileKind === 'diagnostic' ? 'diagnostic' : 'daily'
-  const admission = await verifyFlightGates(variant, true)
-  const evaluation = evaluateFlightSignals(variant, flight.rawEvents)
-  const usbDetected = admission.evidence.usbDetected
-  const registeredCount = shortcutRegistrations.filter((item) => item.registered).length
-  const status = evaluation.status === 'passed' && admission.ready ? 'passed' : evaluation.status === 'incomplete' ? 'incomplete' : 'failed'
-  const payload = {
-    schema: 'ai.ashlr.agent-board.flight-check/v2',
-    receiptId: randomUUID(),
-    profileKind: variant,
-    status,
-    startedAt: flight.startedAt,
-    exportedAt: new Date().toISOString(),
-    appVersion: app.getVersion(),
-    device: { expectedName: 'Creator Micro 2', usbDetected },
-    configuration: { registrations: shortcutRegistrations, registeredCount, admission: admission.evidence, gates: admission.gates },
-    evaluation,
-    rawEvents: flight.rawEvents,
-    disclaimer: 'Operator-guided global-shortcut receipt; not a cryptographic device-identity attestation.',
-  }
-  const canonical = JSON.stringify(payload)
-  const document = { ...payload, sha256: createHash('sha256').update(canonical).digest('hex') }
   const suggestedName = `ashlr-agent-board-flight-check-${new Date().toISOString().replace(/[:.]/g, '-')}.json`
-  const result = await dialog.showSaveDialog(mainWindow, { title: 'Save Flight Check receipt', defaultPath: path.join(app.getPath('documents'), suggestedName), filters: [{ name: 'JSON receipt', extensions: ['json'] }] })
-  if (result.canceled || !result.filePath) return null
-  const temporaryPath = `${result.filePath}.${randomUUID()}.tmp`
-  writeFileSync(temporaryPath, `${JSON.stringify(document, null, 2)}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
-  renameSync(temporaryPath, result.filePath)
-  return result.filePath
+  return saveBoundFlightReceipt({
+    coordinator: flightOperations,
+    verifyGates: () => verifyFlightGates(variant, true),
+    chooseDestination: async () => {
+      const result = await dialog.showSaveDialog(mainWindow, { title: 'Save Flight Check receipt', defaultPath: path.join(app.getPath('documents'), suggestedName), filters: [{ name: 'JSON receipt', extensions: ['json'] }] })
+      return result.canceled || !result.filePath ? null : result.filePath
+    },
+    buildDocument: ({ flight, admission }) => {
+      const evaluation = evaluateFlightSignals(variant, flight.rawEvents)
+      const usbDetected = admission.evidence.usbDetected
+      const registeredCount = shortcutRegistrations.filter((item) => item.registered).length
+      const status = evaluation.status === 'passed' && admission.ready ? 'passed' : evaluation.status === 'incomplete' ? 'incomplete' : 'failed'
+      const payload = {
+        schema: 'ai.ashlr.agent-board.flight-check/v2',
+        receiptId: randomUUID(),
+        profileKind: variant,
+        status,
+        startedAt: flight.startedAt,
+        exportedAt: new Date().toISOString(),
+        appVersion: app.getVersion(),
+        device: { expectedName: 'Creator Micro 2', usbDetected },
+        configuration: { registrations: shortcutRegistrations, registeredCount, admission: admission.evidence, gates: admission.gates },
+        evaluation,
+        rawEvents: flight.rawEvents,
+        disclaimer: 'Operator-guided global-shortcut receipt; not a cryptographic device-identity attestation.',
+      }
+      const canonical = JSON.stringify(payload)
+      return { ...payload, sha256: createHash('sha256').update(canonical).digest('hex') }
+    },
+    writeDocument: (destination, document) => {
+      const temporaryPath = `${destination}.${randomUUID()}.tmp`
+      writeFileSync(temporaryPath, `${JSON.stringify(document, null, 2)}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+      renameSync(temporaryPath, destination)
+      return destination
+    },
+  })
 }))
 ipcMain.handle('board:requestAction', trustedIpc(async (_event, actionId) => {
   if (flightSession.isActive()) return { ok:false,title:'Flight Check interlock',message:'Mapped actions are disabled until hardware acceptance ends.',timestamp:new Date().toISOString() }
@@ -464,6 +466,6 @@ if (!hasSingleInstanceLock) {
   })
   app.whenReady().then(() => { createWindow(); synchronizeShortcutOwnership() })
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
-  app.on('will-quit', () => { flightSession.reset(); globalShortcut.unregisterAll() })
+  app.on('will-quit', () => { flightOperations.reset(); globalShortcut.unregisterAll() })
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
 }
