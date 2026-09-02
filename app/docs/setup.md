@@ -71,6 +71,8 @@ it does not expose the app path, signing output, or publisher identifier. An
 installed app with `invalid metadata`, `publisher unrecognized`, `invalid
 signature`, `known resource mutation`, `Gatekeeper rejected`, `unsafe`,
 `multiple installations`, or `probe unavailable` is not a verified controller.
+The fixed-path probe uses Work Louder's official lowercase `input.app` bundle
+name; it does not scan Applications folders or relax canonical-path checks.
 
 On this desk, Input 0.18.4 later showed an exact sealed `window-info` helper
 change while it was running; which process caused the change is unproven. A

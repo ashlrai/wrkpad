@@ -34,7 +34,9 @@ function validCandidate(candidate) {
 
 function defaultCandidates(home = homedir()) {
   if (!validCandidate(home)) return null
-  return ['/Applications/Input.app', path.join(home, 'Applications', 'Input.app')]
+  // Work Louder's signed DMG ships the bundle with this lowercase basename.
+  // Keep the paths exact so canonical-path and symlink checks remain fail-closed.
+  return ['/Applications/input.app', path.join(home, 'Applications', 'input.app')]
 }
 
 function runFixed(executable, args, options = {}) {

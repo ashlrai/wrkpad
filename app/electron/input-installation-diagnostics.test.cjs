@@ -49,12 +49,55 @@ function verifiedRunner(calls = [], overrides = {}) {
   }
 }
 
-test('uses only the two fixed production candidate locations', () => {
+test('uses only the two fixed official lowercase production candidate locations', () => {
   assert.deepEqual(defaultCandidates('/Users/example'), [
-    '/Applications/Input.app',
-    '/Users/example/Applications/Input.app',
+    '/Applications/input.app',
+    '/Users/example/Applications/input.app',
   ])
   assert.equal(defaultCandidates('relative'), null)
+})
+
+test('accepts the official lowercase bundle and probes only its canonical path', () => {
+  const files = fixture()
+  const calls = []
+  const official = path.join(files.root, 'system', 'input.app')
+  try {
+    createBundle(official)
+    assert.deepEqual(inspectInputInstallation({ candidates: [official, files.user], runner: verifiedRunner(calls) }), {
+      status: 'verified', version: '0.18.4',
+    })
+    assert.ok(calls.length > 0)
+    const approvedTargets = new Set([official, path.join(official, 'Contents', 'Info.plist')])
+    assert.ok(calls.every(({ args }) => approvedTargets.has(args.at(-1))))
+  } finally {
+    rmSync(files.root, { recursive: true, force: true })
+  }
+})
+
+test('does not case-fold unapproved bundle spellings on case-sensitive filesystems', (t) => {
+  const files = fixture()
+  const official = path.join(files.root, 'system', 'input.app')
+  const unapproved = path.join(files.root, 'system', 'INPUT.app')
+  let calls = 0
+  try {
+    createBundle(unapproved)
+    let caseSensitive = false
+    try {
+      caseSensitive = realpathSync.native(official) !== realpathSync.native(unapproved)
+    } catch (error) {
+      caseSensitive = error?.code === 'ENOENT'
+    }
+    if (!caseSensitive) {
+      t.skip('fixture volume is case-insensitive')
+      return
+    }
+    assert.deepEqual(inspectInputInstallation({ candidates: [official, files.user], runner: () => { calls += 1 } }), {
+      status: 'missing', version: null,
+    })
+    assert.equal(calls, 0)
+  } finally {
+    rmSync(files.root, { recursive: true, force: true })
+  }
 })
 
 test('reports missing without running metadata or trust probes', () => {

@@ -35,6 +35,9 @@ verified**. The app deliberately shows a sanitized reason such as `invalid
 signature`, `publisher unrecognized`, `Gatekeeper rejected`, `multiple
 installations`, `unsafe`, `known resource mutation`, or `probe unavailable`; it
 does not display raw signing output, a local app path, or publisher identifiers.
+The official DMG installs lowercase `input.app`; the detector probes that exact
+fixed name and still rejects symlinks, alternate locations, and noncanonical
+ancestors.
 
 On this desk, Input 0.18.4 later showed an exact sealed `window-info` helper
 change while it was running; which process caused the change is unproven. The
