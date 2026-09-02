@@ -14,13 +14,14 @@ const MAX_OUTPUT_BYTES = 256 * 1024
 const ROUTES = new Set(['ashlr_layer', 'codex_native'])
 const INPUT_RUNTIME_STATUSES = new Set(['unresolved_profile_layer', 'not_observed', 'log_missing', 'log_unsafe', 'log_unavailable'])
 const CODEX_PROTOCOL_TRAFFIC_STATUSES = new Set(['recurring_unresolved_response', 'not_observed', 'log_missing', 'log_unsafe', 'log_unavailable'])
-const REQUIRED_DOCTOR_CHECK_NAMES = new Set(['Creator Micro 2 USB', 'Work Louder Input'])
+const ASHLR_REQUIRED_DOCTOR_CHECK_NAMES = new Set(['Creator Micro 2 USB', 'Work Louder Input'])
+const NATIVE_REQUIRED_DOCTOR_CHECK_NAMES = new Set(['Creator Micro 2 USB', 'ChatGPT desktop'])
 const INPUT_CACHE_STATUSES = new Set(['available', 'missing', 'invalid', 'unsafe'])
 const INPUT_ENCODER_DIRECTIONS = new Set(['correct', 'reversed', 'unrecognized', 'unavailable'])
 const INPUT_INSTALLATION_STATUSES = new Set(['verified', 'missing', 'multiple_installations', 'unsafe', 'invalid_metadata', 'publisher_unrecognized', 'invalid_signature', 'known_resource_mutation', 'gatekeeper_rejected', 'probe_unavailable'])
 const RECEIVER_RUNTIME_STATUSES = new Set(['not_running', 'exclusive', 'contended_same_build', 'contended_distinct_builds', 'unavailable'])
 const READINESS_STATUSES = new Set(['pass', 'manual', 'blocked'])
-const NATIVE_REASONS = new Set(['firmware_rpc_missing', 'historical_firmware_rpc_missing', 'recent_native_connection_observed', 'native_connection_requires_verification'])
+const NATIVE_REASONS = new Set(['native_prerequisite_missing', 'firmware_rpc_missing', 'historical_firmware_rpc_missing', 'recent_native_connection_observed', 'native_connection_requires_verification'])
 const ASHLR_REASONS = new Set(['required_prerequisite_missing', 'receiver_contended_same_build', 'receiver_contended_distinct_builds', 'receiver_probe_unavailable', 'receiver_not_running', 'encoder_direction_reversed', 'input_profile_requires_activation', 'recent_unresolved_profile_layer_observed', 'recurring_codex_protocol_traffic', 'physical_acceptance_required'])
 const boundedHash = (value) => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value) ? value : null
 const boundedVersion = (value) => typeof value === 'string' && /^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$/.test(value) ? value : null
@@ -162,10 +163,14 @@ function nextStep(id, actor, safety, requires, proves, doesNotProve, command) {
 
 function projectAppDoctor(raw) {
   if (!raw || raw.schema !== 'ai.ashlr.agent-board.doctor/v1') return null
-  const required = Array.isArray(raw.checks)
-    ? raw.checks.filter((item) => item.category === 'required')
-    : []
+  const checks = Array.isArray(raw.checks) ? raw.checks : []
+  const required = checks.filter((item) => item.category === 'required')
   const requiredNames = new Set(required.map((item) => item?.name).filter((name) => typeof name === 'string'))
+  const uniqueCheckReady = (name) => {
+    const matches = checks.filter((item) => item?.name === name)
+    return matches.length === 1 && matches[0].ok === true
+  }
+  const declaredRoute = ['ashlr_layer', 'codex_native'].includes(raw.route) ? raw.route : 'unknown'
   const rawInputInstallation = raw.inputInstallation && typeof raw.inputInstallation === 'object' ? raw.inputInstallation : null
   const projectedInputStatus = INPUT_INSTALLATION_STATUSES.has(rawInputInstallation?.status) ? rawInputInstallation.status : 'probe_unavailable'
   const inputVersion = boundedVersion(rawInputInstallation?.version)
@@ -206,10 +211,17 @@ function projectAppDoctor(raw) {
     distinctBuildCount: receiverShapeValid ? receiverBuildCount : 0,
     currentAsarSha256: receiverShapeValid ? receiverHash : null,
   }
-  const requiredReady = required.length === REQUIRED_DOCTOR_CHECK_NAMES.size
-    && requiredNames.size === REQUIRED_DOCTOR_CHECK_NAMES.size
-    && [...REQUIRED_DOCTOR_CHECK_NAMES].every((name) => requiredNames.has(name))
+  const expectedRequiredNames = declaredRoute === 'codex_native'
+    ? NATIVE_REQUIRED_DOCTOR_CHECK_NAMES
+    : ASHLR_REQUIRED_DOCTOR_CHECK_NAMES
+  const requiredReady = required.length === expectedRequiredNames.size
+    && requiredNames.size === expectedRequiredNames.size
+    && [...expectedRequiredNames].every((name) => requiredNames.has(name))
     && required.every((item) => item.ok === true)
+  const usbReady = uniqueCheckReady('Creator Micro 2 USB')
+  const nativePrerequisitesReady = usbReady && uniqueCheckReady('ChatGPT desktop')
+  const ashlrPrerequisitesReady = usbReady
+    && uniqueCheckReady('Work Louder Input')
     && inputInstallation.status === 'verified'
   const rawRuntime = raw.inputRuntime && typeof raw.inputRuntime === 'object' ? raw.inputRuntime : null
   const runtimeStatus = rawRuntime && INPUT_RUNTIME_STATUSES.has(rawRuntime.status) ? rawRuntime.status : rawRuntime ? 'invalid' : null
@@ -240,6 +252,8 @@ function projectAppDoctor(raw) {
   const nativeFresh = raw.readiness?.codexNative?.fresh === true
   const nativeShapeValid = projectedNativeStatus === 'blocked' && projectedNativeReason === 'firmware_rpc_missing'
     ? nativeFresh
+    : projectedNativeStatus === 'blocked' && projectedNativeReason === 'native_prerequisite_missing'
+      ? !nativeFresh
     : projectedNativeStatus === 'pass' && projectedNativeReason === 'recent_native_connection_observed'
       ? nativeFresh
       : projectedNativeStatus === 'manual' && projectedNativeReason === 'historical_firmware_rpc_missing'
@@ -250,7 +264,7 @@ function projectAppDoctor(raw) {
   const ashlrStatus = READINESS_STATUSES.has(raw.readiness?.ashlrLayer?.status) ? raw.readiness.ashlrLayer.status : 'manual'
   const ashlrReason = ASHLR_REASONS.has(raw.readiness?.ashlrLayer?.reason) ? raw.readiness.ashlrLayer.reason : 'physical_acceptance_required'
   return {
-    declaredRoute: ['ashlr_layer', 'codex_native'].includes(raw.route) ? raw.route : 'unknown',
+    declaredRoute,
     inputProfile: rawProfile ? {
       cacheStatus,
       dailyProfileMatch,
@@ -273,6 +287,8 @@ function projectAppDoctor(raw) {
     inputInstallation,
     receiverRuntime,
     requiredReady,
+    nativePrerequisitesReady,
+    ashlrPrerequisitesReady,
     nativeStatus,
     nativeReason,
     nativeFresh: nativeShapeValid && nativeFresh,
@@ -311,6 +327,9 @@ export function buildPreflight({
 
   const binary = stableBinarySnapshot(stable, developmentBinary)
   const appDoctor = projectAppDoctor(appDoctorRaw)
+  const routePrerequisitesReady = route === 'codex_native'
+    ? appDoctor?.nativePrerequisitesReady === true
+    : appDoctor?.ashlrPrerequisitesReady === true
   const coreDoctor = runStableJson(stable, binary.matches_local_build, ['doctor', '--json'], runCommand)
   const service = runStableJson(stable, binary.matches_local_build, ['service', 'status', '--json'], runCommand)
   const codexHooks = runStableJson(stable, binary.matches_local_build, ['hooks', 'status', '--provider', 'codex', '--scope', 'user', '--json'], runCommand)
@@ -344,9 +363,9 @@ export function buildPreflight({
     ),
     check(
       'agent_board_doctor',
-      appDoctor?.requiredReady ? 'pass' : appDoctor ? 'blocked' : 'warn',
-      appDoctor ? `required desktop probes ${appDoctor.requiredReady ? 'passed' : 'did not pass'}` : 'desktop doctor output unavailable or incompatible',
-      appDoctor ? 'desktop USB and application prerequisites are projected separately from route readiness' : 'run the desktop doctor directly for bounded diagnostics',
+      routePrerequisitesReady ? 'pass' : appDoctor ? 'blocked' : 'warn',
+      appDoctor ? `${route === 'codex_native' ? 'native' : 'Ashlr Layer'} desktop prerequisites ${routePrerequisitesReady ? 'passed' : 'did not pass'}` : 'desktop doctor output unavailable or incompatible',
+      appDoctor ? 'desktop prerequisites are evaluated for the requested route and remain separate from physical acceptance' : 'run the desktop doctor directly for bounded diagnostics',
     ),
     check(
       'core_device_observer',
@@ -379,7 +398,7 @@ export function buildPreflight({
       'a state receipt does not prove a fresh provider event or physical signal',
     ),
   ]
-  const ashlrPrerequisitesReady = appDoctor?.requiredReady === true
+  const ashlrPrerequisitesReady = appDoctor?.ashlrPrerequisitesReady === true
   const inputInstallationReady = appDoctor?.inputInstallation?.status === 'verified'
   const knownInputResourceMutation = appDoctor?.inputInstallation?.status === 'known_resource_mutation'
   const ashlrReceiverReady = appDoctor?.receiverRuntime?.status === 'exclusive'
@@ -389,13 +408,15 @@ export function buildPreflight({
 
   checks.push(check(
     'input_installation_integrity',
-    inputInstallationReady ? 'pass' : 'blocked',
+    inputInstallationReady ? 'pass' : route === 'ashlr_layer' ? 'blocked' : 'warn',
     `status=${appDoctor?.inputInstallation?.status ?? 'probe_unavailable'}; version=${appDoctor?.inputInstallation?.version ?? 'unavailable'}`,
     inputInstallationReady
       ? 'the exact vendor publisher, bundle signature, and Gatekeeper assessment passed'
-      : knownInputResourceMutation
-        ? 'the known vendor resource mutation invalidates the signed bundle; fully quit Input, preserve a stopped-state profile backup, replace it with one official signed vendor copy, and rerun doctor before configuration or firmware work'
-        : 'presence alone is insufficient; restore one official signed Work Louder Input installation before configuration or firmware work',
+      : route === 'codex_native'
+        ? 'Input integrity is advisory for a read-only native retry because Input must remain quit; restore a verified signed copy before any later firmware or profile operation'
+        : knownInputResourceMutation
+          ? 'the known vendor resource mutation invalidates the signed bundle; fully quit Input, preserve a stopped-state profile backup, replace it with one official signed vendor copy, and rerun doctor before configuration or firmware work'
+          : 'presence alone is insufficient; restore one official signed Work Louder Input installation before configuration or firmware work',
     inputInstallationReady ? 'agent' : 'human',
     inputInstallationReady ? 'read' : 'local_write',
   ))
@@ -456,20 +477,29 @@ export function buildPreflight({
       'permission',
     ))
   } else {
+    const nativePrerequisitesMissing = appDoctor?.nativeStatus === 'blocked'
+      && appDoctor?.nativeReason === 'native_prerequisite_missing'
     const firmwareMissing = appDoctor?.nativeStatus === 'blocked'
       && appDoctor?.nativeReason === 'firmware_rpc_missing'
       && appDoctor?.nativeFresh === true
     const historicalFirmwareEvidence = appDoctor?.nativeReason === 'historical_firmware_rpc_missing'
+    const nativeInitializationObserved = appDoctor?.nativeStatus === 'pass'
+      && appDoctor?.nativeReason === 'recent_native_connection_observed'
+      && appDoctor?.nativeFresh === true
     checks.push(check(
       'route_readiness',
-      firmwareMissing ? 'blocked' : 'manual',
+      nativePrerequisitesMissing || firmwareMissing ? 'blocked' : 'manual',
       `Codex Native: ${appDoctor?.nativeReason ?? 'native connection requires manual verification'}`,
-      firmwareMissing
+      nativePrerequisitesMissing
+        ? 'Creator Micro 2 USB and ChatGPT desktop are required before a native connection receipt can be evaluated'
+        : firmwareMissing
         ? 'a recent Codex receipt found the mandatory native RPC unavailable; only a guarded vendor firmware qualification can change that observed state'
         : historicalFirmwareEvidence
           ? 'the RPC failure evidence is historical; re-run the explicit native connection check before considering firmware'
+          : nativeInitializationObserved
+            ? 'a fresh ordered native initialization was inferred from bounded Codex logs; Settings connection and physical controls remain explicit human acceptance gates'
           : 'Codex Settings must show a native connection and physical controls must be accepted',
-      firmwareMissing ? 'human' : 'human',
+      'human',
       firmwareMissing ? 'firmware' : 'local_write',
     ))
   }
@@ -496,7 +526,7 @@ export function buildPreflight({
       { executable: 'cargo', args: ['build', '--release', '--locked'], cwd: '$REPO_ROOT' },
     ))
   }
-  nextSteps.push(!inputInstallationReady
+  nextSteps.push(route === 'ashlr_layer' && !inputInstallationReady
     ? nextStep(
       'restore_signed_input', 'human', 'local_write', knownInputResourceMutation
         ? ['fully quit Work Louder Input', 'preserve a stopped-state profile backup before replacement', 'replace the modified app with one official signed Work Louder Input release', 'rerun the read-only doctor before reopening board controllers or considering firmware']
@@ -541,14 +571,29 @@ export function buildPreflight({
               'the named daily shortcut route emitted all expected physical gestures',
               'native Codex RGB, firmware compatibility, provider authority, or consequential-action approval',
             )
-      : appDoctor?.nativeStatus === 'blocked' && appDoctor?.nativeReason === 'firmware_rpc_missing' && appDoctor?.nativeFresh === true
+      : !routePrerequisitesReady
+        ? nextStep(
+          'resolve_native_prerequisites', 'human', 'local_write', ['connect the Creator Micro 2 over USB', 'install and open ChatGPT desktop', 'rerun the read-only desktop doctor'],
+          'the bounded native USB and ChatGPT desktop prerequisites are available',
+          'native RPC success, physical controls, Ashlr Layer readiness, provider authority, or release readiness',
+        )
+        : appDoctor?.nativeStatus === 'blocked' && appDoctor?.nativeReason === 'firmware_rpc_missing' && appDoctor?.nativeFresh === true
+          && !inputInstallationReady
+          ? nextStep(
+            'restore_signed_input', 'human', 'local_write', knownInputResourceMutation
+              ? ['fully quit Work Louder Input', 'preserve a stopped-state profile backup before replacement', 'replace the modified app with one official signed Work Louder Input release', 'rerun the read-only doctor before considering another firmware operation']
+              : ['download the official Work Louder Input release', 'verify there is one intended installation', 'preserve profile backups before replacement'],
+            'the desktop doctor verifies the exact vendor publisher, signature integrity, and Gatekeeper assessment before another firmware operation',
+            'native connection, device synchronization, physical acceptance, or release readiness',
+          )
+          : appDoctor?.nativeStatus === 'blocked' && appDoctor?.nativeReason === 'firmware_rpc_missing' && appDoctor?.nativeFresh === true
         ? nextStep(
           'qualify_native_firmware', 'human', 'firmware', ['reviewed vendor-matched image', 'recorded checksum', 'stable power', 'recovery plan', 'Codex, Agent Board, and competing HID controllers quit; signed Work Louder Input is sole owner'],
           'the exact firmware and Codex build complete rgbcfg then thstatus and physical acceptance',
           'cross-provider Ashlr Layer readiness or general hardware compatibility',
         )
         : nextStep(
-          'verify_native_connection', 'human', 'local_write', ['signed Work Louder Input verified', 'Work Louder Input and Agent Board fully quit', 'Codex opened alone'],
+          'verify_native_connection', 'human', 'local_write', ['Creator Micro 2 present over USB', 'ChatGPT desktop installed', 'Work Louder Input and Agent Board fully quit', 'Codex opened alone'],
           'a fresh Codex Settings and physical-control receipt replaces historical or missing native evidence',
           'firmware compatibility, Ashlr Layer readiness, provider authority, or release readiness',
         ))

@@ -77,26 +77,13 @@ Unknown devices remain observe-only.
 
 ## Connected desk snapshot
 
-The August 31 and September 1, 2026 desk snapshots prove discovery and a
-controller-integrity failure mode, not lighting support:
-
-- Work Louder Creator Micro 2 `303A:8298`, USB, six HID collections;
-- IORegistry descriptor: 275 bytes, SHA-256 `9257d7361f9c784e0fc0b260bbac0feadd49bf79cbb6202d6c41560cbae96fb6`;
-- descriptor source was the macOS registry; no HID handle was opened and no report was sent;
-- raw USB device version `0x39C0` is retained only as a non-semantic value;
-- current Input log firmware response: `v0.1.50`;
-- `device.status` and `v.oai.rgbcfg`: `Method not found`.
-- the installed Input 0.18.4 had the expected bundle identity and publisher,
-  but strict verification found its sealed `window-info-retriever.scpt`
-  resource modified while running;
-- a fresh official 0.18.4 DMG passed strict signature and Gatekeeper checks
-  before launch, so `known_resource_mutation` remains an unverified blocking
-  status rather than a signature exception.
-
-The observed `v0.1.50` is older than the reviewed `v0.6.2` vendor candidate,
-but that comparison is qualification-planning evidence only. Do not update
-firmware until the official Input installation passes the sanitized publisher,
-signature, and Gatekeeper gate and the foreground operator approves the exact
-backup, candidate, and recovery plan. Re-capture every item after an official
-firmware update. Never reuse this descriptor or firmware evidence as acceptance
-for a different desk, device, or release.
+The September 2, 2026 post-flash snapshot verifies firmware `0.6.2`, wired USB
+enumeration for Creator Micro 2 `303A:8298`, a changed 207-byte HID descriptor,
+and successful board responses to `v.oai.rgbcfg` followed by
+`v.oai.thstatus`. It does not prove that Codex consumed those responses or that
+native keys or lighting work. The installed Input copy repeated its known
+single sealed-resource mutation after the foreground update and is not trusted
+for another Input-controlled operation. Native and Ashlr Layer physical
+acceptance remain pending. Use the canonical
+[post-flash evidence record](creator-micro-2-post-flash-2026-09-02.md); never
+reuse that desk receipt as acceptance for another device or release.

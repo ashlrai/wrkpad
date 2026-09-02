@@ -109,11 +109,12 @@ test('required Input check passes only an exact verified installation receipt', 
   assert.doesNotMatch(JSON.stringify(invalid), /private|Users|modified|false pass/)
 })
 
-test('known Input resource mutation stays blocked and orders signed-app recovery before controller work', () => {
+test('known Input resource mutation stays blocked for the Ashlr Layer', () => {
   const result = evaluateDoctor({
     ...requiredProbes,
     ...missingOptionalProbes,
-    boardRoute: 'codex_native',
+    boardRoute: 'ashlr_layer',
+    chatgpt: { ok: true, detail: 'installed' },
     nativeCodex: { ok: false, code: 'firmware_rpc_missing', detail: 'RPC 404', fresh: true },
     inputInstallation: {
       status: 'known_resource_mutation', version: '0.18.4',
@@ -133,6 +134,63 @@ test('known Input resource mutation stays blocked and orders signed-app recovery
   assert.match(result.nextAction, /before reopening other board controllers/)
   assert.match(result.nextAction, /Do not repair or re-sign the app/)
   assert.doesNotMatch(JSON.stringify(result), /Users|private|secret|window-info-retriever/)
+})
+
+test('Codex Native treats Input integrity as advisory during a connection retry', () => {
+  const result = evaluateDoctor({
+    ...requiredProbes,
+    ...missingOptionalProbes,
+    boardRoute: 'codex_native',
+    chatgpt: { ok: true, detail: 'installed' },
+    nativeCodex: { ok: false, code: 'firmware_rpc_missing', detail: 'historical RPC 404', fresh: false },
+    inputInstallation: {
+      status: 'known_resource_mutation', version: '0.18.4',
+      resource: '/Users/private/window-info-retriever.scpt', raw: 'secret verification output',
+    },
+  })
+
+  assert.equal(result.ok, true)
+  assert.equal(result.readiness.prerequisites.status, 'pass')
+  assert.equal(result.readiness.codexNative.status, 'manual')
+  assert.equal(result.readiness.codexNative.reason, 'historical_firmware_rpc_missing')
+  assert.deepEqual(result.checks.find((check) => check.name === 'Work Louder Input'), {
+    name: 'Work Louder Input', ok: false, detail: 'Input.app has the known modified signed resource v0.18.4',
+    category: 'optional', severity: 'warning', blocking: false, code: 'known_resource_mutation',
+  })
+  assert.match(result.nextAction, /Fully quit Work Louder Input and Agent Board/)
+  assert.doesNotMatch(result.nextAction, /replace|repair|re-sign/)
+  assert.doesNotMatch(JSON.stringify(result), /Users|private|secret|window-info-retriever/)
+})
+
+test('Codex Native requires verified Input only before a fresh firmware qualification', () => {
+  const result = evaluateDoctor({
+    ...requiredProbes,
+    ...missingOptionalProbes,
+    boardRoute: 'codex_native',
+    chatgpt: { ok: true, detail: 'installed' },
+    nativeCodex: { ok: false, code: 'firmware_rpc_missing', detail: 'RPC 404', fresh: true },
+    inputInstallation: { status: 'invalid_signature', version: '0.18.4' },
+  })
+
+  assert.equal(result.ok, true)
+  assert.equal(result.readiness.codexNative.reason, 'firmware_rpc_missing')
+  assert.match(result.nextAction, /required before another firmware qualification/)
+  assert.match(result.nextAction, /not before a read-only native connection retry/)
+})
+
+test('Codex Native requires USB and ChatGPT without promoting Input recovery', () => {
+  const result = evaluateDoctor({
+    ...requiredProbes,
+    ...missingOptionalProbes,
+    boardRoute: 'codex_native',
+    inputInstallation: { status: 'invalid_signature', version: '0.18.4' },
+  })
+
+  assert.equal(result.ok, false)
+  assert.equal(result.readiness.codexNative.status, 'blocked')
+  assert.equal(result.readiness.codexNative.reason, 'native_prerequisite_missing')
+  assert.match(result.nextAction, /Install ChatGPT desktop/)
+  assert.doesNotMatch(result.nextAction, /replace|repair|re-sign/)
 })
 
 test('malformed Input installation evidence fails closed without leaking fields', () => {
@@ -166,6 +224,7 @@ test('receiver contention blocks only Ashlr readiness and requires a human singl
     ...requiredProbes,
     ...missingOptionalProbes,
     boardRoute: 'ashlr_layer',
+    chatgpt: { ok: true, detail: 'installed' },
     receiverRuntime: {
       status: 'contended_distinct_builds', instanceCount: 2, distinctBuildCount: 2,
       currentAsarSha256: receiverHash, candidateAsarSha256: 'b'.repeat(64), candidateMatchesCurrent: false,
@@ -203,6 +262,7 @@ test('native route guidance does not promote Ashlr receiver recovery over native
     ...requiredProbes,
     ...missingOptionalProbes,
     boardRoute: 'codex_native',
+    chatgpt: { ok: true, detail: 'installed' },
     nativeCodex: { ok: false, code: 'firmware_rpc_missing', detail: 'RPC 404', fresh: true },
     receiverRuntime: {
       status: 'contended_same_build', instanceCount: 2, distinctBuildCount: 1,
@@ -222,6 +282,25 @@ test('result exposes non-blocking manual checks and a next action', () => {
   assert.equal(result.manualChecks.every((check) => check.category === 'manual'), true)
   assert.equal(result.manualChecks.every((check) => check.status === 'manual' && !check.blocking), true)
   assert.match(result.nextAction, /Input Monitoring/)
+})
+
+test('Codex Native exposes its own ordered manual acceptance checks', () => {
+  const result = evaluateDoctor({
+    ...requiredProbes,
+    ...missingOptionalProbes,
+    boardRoute: 'codex_native',
+    chatgpt: { ok: true, detail: 'installed' },
+  })
+
+  assert.deepEqual(result.manualChecks.map((check) => check.id), [
+    'wired-mode',
+    'native-owner-isolation',
+    'native-settings',
+    'native-physical-controls',
+  ])
+  assert.equal(result.manualChecks.every((check) => check.category === 'manual'), true)
+  assert.equal(result.manualChecks.every((check) => check.status === 'manual' && !check.blocking), true)
+  assert.doesNotMatch(JSON.stringify(result.manualChecks), /Input layer|Flight Check/)
 })
 
 test('available optional integrations are reported as passing', () => {
@@ -246,6 +325,7 @@ test('native firmware RPC failure receives specific nonblocking recovery guidanc
     ...requiredProbes,
     ...missingOptionalProbes,
     boardRoute: 'codex_native',
+    chatgpt: { ok: true, detail: 'installed' },
     nativeCodex: { ok: false, code: 'firmware_rpc_missing', detail: 'RPC 404', fresh: true },
   })
 
@@ -267,6 +347,7 @@ test('Ashlr Layer never promotes an optional native firmware operation', () => {
     ...requiredProbes,
     ...missingOptionalProbes,
     boardRoute: 'ashlr_layer',
+    chatgpt: { ok: true, detail: 'installed' },
     nativeCodex: { ok: false, code: 'firmware_rpc_missing', detail: 'historical RPC 404', fresh: false },
   })
 

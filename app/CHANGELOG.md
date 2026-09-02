@@ -62,6 +62,9 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 
 ### Changed
 
+- Replace stale pre-flash setup, troubleshooting, ownership, and readiness
+  claims with a canonical September 2 evidence record that keeps firmware RPC
+  success separate from native Codex and physical acceptance.
 - Fail closed instead of guessing `npm test` for Cargo, Go, ambiguous polyglot,
   or unsupported workspaces.
 - Label CLI presence, observer receipts, and desktop shortcut registration as

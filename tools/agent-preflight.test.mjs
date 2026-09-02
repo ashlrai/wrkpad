@@ -15,6 +15,7 @@ const appDoctor = {
   checks: [
     { name: 'Creator Micro 2 USB', category: 'required', ok: true },
     { name: 'Work Louder Input', category: 'required', ok: true },
+    { name: 'ChatGPT desktop', category: 'optional', ok: true },
   ],
   inputInstallation: { status: 'verified', version: '0.18.4' },
   receiverRuntime: {
@@ -72,6 +73,37 @@ test('Codex Native remains blocked when the native firmware RPC is missing', () 
   assert.equal(firmwareStep.command, undefined)
 })
 
+test('fresh inferred native initialization remains manual until Settings and physical acceptance', () => {
+  const result = buildPreflight({
+    route: 'codex_native', source,
+    appDoctorRaw: {
+      ...appDoctor,
+      route: 'codex_native',
+      readiness: {
+        ...appDoctor.readiness,
+        codexNative: { status: 'pass', reason: 'recent_native_connection_observed', fresh: true },
+      },
+    },
+    stable: { path: import.meta.filename, pathClass: 'stable_user_install' },
+    developmentBinary: import.meta.filename,
+    runCommand: commandFixture,
+    observedAt: '2026-09-02T23:30:00.000Z',
+  })
+
+  assert.equal(result.checks.filter((item) => item.id !== 'route_readiness').every((item) => item.status === 'pass'), true)
+  assert.deepEqual(result.checks.find((item) => item.id === 'route_readiness'), {
+    id: 'route_readiness',
+    status: 'manual',
+    actor: 'human',
+    safety: 'local_write',
+    evidence: 'Codex Native: recent_native_connection_observed',
+    reason: 'a fresh ordered native initialization was inferred from bounded Codex logs; Settings connection and physical controls remain explicit human acceptance gates',
+  })
+  assert.equal(result.overall, 'manual')
+  assert.ok(result.next_steps.some((item) => item.id === 'verify_native_connection'))
+  assert.doesNotMatch(JSON.stringify(result), /\/Users\/|prompt|transcript|token/i)
+})
+
 test('Ashlr Layer stays manual until physical acceptance', () => {
   const result = buildPreflight({
     route: 'ashlr_layer', source, appDoctorRaw: appDoctor, stable: null,
@@ -125,7 +157,7 @@ test('Ashlr Layer blocks hostile Input integrity and never exposes raw diagnosti
   assert.doesNotMatch(JSON.stringify(result), /Users|private|secret/)
 })
 
-test('Codex Native restores signed Input before offering firmware qualification', () => {
+test('Codex Native treats Input as advisory but restores it before firmware qualification', () => {
   const result = buildPreflight({
     route: 'codex_native', source, stable: null,
     appDoctorRaw: {
@@ -137,13 +169,13 @@ test('Codex Native restores signed Input before offering firmware qualification'
     observedAt: '2026-09-01T20:00:00.000Z',
   })
 
-  assert.equal(result.checks.find((item) => item.id === 'input_installation_integrity').status, 'blocked')
+  assert.equal(result.checks.find((item) => item.id === 'input_installation_integrity').status, 'warn')
   assert.ok(result.next_steps.some((item) => item.id === 'restore_signed_input'))
   assert.equal(result.next_steps.some((item) => item.id === 'qualify_native_firmware'), false)
   assert.doesNotMatch(JSON.stringify(result), /Users|private/)
 })
 
-test('known Input resource mutation fails closed and orders human recovery before either route', () => {
+test('known Input resource mutation blocks Ashlr and gates only firmware work for Codex Native', () => {
   for (const route of ['ashlr_layer', 'codex_native']) {
     const result = buildPreflight({
       route, source, stable: null,
@@ -161,15 +193,22 @@ test('known Input resource mutation fails closed and orders human recovery befor
     })
 
     const integrity = result.checks.find((item) => item.id === 'input_installation_integrity')
-    assert.equal(integrity.status, 'blocked')
+    assert.equal(integrity.status, route === 'ashlr_layer' ? 'blocked' : 'warn')
     assert.equal(integrity.evidence, 'status=known_resource_mutation; version=0.18.4')
-    assert.match(integrity.reason, /fully quit Input, preserve a stopped-state profile backup/)
+    assert.match(
+      integrity.reason,
+      route === 'ashlr_layer'
+        ? /fully quit Input, preserve a stopped-state profile backup/
+        : /advisory for a read-only native retry/,
+    )
     const recovery = result.next_steps.find((item) => item.id === 'restore_signed_input')
     assert.deepEqual(recovery.requires, [
       'fully quit Work Louder Input',
       'preserve a stopped-state profile backup before replacement',
       'replace the modified app with one official signed Work Louder Input release',
-      'rerun the read-only doctor before reopening board controllers or considering firmware',
+      route === 'ashlr_layer'
+        ? 'rerun the read-only doctor before reopening board controllers or considering firmware'
+        : 'rerun the read-only doctor before considering another firmware operation',
     ])
     assert.equal(result.next_steps.some((item) => item.id === 'qualify_native_firmware'), false)
     assert.equal(result.next_steps.some((item) => item.id === 'reconcile_input_profile'), false)
@@ -197,6 +236,52 @@ test('historical native RPC evidence is advisory and requires a fresh native che
   assert.match(result.checks.find((item) => item.id === 'route_readiness').reason, /historical/)
   assert.ok(result.next_steps.some((item) => item.id === 'verify_native_connection'))
   assert.equal(result.next_steps.some((item) => item.id === 'qualify_native_firmware'), false)
+})
+
+test('historical native retry is not blocked by unverified Input', () => {
+  const result = buildPreflight({
+    route: 'codex_native', source, stable: null,
+    appDoctorRaw: {
+      ...appDoctor,
+      inputInstallation: { status: 'invalid_signature', version: '0.18.4', raw: '/Users/example/private' },
+      checks: appDoctor.checks.map((item) => item.name === 'Work Louder Input' ? { ...item, category: 'optional', ok: false } : item),
+      readiness: {
+        ...appDoctor.readiness,
+        codexNative: { status: 'manual', reason: 'historical_firmware_rpc_missing', fresh: false },
+      },
+    },
+    developmentBinary: '/missing/development/binary', runCommand: commandFixture,
+    observedAt: '2026-09-01T20:00:00.000Z',
+  })
+
+  assert.equal(result.checks.find((item) => item.id === 'agent_board_doctor').status, 'pass')
+  assert.equal(result.checks.find((item) => item.id === 'input_installation_integrity').status, 'warn')
+  assert.ok(result.next_steps.some((item) => item.id === 'verify_native_connection'))
+  assert.equal(result.next_steps.some((item) => item.id === 'restore_signed_input'), false)
+  assert.doesNotMatch(JSON.stringify(result), /Users|private/)
+})
+
+test('Codex Native blocks missing USB or ChatGPT before evaluating a connection receipt', () => {
+  for (const missingName of ['Creator Micro 2 USB', 'ChatGPT desktop']) {
+    const result = buildPreflight({
+      route: 'codex_native', source, stable: null,
+      appDoctorRaw: {
+        ...appDoctor,
+        checks: appDoctor.checks.map((item) => item.name === missingName ? { ...item, ok: false } : item),
+        readiness: {
+          ...appDoctor.readiness,
+          codexNative: { status: 'blocked', reason: 'native_prerequisite_missing', fresh: false },
+        },
+      },
+      developmentBinary: '/missing/development/binary', runCommand: commandFixture,
+      observedAt: '2026-09-01T20:00:00.000Z',
+    })
+
+    assert.equal(result.checks.find((item) => item.id === 'agent_board_doctor').status, 'blocked')
+    assert.equal(result.checks.find((item) => item.id === 'route_readiness').status, 'blocked')
+    assert.ok(result.next_steps.some((item) => item.id === 'resolve_native_prerequisites'))
+    assert.equal(result.next_steps.some((item) => item.id === 'qualify_native_firmware'), false)
+  }
 })
 
 test('hostile Input versions and receiver shapes fail closed', () => {

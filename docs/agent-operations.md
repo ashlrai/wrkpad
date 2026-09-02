@@ -127,11 +127,13 @@ When Codex discovers `303A:8298` but preflight reports
 quitting Logitech do not add the missing RPC. The operator must decide whether
 to keep the working shared route or run the separate firmware qualification.
 
-The desk observation is firmware `v0.1.50`, which is older than the reviewed
-`v0.6.2` vendor candidate. An agent must not turn that version comparison into
-an update instruction while Input is unverified. First require the sanitized
-publisher/signature/Gatekeeper gate, then preserve the backup and exact human
-approval boundary below.
+On the tested desk, the operator completed the approved update to `0.6.2` on
+September 2, 2026. Both required firmware methods now return success, but native
+Codex consumption and physical behavior are not yet accepted. Input also
+repeated its known sealed-resource mutation after the update and must remain
+closed for native qualification. See the canonical
+[post-flash evidence record](creator-micro-2-post-flash-2026-09-02.md). Do not
+repeat the flash merely because native acceptance is still pending.
 
 An agent may prepare the vendor release identity, checksum, backups, and
 post-flash test plan. It must stop before quitting applications, entering a

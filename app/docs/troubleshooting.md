@@ -39,18 +39,14 @@ The official DMG installs lowercase `input.app`; the detector probes that exact
 fixed name and still rejects symlinks, alternate locations, and noncanonical
 ancestors.
 
-On September 1, 2026, this desk's Input 0.18.4 installation showed an exact
-sealed `window-info` helper change while it was running; which process caused
-the change remains unproven. The bounded `known resource mutation` result
-identifies only that exact shape. On September 2, with Input stopped, its local
-profile and preference state was backed up; the app bundle was then replaced
-from the
-[official Input 0.18.4 release](https://github.com/worklouder/input-releases/releases/tag/v0.18.4);
-the replacement passed publisher, strict signature, and Gatekeeper checks. If
-the current profile is already correct, leave Input closed during
-commissioning. This recovery does not prove profile state, device sync,
-firmware compatibility, or physical acceptance and never authorizes firmware
-work.
+On the tested desk, the official Input 0.18.4 replacement passed all three
+checks before the approved September 2 update, then repeated the same single
+sealed `window-info` helper mutation during that session. The installed copy is
+currently unverified for another Input-controlled operation. Input can remain
+closed for native Codex qualification. See the canonical
+[post-flash evidence record](../../docs/creator-micro-2-post-flash-2026-09-02.md).
+This bounded diagnosis does not identify the writer or authorize a signature
+exception.
 
 For any result other than verified:
 
@@ -162,12 +158,11 @@ simulate the shortcut from the keyboard. Complete the Input-only reconciliation
 above, then confirm the fresh check still records `0` raw receipts.
 
 Only after a fresh second check still receives zero signals should firmware
-qualification be considered. The observed desk firmware `v0.1.50` is older
-than the reviewed `v0.6.2` vendor candidate, but do not update until Setup says
-Input's publisher, signature, and Gatekeeper are verified. Keep the
-external profile backup and fully quit ChatGPT/Codex Desktop, Agent Board, and
-every other board/HID controller before the signed Input updater downloads or
-enters a bootloader.
+qualification be considered for a device that is actually outdated. The tested
+desk already runs `0.6.2`; do not reflash it merely because a physical receipt
+is missing. Its current post-flash state and remaining acceptance gates are in
+the canonical
+[evidence record](../../docs/creator-micro-2-post-flash-2026-09-02.md).
 
 ## Codex finds Creator Micro but native connection fails
 
@@ -178,13 +173,13 @@ the first Codex control-plane method; Bluetooth keyboard/trackpad traffic and
 Agent Board's global shortcuts are not the cause.
 
 Do not repeatedly reconnect, grant more permissions, or quit Logitech just to
-clear this error. Follow the [separate firmware qualification
-workflow](setup.md#3-verify-work-louder-input). The currently published vendor
-release is only a qualification candidate until this exact desk path passes.
-After updating, test Codex with
+clear a confirmed 404. Follow the [separate firmware qualification
+workflow](setup.md#3-verify-work-louder-input). After updating, test Codex with
 Input fully quit. Codex must receive successful `v.oai.rgbcfg` and then
 `v.oai.thstatus` responses before native keys or lighting are described as
-connected.
+connected. On the tested desk, the updated firmware accepted both methods, but
+Codex consumption and physical behavior remain unproven; see the
+[post-flash evidence](../../docs/creator-micro-2-post-flash-2026-09-02.md).
 
 If those calls succeed but Codex still fails, verify Input Monitoring and test
 Codex as the only open board controller. Codex and Input can hold nonexclusive
@@ -231,7 +226,7 @@ The focus contract is narrow: Codex opens ChatGPT, Claude Code opens cmux, and u
 
 Runtime discovery checks `~/.local/bin`, `~/.npm-global/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, and `/usr/bin`. It intentionally ignores inherited `PATH` entries. The file must be executable. Install or symlink the CLI into a supported directory, then restart the app.
 
-The doctor treats ChatGPT, Codex CLI, native Codex control, Claude Code, and Ashlr Hub as optional integrations. A missing or firmware-incompatible optional integration produces a warning but does not fail the required board and Work Louder Input checks. In JSON output, `nextAction` prioritizes a failed required check, the declared Codex Native route's guarded qualification, or the next manual physical gate. Ashlr Layer never promotes a native firmware operation.
+The doctor evaluates prerequisites for the requested route. **Ashlr Layer** requires the board and a verified Work Louder Input installation. **Codex Native** requires the board and ChatGPT Desktop; Input must remain quit, so its integrity result is advisory for a read-only native retry and blocking again only before a later Input-controlled profile or firmware operation. Codex CLI, Claude Code, and Ashlr Hub remain optional integrations. In JSON output, `nextAction` prioritizes a failed route prerequisite, the declared Codex Native route's guarded qualification, or the next manual physical gate. Ashlr Layer never promotes a native firmware operation.
 
 ## A confirmation expires
 

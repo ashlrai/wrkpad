@@ -39,6 +39,11 @@ All notable changes will be documented here. The project follows semantic versio
 
 ### Changed
 
+- Consolidate volatile Creator Micro 2 desk observations into a dated
+  post-flash evidence record, including firmware `0.6.2`, the changed HID
+  descriptor, successful firmware RPC responses, repeated Input resource
+  mutation, current controller topology, and still-pending native and physical
+  acceptance.
 - Verify the declared Rust 1.88 minimum in CI, bound core workflow runtime, and
   keep the unreleased crate out of package registries by default.
 - Attach exact source and SHA-256 evidence to explicitly unsigned Agent Board

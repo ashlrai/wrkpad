@@ -15,20 +15,24 @@ const { inspectReceiverRuntime, RECEIVER_PROCESS_PATTERN } = require('../electro
 const { appSettingsPath, readAppSettings } = require('../electron/settings.cjs')
 const { resolveTool } = require('../electron/tool-resolver.cjs')
 
-const REQUIRED_CHECKS = [
-  {
-    key: 'board',
-    name: 'Creator Micro 2 USB',
-    nextAction: 'Connect the Creator Micro 2 with a data-capable USB-C cable, then rerun the doctor.',
-  },
-  {
-    key: 'input',
-    name: 'Work Louder Input',
-    nextAction: 'Install the signed Work Louder Input app, then rerun the doctor.',
-  },
-]
+const BOARD_CHECK = {
+  key: 'board',
+  name: 'Creator Micro 2 USB',
+  nextAction: 'Connect the Creator Micro 2 with a data-capable USB-C cable, then rerun the doctor.',
+}
+const INPUT_CHECK = {
+  key: 'input',
+  name: 'Work Louder Input',
+  nextAction: 'Install the signed Work Louder Input app, then rerun the doctor.',
+}
+const CHATGPT_CHECK = {
+  key: 'chatgpt',
+  name: 'ChatGPT desktop',
+  nextAction: 'Install ChatGPT desktop, open Codex, then rerun the doctor.',
+}
 
 const OPTIONAL_CHECKS = [
+  INPUT_CHECK,
   { key: 'chatgpt', name: 'ChatGPT desktop' },
   { key: 'codex', name: 'Codex CLI' },
   { key: 'nativeCodex', name: 'Codex native Creator Micro' },
@@ -37,7 +41,7 @@ const OPTIONAL_CHECKS = [
   { key: 'logitech', name: 'Competing Logitech HID owner' },
 ]
 
-const MANUAL_CHECKS = [
+const ASHLR_MANUAL_CHECKS = [
   {
     id: 'input-monitoring',
     name: 'Input Monitoring',
@@ -52,6 +56,28 @@ const MANUAL_CHECKS = [
     id: 'flight-check',
     name: 'Physical Flight Check',
     detail: 'Run the Daily Flight Check in Agent Board and export a passing receipt.',
+  },
+]
+const NATIVE_MANUAL_CHECKS = [
+  {
+    id: 'wired-mode',
+    name: 'Wired USB mode',
+    detail: 'Confirm the board connection light is white and the USB cable carries data, not power only.',
+  },
+  {
+    id: 'native-owner-isolation',
+    name: 'Native controller isolation',
+    detail: 'Keep Work Louder Input and Agent Board fully quit while Codex owns the board.',
+  },
+  {
+    id: 'native-settings',
+    name: 'Codex Creator Micro connection',
+    detail: 'Require a fresh Settings → Creator Micro connected state after the ordered native handshake.',
+  },
+  {
+    id: 'native-physical-controls',
+    name: 'Native physical controls',
+    detail: 'Verify the dial, joystick, agent keys, action keys, microphone control, and lighting in Codex.',
   },
 ]
 const INPUT_RUNTIME_STATUSES = new Set(['unresolved_profile_layer', 'not_observed', 'log_missing', 'log_unsafe', 'log_unavailable'])
@@ -147,24 +173,30 @@ const makeCheck = (definition, probe, category) => ({
 })
 
 export function evaluateDoctor(probes, options = {}) {
-  const inputInstallation = projectInputInstallation(probes.inputInstallation)
-  const receiverRuntime = projectReceiverRuntime(probes.receiverRuntime)
-  const evaluatedProbes = { ...probes, input: inputCheck(inputInstallation) }
-  const requiredChecks = REQUIRED_CHECKS.map((definition) =>
-    makeCheck(definition, evaluatedProbes[definition.key], 'required'),
-  )
-  const optionalChecks = OPTIONAL_CHECKS.map((definition) =>
-    makeCheck(definition, probes[definition.key], 'optional'),
-  )
-  const failedRequiredIndex = requiredChecks.findIndex((check) => !check.ok)
-  const nativeFirmwareMissing = probes.nativeCodex?.code === 'firmware_rpc_missing'
-  const nativeEvidenceFresh = probes.nativeCodex?.fresh === true
-  const currentNativeFirmwareMissing = nativeFirmwareMissing && nativeEvidenceFresh
-  const nativeConnected = probes.nativeCodex?.ok === true && nativeEvidenceFresh
-  const nativeRouteSelected = probes.boardRoute === 'codex_native'
   const route = ['codex_native', 'ashlr_layer'].includes(probes.boardRoute)
     ? probes.boardRoute
     : 'unknown'
+  const inputInstallation = projectInputInstallation(probes.inputInstallation)
+  const receiverRuntime = projectReceiverRuntime(probes.receiverRuntime)
+  const evaluatedProbes = { ...probes, input: inputCheck(inputInstallation) }
+  const requiredDefinitions = route === 'codex_native'
+    ? [BOARD_CHECK, CHATGPT_CHECK]
+    : [BOARD_CHECK, INPUT_CHECK]
+  const requiredKeys = new Set(requiredDefinitions.map((definition) => definition.key))
+  const requiredChecks = requiredDefinitions.map((definition) =>
+    makeCheck(definition, evaluatedProbes[definition.key], 'required'),
+  )
+  const optionalChecks = OPTIONAL_CHECKS.filter((definition) => !requiredKeys.has(definition.key)).map((definition) =>
+    makeCheck(definition, evaluatedProbes[definition.key], 'optional'),
+  )
+  const failedRequiredIndex = requiredChecks.findIndex((check) => !check.ok)
+  const ashlrPrerequisitesReady = Boolean(probes.board?.ok) && inputInstallation.status === 'verified'
+  const nativePrerequisitesReady = Boolean(probes.board?.ok) && Boolean(probes.chatgpt?.ok)
+  const nativeFirmwareMissing = probes.nativeCodex?.code === 'firmware_rpc_missing'
+  const nativeEvidenceFresh = probes.nativeCodex?.fresh === true
+  const currentNativeFirmwareMissing = nativeFirmwareMissing && nativeEvidenceFresh
+  const nativeConnected = nativePrerequisitesReady && probes.nativeCodex?.ok === true && nativeEvidenceFresh
+  const nativeRouteSelected = probes.boardRoute === 'codex_native'
   const inputProfile = probes.inputProfile ?? {
     cacheStatus: 'missing',
     activeProfile: null,
@@ -201,7 +233,7 @@ export function evaluateDoctor(probes, options = {}) {
     : receiverRuntime.status === 'contended_distinct_builds'
       ? 'receiver_contended_distinct_builds'
       : 'receiver_probe_unavailable'
-  const ashlrReason = failedRequiredIndex !== -1
+  const ashlrReason = !ashlrPrerequisitesReady
     ? 'required_prerequisite_missing'
     : receiverBlocked
       ? receiverReason
@@ -216,7 +248,8 @@ export function evaluateDoctor(probes, options = {}) {
           : recurringCodexTrafficObserved
             ? 'recurring_codex_protocol_traffic'
             : 'physical_acceptance_required'
-  const manualChecks = MANUAL_CHECKS.map((check) => ({
+  const manualDefinitions = route === 'codex_native' ? NATIVE_MANUAL_CHECKS : ASHLR_MANUAL_CHECKS
+  const manualChecks = manualDefinitions.map((check) => ({
     ...check,
     category: 'manual',
     status: 'manual',
@@ -255,30 +288,34 @@ export function evaluateDoctor(probes, options = {}) {
     readiness: {
       prerequisites: {
         status: failedRequiredIndex === -1 ? 'pass' : 'blocked',
-        reason: failedRequiredIndex === -1 ? 'required_checks_passed' : `required_check_failed:${REQUIRED_CHECKS[failedRequiredIndex].key}`,
+        reason: failedRequiredIndex === -1 ? 'required_checks_passed' : `required_check_failed:${requiredDefinitions[failedRequiredIndex].key}`,
       },
       codexNative: {
-        status: currentNativeFirmwareMissing ? 'blocked' : nativeConnected ? 'pass' : 'manual',
-        reason: currentNativeFirmwareMissing
+        status: !nativePrerequisitesReady || currentNativeFirmwareMissing ? 'blocked' : nativeConnected ? 'pass' : 'manual',
+        reason: !nativePrerequisitesReady
+          ? 'native_prerequisite_missing'
+          : currentNativeFirmwareMissing
           ? 'firmware_rpc_missing'
           : nativeConnected
             ? 'recent_native_connection_observed'
             : nativeFirmwareMissing
               ? 'historical_firmware_rpc_missing'
               : 'native_connection_requires_verification',
-        fresh: nativeEvidenceFresh,
+        fresh: nativePrerequisitesReady && nativeEvidenceFresh,
       },
       ashlrLayer: {
-        status: failedRequiredIndex === -1 && !receiverBlocked ? 'manual' : 'blocked',
+        status: ashlrPrerequisitesReady && !receiverBlocked ? 'manual' : 'blocked',
         reason: ashlrReason,
       },
     },
     modeGuidance: {
-      codexNative: currentNativeFirmwareMissing
-        ? 'Codex recently observed v.oai.rgbcfg RPC 404. Back up Input profiles, then qualify a reviewed vendor firmware candidate with Codex fully quit; release strings alone do not prove compatibility.'
-        : nativeFirmwareMissing
-          ? 'Codex previously observed v.oai.rgbcfg RPC 404, but that evidence is historical. Re-run the explicit native connection check before considering firmware.'
-        : 'Native Codex requires an explicit connected receipt; process presence alone is not enough.',
+      codexNative: !nativePrerequisitesReady
+        ? 'Native Codex requires the Creator Micro 2 over USB and ChatGPT desktop before its connection receipt can be evaluated.'
+        : currentNativeFirmwareMissing
+          ? 'Codex recently observed v.oai.rgbcfg RPC 404. Back up Input profiles, then qualify a reviewed vendor firmware candidate with Codex fully quit; release strings alone do not prove compatibility.'
+          : nativeFirmwareMissing
+            ? 'Codex previously observed v.oai.rgbcfg RPC 404, but that evidence is historical. Re-run the explicit native connection check before considering firmware.'
+            : 'Native Codex requires an explicit connected receipt; process presence alone is not enough.',
       ashlrLayer: receiverBlocked
         ? 'Agent Board receiver ownership is contended or unavailable. Shortcut and physical acceptance must wait for one reviewed receiver; no process was quit automatically.'
         : unresolvedRuntimeObserved
@@ -290,9 +327,13 @@ export function evaluateDoctor(probes, options = {}) {
     nextAction:
       failedRequiredIndex === -1
         ? currentNativeFirmwareMissing && nativeRouteSelected
-          ? 'For the declared Codex Native route, back up the Input profile and plan a guarded vendor firmware qualification with Codex fully quit.'
+          ? inputInstallation.status === 'verified'
+            ? 'For the declared Codex Native route, back up the Input profile and plan a guarded vendor firmware qualification with Codex fully quit.'
+            : `${inputRecoveryAction(inputInstallation.status)} This is required before another firmware qualification, not before a read-only native connection retry.`
           : nativeFirmwareMissing && nativeRouteSelected
-            ? 'Re-run the explicit Codex Native connection check. Historical RPC evidence is advisory and does not authorize firmware work.'
+            ? 'Fully quit Work Louder Input and Agent Board, open Codex alone, then re-run the explicit native connection check. Historical RPC evidence is advisory and does not authorize firmware work.'
+            : nativeRouteSelected
+              ? 'Keep Work Louder Input and Agent Board fully quit, open Codex alone, then verify Settings → Creator Micro and the physical controls.'
           : route === 'ashlr_layer' && receiverBlocked
             ? receiverRecoveryAction
             : route === 'ashlr_layer' && receiverRuntime.status === 'not_running'
@@ -306,7 +347,7 @@ export function evaluateDoctor(probes, options = {}) {
                 : recurringCodexTrafficObserved && route === 'ashlr_layer'
                   ? 'A human must establish an Input-only window before reconciliation; no application was quit and protocol traffic does not prove ownership.'
                 : manualChecks[0].detail
-        : failedRequiredIndex === 1 ? inputRecoveryAction(inputInstallation.status) : REQUIRED_CHECKS[failedRequiredIndex].nextAction,
+        : requiredDefinitions[failedRequiredIndex].key === 'input' ? inputRecoveryAction(inputInstallation.status) : requiredDefinitions[failedRequiredIndex].nextAction,
   }
 }
 

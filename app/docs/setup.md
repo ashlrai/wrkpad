@@ -40,7 +40,7 @@ insertion: explicitly select the white wired channel.
 npm run doctor
 ```
 
-Expected USB result: `Creator Micro 2 USB: Work Louder 303A:8298` on the desk-verified unit. The read-only doctor also recognizes `303A:8297` as a candidate and labels it accordingly; neither identity authorizes writes. The board and Work Louder Input are required doctor checks. ChatGPT, Codex CLI, Claude Code, and Ashlr Hub are optional integrations: missing tools produce warnings but do not fail the doctor.
+Expected USB result: `Creator Micro 2 USB: Work Louder 303A:8298` on the desk-verified unit. The read-only doctor also recognizes `303A:8297` as a candidate and labels it accordingly; neither identity authorizes writes. Prerequisites are route-specific: **Ashlr Layer** requires the board and a verified Work Louder Input installation, while **Codex Native** requires the board and ChatGPT Desktop. Input integrity is advisory for a read-only native retry because Input must remain quit, but it becomes a blocking gate again before any later Input-controlled profile or firmware operation. Codex CLI, Claude Code, and Ashlr Hub remain optional integrations; their absence produces warnings rather than satisfying or failing either hardware route.
 
 The doctor is read-only and cannot grant permissions or change board configuration. `npm run doctor -- --json` includes `manualChecks`, route-specific `modeGuidance`, and a prioritized `nextAction`. It inspects only a bounded tail of recent Codex Desktop logs and projects a reason code; raw log lines and paths never reach the renderer. Passing required checks does not prove native Codex connection, Input Monitoring, the active Input layer, or the physical Flight Check. If USB is absent, use [troubleshooting](troubleshooting.md#usb-device-is-not-detected).
 
@@ -74,18 +74,16 @@ signature`, `known resource mutation`, `Gatekeeper rejected`, `unsafe`,
 The fixed-path probe uses Work Louder's official lowercase `input.app` bundle
 name; it does not scan Applications folders or relax canonical-path checks.
 
-On September 1, 2026, this desk's Input 0.18.4 installation showed an exact
-sealed `window-info` helper change while it was running; which process caused
-the change remains unproven. A `known resource mutation` result recognizes only
-that exact shape. On September 2, with Input stopped, its local profile and
-preference state was backed up; the app bundle was then replaced from the
-[official Input 0.18.4 release](https://github.com/worklouder/input-releases/releases/tag/v0.18.4);
-the replacement then passed publisher, strict signature, and Gatekeeper checks.
-That recovery receipt does not waive future verification. If Setup again
-reports `known resource mutation`, fully quit Input, preserve a stopped-state
-backup, replace it from the official release, and require a fresh verified
-result before launching it. If the profile is already correct, leave Input
-closed during commissioning. Neither result authorizes firmware work.
+On the tested desk, a fresh official Input 0.18.4 copy passed publisher, strict
+signature, and Gatekeeper checks before the approved September 2 firmware
+update. After that session, the same single sealed `window-info` helper changed
+again. The installed copy is now `known resource mutation` and unverified for
+another Input-controlled operation. This does not invalidate native Codex while
+Input is closed. See the canonical
+[post-flash evidence record](../../docs/creator-micro-2-post-flash-2026-09-02.md).
+If Setup reports this result, preserve a stopped-state backup, replace Input
+from the official release, and require fresh verification before another
+profile, device-file, or firmware mutation.
 
 If verification does not pass, stop configuration and firmware work. Fully quit
 Input manually, download a fresh installer from the official page, replace the
@@ -103,19 +101,20 @@ Firmware availability is not firmware qualification, and changing firmware
 invalidates the configuration baseline. Do not enter the updater at all until
 Setup reports the signed Input installation as verified.
 
-For **Codex Native**, a recent Codex log result of
-`firmware_rpc_missing` is different: USB and HID work, but the board returned
-RPC 404 for `v.oai.rgbcfg`. The tested desk unit reports firmware `v0.1.50`.
-That observed version is older than the reviewed `v0.6.2` vendor candidate and
-is treated as outdated for qualification planning, not as authorization to
-flash.
+For **Codex Native**, a fresh `firmware_rpc_missing` result means USB and HID
+worked but the board returned RPC 404 for `v.oai.rgbcfg`. That was the tested
+desk's pre-flash state, not its current state. On September 2 the operator
+updated that unit to `0.6.2`; the board then returned success for
+`v.oai.rgbcfg` and `v.oai.thstatus`. Native Codex consumption and physical
+acceptance remain pending, so do not reflash from that historical 404. See the
+[post-flash evidence](../../docs/creator-micro-2-post-flash-2026-09-02.md).
+
 As verified on September 1, 2026, Work Louder marks [Creator Micro v2 firmware
 v0.6.2](https://github.com/worklouder/cm-v2-fw-releases/releases/tag/v0.6.2)
 as its latest release, and its release asset contains both required Codex RPC
-names. That string-level evidence makes v0.6.2 a vendor candidate, not a proven
-compatible minimum for PID `303A:8298` or the installed Codex build. Updating
-remains an explicit vendor operation and the post-update checks below are the
-acceptance gate:
+names. For any other device, that release remains a pinned qualification input,
+not authorization to flash or proof of compatibility. Updating is an explicit
+vendor operation and the post-update checks below remain the acceptance gate:
 
 The reviewed candidate asset is `firmware_0.6.2_merged.bin`, 2,086,848 bytes,
 SHA-256

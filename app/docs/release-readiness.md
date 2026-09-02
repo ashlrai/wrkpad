@@ -14,7 +14,7 @@ versions from colliding.
 | Test verified | Tests, lint, build, and relevant hardware tests pass at one full SHA | Package exists |
 | Artifact built | Architecture-specific app and checksum from the verified SHA | Signing, notarization, or launch |
 | Distribution ready | Signature, notarization, Gatekeeper check, provenance, rollback | Provider or physical acceptance |
-| Integration configured | Official Input passes sanitized publisher/signature/Gatekeeper checks; one intended Agent Board receiver; apps, tools, hooks, and permissions are present | Valid shortcut, provider, or physical receipt |
+| Integration configured | Route-specific controller checks pass: verified Input and one Agent Board receiver for Ashlr Layer, or Input closed with Codex as the sole intended controller for Codex Native; apps, tools, hooks, and permissions are present | Exclusive HID ownership, valid shortcut, provider, or physical receipt |
 | Physical accepted | Fresh Flight Check passes on the actual board and daily layer | Native RGB or firmware qualification |
 | Provider accepted | Real Codex, Claude/cmux, `wrkpad`, and Fleet workflows pass | User acceptance |
 | User accepted | Named workflow and usability criteria pass with a real operator | General availability |
@@ -41,15 +41,19 @@ For hardware acceptance, also record these independent local gates:
 
 - A human confirmed the Creator Micro 2 Pro's fourth **WIRED** communication
   channel by white underglow. This is mode evidence only, not USB acceptance.
-- Setup reported **Input … · publisher, signature, and Gatekeeper verified**.
-  Record only the sanitized status and version, never raw signing output or app
-  paths.
+- Before an Input-controlled operation, Setup reported **Input … · publisher,
+  signature, and Gatekeeper verified**. For Codex Native, record that Input was
+  stopped and preserve its integrity result as a separate future-operations
+  gate. Record only sanitized status and version, never raw signing output or
+  app paths.
 - Setup reported **One receiver · shortcut ownership available**. If it was
   contended, a human used Command-Q to fully quit all Agent Board copies and
   relaunched one intended build; no process was killed automatically.
-- `v0.1.50` remains the observed desk firmware and is older than the reviewed
-  `v0.6.2` candidate. No firmware update proceeds until the official Input
-  installation is verified and the separate human qualification is approved.
+- The September 2 desk update installed firmware `0.6.2` and the board accepted
+  both required Codex methods. Input then repeated its known sealed-resource
+  mutation. Native consumption, visible lighting, and post-update Flight Check
+  remain pending; see the canonical
+  [post-flash evidence](../../docs/creator-micro-2-post-flash-2026-09-02.md).
 
 These gates do not prove one another, a current Input profile, Input Monitoring,
 device synchronization, native Codex RPC success, provider receipt, or physical

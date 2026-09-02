@@ -63,9 +63,9 @@ marks missing observers and optional CLIs as unavailable.
   actions, and exports a hashed operator-guided Flight Check receipt.
 - Agent Board keeps Codex Native and the cross-provider Ashlr Layer as explicit,
   local-only route declarations; neither is inferred or applied to the board.
-- A privacy-bounded native diagnostic maps fresh versus historical
-  `v.oai.rgbcfg` RPC 404 evidence to a route-scoped qualification warning while
-  leaving the shortcut route independently usable.
+- A privacy-bounded native diagnostic distinguishes historical RPC failures
+  from a fresh, inferred initialization sequence while keeping the manual
+  Settings connection and physical acceptance separate from the shortcut route.
 - Privacy-bounded Input cache/runtime diagnostics report the cache-current
   profile, a uniquely observable single layer, encoder order, and exact
   unresolved-index reason codes without exposing raw logs or claiming current
@@ -217,6 +217,8 @@ Repository map:
 - [`docs/architecture.md`](docs/architecture.md) — core components and trust boundaries.
 - [`docs/agent-operations.md`](docs/agent-operations.md) — shared Codex, Claude,
   hardware, and release workflow for humans and agents.
+- [`docs/creator-micro-2-post-flash-2026-09-02.md`](docs/creator-micro-2-post-flash-2026-09-02.md) —
+  canonical dated desk evidence and remaining acceptance gates.
 - [`SECURITY.md`](SECURITY.md), [`CONTRIBUTING.md`](CONTRIBUTING.md),
   [`SUPPORT.md`](SUPPORT.md), and [`CHANGELOG.md`](CHANGELOG.md) — canonical
   repository policies and project history.
@@ -228,7 +230,7 @@ Discovery recognizes these identities and reports the one actually observed:
 | VID:PID | Classification | Evidence boundary |
 | --- | --- | --- |
 | `303A:8297` | Creator Micro 2 candidate | Recognized for read-only presence; community and user-supplied evidence; never sufficient for writes |
-| `303A:8298` | Creator Micro 2 | Reverified on the tested desk unit on August 31, 2026 |
+| `303A:8298` | Creator Micro 2 | Reverified over wired USB after the September 2, 2026 firmware update |
 | `303A:8360` | Codex Micro | Repeated community hardware evidence |
 | `574C:E6E3` | Legacy Work Louder Micro v1 | QMK explanation only; current-generation protocol is forbidden |
 
@@ -238,30 +240,16 @@ layer, accepted capabilities, visible result, and a release path.
 
 ## Current evidence
 
-The August 31, 2026 desk audit enumerated a Creator Micro 2 `303A:8298` over USB
-with six HID collections. The operating-system registry descriptor is 275 bytes
-with SHA-256 `9257d7361f9c784e0fc0b260bbac0feadd49bf79cbb6202d6c41560cbae96fb6`;
-serial data is discarded. The current Input log reports firmware `v0.1.50`, while
-`device.status` and `v.oai.rgbcfg` return `Method not found`, so that unit is not
-lighting-qualified. That observed version is older than the reviewed `v0.6.2`
-vendor candidate, but no firmware operation is authorized until the official
-Work Louder Input installation passes publisher, signature, and Gatekeeper
-verification and a human approves the separate qualification. Bluetooth
-keyboard and trackpad traffic is unrelated to this USB commissioning path.
-
-The September 1 recheck found Input 0.18.4 with the expected bundle identity
-and publisher, but strict verification reported that its sealed
-`window-info-retriever.scpt` resource had changed while Input was running. A
-fresh [official 0.18.4 DMG](https://github.com/worklouder/input-releases/releases/tag/v0.18.4)
-passed strict signature and Gatekeeper checks before launch. On September 2,
-with Input stopped, its local profile and preference state was backed up; the
-app bundle was then replaced from that DMG. The exact installed copy passed
-publisher, strict signature, and Gatekeeper checks. At the September 2
-snapshot, Input and Agent Board were stopped while IOHID continued to enumerate
-the USB device, leaving a Codex-only retry available. No fresh native RPC or
-physical acceptance receipt had been captured at that point. The latest
-historical native receipt remains the September 1 `v.oai.rgbcfg` RPC 404 and
-must not be reported as a current failure without a new retry.
+On September 2, 2026, the tested Creator Micro 2 `303A:8298` was updated from
+firmware `v0.1.50` to `0.6.2`, re-enumerated over wired USB, and returned
+successful results for both required Codex RPC methods. Input then repeated its
+known single sealed-resource mutation and is unverified for another
+Input-controlled operation. At the recorded post-update snapshot, Input and
+Agent Board were stopped; native Codex connection, visible lighting, post-update
+Flight Check, provider receipt, and operator acceptance remained unproven. See
+the canonical
+[post-flash evidence record](docs/creator-micro-2-post-flash-2026-09-02.md) for
+timestamps, descriptor hashes, topology, and evidence boundaries.
 
 Automated source checks and local package creation do not prove installed hooks,
 provider receipt, physical gesture completion, RGB support, signed distribution,
