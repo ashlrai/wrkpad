@@ -2,6 +2,8 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const { EventEmitter } = require('node:events')
 const {
+  AUTHORIZATION_MAX_AGE_MS,
+  CMUX_AUTHORIZATION_SCHEMA,
   CMUX_CLI_PATH,
   CMUX_LOCATOR_SCHEMA,
   LOCATOR_MAX_AGE_MS,
@@ -9,8 +11,11 @@ const {
   createCmuxCliRunner,
   createCmuxFocusAdapter,
   identifyMatches,
+  inspectSocketIdentity,
   parseCapabilities,
   parseVersion,
+  sameSocketIdentity,
+  validateAuthorization,
   validateLocator,
 } = require('./cmux-focus-adapter.cjs')
 
@@ -18,6 +23,7 @@ const NOW = new Date('2026-09-03T18:00:00.000Z')
 const WORKSPACE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const SURFACE = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
 const SOCKET = '/tmp/cmux-test.sock'
+const SOCKET_IDENTITY = Object.freeze({ device: '1', inode: '2', uid: '501' })
 const LOCATOR = {
   schema: CMUX_LOCATOR_SCHEMA,
   provider: 'claude',
@@ -28,7 +34,30 @@ const LOCATOR = {
 }
 const HELP = 'capabilities\nidentify\nselect-workspace\nfocus-panel\n'
 const CAPABILITIES = JSON.stringify({ protocol: 'cmux-socket', socket_path: SOCKET, access_mode: 'password', methods: ['system.identify', 'workspace.select', 'surface.focus'] })
-const IDENTIFY = JSON.stringify({ socket_path: SOCKET, caller: { workspace_id: WORKSPACE, surface_id: SURFACE } })
+const IDENTIFY = JSON.stringify({
+  socket_path: SOCKET,
+  bundle_identifier: 'com.cmuxterm.app',
+  app_bundle_path: '/Applications/cmux.app',
+  app_executable_path: '/Applications/cmux.app/Contents/MacOS/cmux',
+  app_cli_path: CMUX_CLI_PATH,
+  caller: { workspace_id: WORKSPACE, surface_id: SURFACE },
+})
+
+function authorization(id = '1'.repeat(32), overrides = {}) {
+  return {
+    schema: CMUX_AUTHORIZATION_SCHEMA,
+    decision: 'allow_once',
+    provider: 'claude',
+    authorizationId: id,
+    sessionBinding: LOCATOR.sessionBinding,
+    issuedAt: NOW.toISOString(),
+    ...overrides,
+  }
+}
+
+function adapterOptions(options = {}) {
+  return { now: () => NOW, inspectSocket: () => SOCKET_IDENTITY, ...options }
+}
 
 function sequenceRunner(sequence, calls = []) {
   return {
@@ -70,14 +99,26 @@ test('validates the version, capability, and echoed identity contracts', () => {
   assert.equal(parseVersion('cmux 0.63.0 (1) [abcdef0]').supported, false)
   assert.equal(parseVersion('cmux latest'), null)
   assert.equal(parseCapabilities(CAPABILITIES).required, true)
-  assert.equal(parseCapabilities(JSON.stringify({ protocol: 'cmux-socket', socket_path: SOCKET, methods: ['system.identify'] })).required, false)
-  assert.equal(parseCapabilities(JSON.stringify({ protocol: 'unexpected', socket_path: SOCKET, methods: ['system.identify'] })), null)
-  assert.equal(parseCapabilities(JSON.stringify({ protocol: 'cmux-socket', socket_path: 'relative.sock', methods: ['system.identify'] })), null)
+  assert.equal(parseCapabilities(JSON.stringify({ protocol: 'cmux-socket', socket_path: SOCKET, access_mode: 'password', methods: ['system.identify'] })).required, false)
+  assert.equal(parseCapabilities(JSON.stringify({ protocol: 'unexpected', socket_path: SOCKET, access_mode: 'password', methods: ['system.identify'] })), null)
+  assert.equal(parseCapabilities(JSON.stringify({ protocol: 'cmux-socket', socket_path: 'relative.sock', access_mode: 'password', methods: ['system.identify'] })), null)
+  assert.equal(parseCapabilities(JSON.stringify({ protocol: 'cmux-socket', socket_path: SOCKET, access_mode: 'unknown', methods: ['system.identify'] })), null)
   assert.equal(parseCapabilities('{bad'), null)
   assert.equal(identifyMatches(IDENTIFY, LOCATOR, SOCKET), true)
+  assert.equal(identifyMatches(JSON.stringify({ ...JSON.parse(IDENTIFY), bundle_identifier: 'org.example.fake' }), LOCATOR, SOCKET), false)
   assert.equal(identifyMatches(JSON.stringify({ socket_path: SOCKET, caller: { workspace_id: WORKSPACE, surface_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd' } }), LOCATOR, SOCKET), false)
   assert.equal(identifyMatches(JSON.stringify({ socket_path: '/tmp/different.sock', caller: { workspace_id: WORKSPACE, surface_id: SURFACE } }), LOCATOR, SOCKET), false)
   assert.equal(identifyMatches(JSON.stringify({ socket_path: SOCKET, focused: { workspace_id: WORKSPACE, surface_id: SURFACE } }), LOCATOR, SOCKET), false)
+})
+
+test('admits only a same-user Unix socket and compares its device and inode', () => {
+  const socketStat = { dev: 1n, ino: 2n, uid: 501n, isSocket: () => true }
+  assert.deepEqual(inspectSocketIdentity(SOCKET, { statImpl: () => socketStat, expectedUid: 501n }), SOCKET_IDENTITY)
+  assert.equal(inspectSocketIdentity(SOCKET, { statImpl: () => ({ ...socketStat, uid: 502n }), expectedUid: 501n }), null)
+  assert.equal(inspectSocketIdentity(SOCKET, { statImpl: () => ({ ...socketStat, isSocket: () => false }), expectedUid: 501n }), null)
+  assert.equal(inspectSocketIdentity(SOCKET, { statImpl: () => { throw new Error('missing') }, expectedUid: 501n }), null)
+  assert.equal(sameSocketIdentity(SOCKET_IDENTITY, { ...SOCKET_IDENTITY }), true)
+  assert.equal(sameSocketIdentity(SOCKET_IDENTITY, { ...SOCKET_IDENTITY, inode: '3' }), false)
 })
 
 test('rejects malformed, cross-provider, cross-session, future, and stale locators', () => {
@@ -94,14 +135,21 @@ test('rejects malformed, cross-provider, cross-session, future, and stale locato
   assert.equal(validateLocator(LOCATOR, NOW, LOCATOR.sessionBinding).ok, true)
 })
 
-test('falls back directly when no locator exists and never probes cmux', async () => {
+test('requires a fresh one-use human authorization before any cmux probe', async () => {
+  assert.equal(validateAuthorization(null, NOW).code, 'exact_focus_not_authorized')
+  assert.equal(validateAuthorization(authorization('2'.repeat(32), { decision: 'always' }), NOW).code, 'authorization_invalid')
+  assert.equal(validateAuthorization(authorization('3'.repeat(32), { issuedAt: new Date(NOW.getTime() - AUTHORIZATION_MAX_AGE_MS - 1).toISOString() }), NOW).code, 'authorization_expired')
+  assert.equal(validateAuthorization(authorization(), NOW).ok, true)
+
   let invoked = false
   const adapter = createCmuxFocusAdapter({
     runner: { invoke: async () => { invoked = true; return { ok: false } } },
     foreground: async () => true,
     now: () => NOW,
   })
-  assert.deepEqual(await adapter.focus(null), { ok: true, opened: true, exact: false, reason: 'locator_unavailable' })
+  assert.deepEqual(await adapter.focus(LOCATOR), { ok: true, opened: true, exact: false, reason: 'exact_focus_not_authorized' })
+  assert.deepEqual(await adapter.focus(null, authorization('4'.repeat(32))), { ok: true, opened: true, exact: false, reason: 'locator_unavailable' })
+  assert.deepEqual(await adapter.focus(LOCATOR, authorization('4'.repeat(32))), { ok: true, opened: true, exact: false, reason: 'authorization_replayed' })
   assert.equal(invoked, false)
 })
 
@@ -109,13 +157,14 @@ test('preserves outside-process access denial and malformed capability output', 
   for (const [result, reason] of [
     [{ ok: false, code: 'access_denied' }, 'access_denied'],
     [{ ok: true, output: '{bad' }, 'capabilities_malformed'],
-    [{ ok: true, output: JSON.stringify({ protocol: 'cmux-socket', socket_path: SOCKET, methods: ['system.identify'] }) }, 'capabilities_incomplete'],
+    [{ ok: true, output: JSON.stringify({ protocol: 'cmux-socket', socket_path: SOCKET, access_mode: 'password', methods: ['system.identify'] }) }, 'capabilities_incomplete'],
+    [{ ok: true, output: JSON.stringify({ protocol: 'cmux-socket', socket_path: SOCKET, access_mode: 'allowAll', methods: ['system.identify', 'workspace.select', 'surface.focus'] }) }, 'access_mode_not_authorized'],
   ]) {
     const sequence = successfulSequence().slice(0, 2)
     sequence.push({ command: 'capabilities', result })
     const calls = []
-    const adapter = createCmuxFocusAdapter({ runner: sequenceRunner(sequence, calls), foreground: async () => true, now: () => NOW })
-    assert.equal((await adapter.focus(LOCATOR, LOCATOR.sessionBinding)).reason, reason)
+    const adapter = createCmuxFocusAdapter(adapterOptions({ runner: sequenceRunner(sequence, calls), foreground: async () => true }))
+    assert.equal((await adapter.focus(LOCATOR, authorization())).reason, reason)
     assert.deepEqual(calls.map(({ command }) => command), ['version', 'help', 'capabilities'])
   }
 })
@@ -130,8 +179,8 @@ test('denies unsupported versions, incomplete help, timeouts, and locator mismat
     [[...successfulSequence().slice(0, 3), { command: 'identify', result: { ok: true, output: JSON.stringify({ socket_path: '/tmp/replaced.sock', caller: { workspace_id: WORKSPACE, surface_id: SURFACE } }) } }], 'locator_mismatch'],
   ]
   for (const [sequence, reason] of cases) {
-    const adapter = createCmuxFocusAdapter({ runner: sequenceRunner(sequence), foreground: async () => true, now: () => NOW })
-    assert.equal((await adapter.focus(LOCATOR, LOCATOR.sessionBinding)).reason, reason)
+    const adapter = createCmuxFocusAdapter(adapterOptions({ runner: sequenceRunner(sequence), foreground: async () => true }))
+    assert.equal((await adapter.focus(LOCATOR, authorization())).reason, reason)
   }
 })
 
@@ -142,8 +191,9 @@ test('focuses only after fresh identity validation and foregrounding', async () 
     runner: sequenceRunner(successfulSequence(), calls),
     foreground: async () => { foregroundedAt = calls.length; return true },
     now: () => NOW,
+    inspectSocket: () => SOCKET_IDENTITY,
   })
-  assert.deepEqual(await adapter.focus(LOCATOR, LOCATOR.sessionBinding), { ok: true, opened: true, exact: true, reason: 'focus_cli_accepted', version: '0.62.2' })
+  assert.deepEqual(await adapter.focus(LOCATOR, authorization()), { ok: true, opened: true, exact: true, reason: 'focus_cli_accepted', version: '0.62.2' })
   assert.equal(foregroundedAt, 4)
   assert.deepEqual(calls.map(({ command }) => command), ['version', 'help', 'capabilities', 'identify', 'select_workspace', 'focus_surface'])
   assert.deepEqual(calls.map(({ socketPath }) => socketPath), [undefined, undefined, undefined, SOCKET, SOCKET, SOCKET])
@@ -157,18 +207,33 @@ test('keeps app foregrounding as the fallback when either focus command fails', 
     if (failedCommand === 'select_workspace') sequence.pop()
     let foregroundCount = 0
     const calls = []
-    const adapter = createCmuxFocusAdapter({ runner: sequenceRunner(sequence, calls), foreground: async () => { foregroundCount += 1; return true }, now: () => NOW })
-    assert.deepEqual(await adapter.focus(LOCATOR, LOCATOR.sessionBinding), { ok: true, opened: true, exact: false, reason: 'command_failed' })
+    const adapter = createCmuxFocusAdapter(adapterOptions({ runner: sequenceRunner(sequence, calls), foreground: async () => { foregroundCount += 1; return true } }))
+    assert.deepEqual(await adapter.focus(LOCATOR, authorization()), { ok: true, opened: true, exact: false, reason: 'command_failed' })
     assert.equal(foregroundCount, 1)
     if (failedCommand === 'select_workspace') assert.equal(calls.some(({ command }) => command === 'focus_surface'), false)
   }
+})
+
+test('fails exact focus when the admitted socket instance changes', async () => {
+  let inspections = 0
+  const adapter = createCmuxFocusAdapter({
+    runner: sequenceRunner(successfulSequence().slice(0, 4)),
+    foreground: async () => true,
+    now: () => NOW,
+    inspectSocket: () => {
+      inspections += 1
+      return inspections === 1 ? SOCKET_IDENTITY : { ...SOCKET_IDENTITY, inode: '99' }
+    },
+  })
+  assert.deepEqual(await adapter.focus(LOCATOR, authorization()), { ok: true, opened: true, exact: false, reason: 'socket_identity_changed' })
 })
 
 function fakeChild(setup) {
   const child = new EventEmitter()
   child.stdout = new EventEmitter()
   child.stderr = new EventEmitter()
-  child.kill = () => { child.killed = true }
+  child.signals = []
+  child.kill = (signal) => { child.signals.push(signal); return true }
   queueMicrotask(() => setup(child))
   return child
 }
@@ -192,16 +257,38 @@ test('bounded runner kills timeout and oversized output without returning conten
   let timeoutChild
   const timeoutRunner = createCmuxCliRunner({ timeoutMs: 5, spawnImpl: () => {
     timeoutChild = fakeChild(() => {})
+    timeoutChild.kill = (signal) => { timeoutChild.signals.push(signal); queueMicrotask(() => timeoutChild.emit('close', null, signal)); return true }
     return timeoutChild
   } })
   assert.deepEqual(await timeoutRunner.invoke('version', LOCATOR), { ok: false, code: 'timeout' })
-  assert.equal(timeoutChild.killed, true)
+  assert.deepEqual(timeoutChild.signals, ['SIGTERM'])
 
   let outputChild
   const outputRunner = createCmuxCliRunner({ maxOutputBytes: 8, spawnImpl: () => {
     outputChild = fakeChild((child) => child.stdout.emit('data', 'private-output'))
+    outputChild.kill = (signal) => { outputChild.signals.push(signal); queueMicrotask(() => outputChild.emit('close', null, signal)); return true }
     return outputChild
   } })
   assert.deepEqual(await outputRunner.invoke('version', LOCATOR), { ok: false, code: 'output_too_large' })
-  assert.equal(outputChild.killed, true)
+  assert.deepEqual(outputChild.signals, ['SIGTERM'])
+})
+
+test('bounded runner escalates termination and does not settle before process close', async () => {
+  let child
+  let settled = false
+  const runner = createCmuxCliRunner({ timeoutMs: 5, terminationGraceMs: 5, spawnImpl: () => {
+    child = fakeChild(() => {})
+    return child
+  } })
+  const pending = runner.invoke('version', LOCATOR).then((result) => {
+    settled = true
+    return result
+  })
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  assert.deepEqual(child.signals, ['SIGTERM', 'SIGKILL'])
+  assert.equal(settled, false)
+  child.emit('error', new Error('kill failed'))
+  assert.equal(settled, false)
+  child.emit('close', null, 'SIGKILL')
+  assert.deepEqual(await pending, { ok: false, code: 'timeout' })
 })

@@ -18,9 +18,10 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 ### Added
 
 - A fixed-bundle-path, versioned cmux focus adapter substrate with bounded
-  capability and socket-identity validation, cross-session and stale-locator
-  rejection, explicit outside-process denial handling, and an
-  application-foreground fallback.
+  capability and server-instance identity validation, fresh one-use human
+  authorization plus exact password-mode admission, cross-session and
+  stale-locator rejection, explicit outside-process denial handling, confirmed
+  child-process cleanup, and an application-foreground fallback.
   Locator capture and socket-password enrollment remain unavailable, and the
   allowlist contains no terminal read, write, paste, or key-injection command.
 - A fixed, clearly unofficial Creator Micro 2 Codex Native recovery layer,

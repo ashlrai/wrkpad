@@ -1,9 +1,10 @@
 # cmux provider adapter contract
 
 Status: the fixed-path, capability-negotiated adapter substrate is implemented
-and source-tested. Locator capture and socket-password enrollment are not
-implemented, so installed Agent Board builds do not currently claim exact cmux
-workspace, pane, or surface focus.
+and source-tested. Locator capture, one-use human authorization issuance, and
+socket-password enrollment are not implemented, so installed Agent Board builds
+cannot take the exact-focus branch and do not claim exact cmux workspace, pane,
+or surface focus.
 
 ## Evidence baseline
 
@@ -54,6 +55,13 @@ transport selector and must not cross the main-process boundary as renderer data
 Exact focus is off by default. App foregrounding through the fixed macOS target
 `/usr/bin/open -a cmux` remains the available fallback.
 
+Every exact-focus attempt additionally requires a fresh, one-use
+`dev.wrkpad.cmux-focus-authorization/v1` receipt created by a future explicit
+human confirmation surface. The receipt is provider- and HMAC-session-bound,
+expires after 30 seconds, and is consumed before any socket probe so it cannot be
+replayed after either success or failure. The current app has no issuer for this
+receipt and passes no authorization to the adapter.
+
 A human may explicitly enable cmux socket-password control in cmux and separately
 authorize Agent Board to use that capability. Agent Board must not read cmux
 settings to discover a password, change the socket-control mode, place a password
@@ -64,19 +72,28 @@ user-provisioned secret from the macOS Keychain and pass it only as
 and output.
 
 Every process launch must use the exact bundle CLI path above, an argv array, no
-shell, a bounded environment, bounded output, and a short timeout. Admission is a
-fresh sequence, not a cached “cmux connected” flag:
+shell, a bounded environment, bounded output, and a short timeout. On timeout or
+oversized output, Agent Board sends `SIGTERM`, escalates to `SIGKILL` after a
+bounded grace period, and does not resolve the attempt until the child `close`
+event confirms process and stdio cleanup. Admission is a fresh sequence, not a
+cached “cmux connected” flag:
 
 1. Run `--version` without a socket and parse a bounded version/build response.
 2. Run socket-free `--help` probes to confirm the required command surface for
    that version.
 3. With the optional human-provisioned credential, run `--json capabilities` and
    require a valid `cmux-socket` JSON response advertising the needed identity
-   and focus operations plus one bounded absolute socket path.
+   and focus operations plus one bounded absolute socket path. Exact focus
+   requires the reported access mode to be exactly `password`; `cmuxOnly`,
+   `automation`, `allowAll`, `off`, missing, and unknown modes all fail closed.
 4. Pin that admitted socket path for the remainder of the attempt. Run `--socket
    <admitted-path> --json --id-format uuids identify --workspace <workspace>
-   --surface <surface>` and require the echoed socket path and both locators to
-   match the stored association.
+   --surface <surface>` and require the echoed socket path, bundle identifier,
+   fixed app/binary/CLI paths, and both locators to match the stored association.
+   Capture the same-user Unix socket's device and inode before this probe and
+   require that fingerprint to remain unchanged after identify, app foreground,
+   workspace selection, and surface focus. A pathname alone is not server-instance
+   identity because a different listener can replace it between subprocesses.
 5. Only within that same bounded operation, and still pinned to the admitted
    socket path, run `select-workspace --workspace <workspace>` followed by
    `focus-panel --workspace <workspace> --panel <surface>`.
@@ -88,11 +105,12 @@ and step 4 succeeds immediately before focus. A CLI success proves only
 that cmux accepted the request. It does not prove that a human saw the expected
 pane or that Claude Code accepted any input.
 
-The current production call supplies no locator. It therefore takes the
-`locator_unavailable` fallback without making a socket request and foregrounds
-cmux through the fixed application target. The complete negotiation and focus
-sequence is covered with synthetic injected runner results; that source test is
-not live cmux acceptance and does not bypass the observed external-process denial.
+The current production call supplies neither authorization nor a locator. It
+therefore takes the `exact_focus_not_authorized` fallback without making a socket
+request and foregrounds cmux through the fixed application target. The complete
+negotiation and focus sequence is covered with synthetic injected runner results;
+that source test is not live cmux acceptance and does not bypass the observed
+external-process denial.
 
 Any missing locator, unsupported version, absent capability, authentication
 denial, timeout, malformed or oversized JSON, server-identity change, locator

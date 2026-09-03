@@ -113,12 +113,15 @@ connection does not prove provider hook trust or receipt delivery.
 The main process also contains a source-tested, fixed-bundle-path cmux focus
 adapter. It accepts only a versioned privacy-safe locator, validates a fresh
 cross-session HMAC match and `identify` echo, pins the bounded socket identity
-admitted by `capabilities`, negotiates `system.identify`, `workspace.select`,
-and `surface.focus`, and allowlists only workspace/surface focus commands. Current
-HASP snapshots expose no locator and Agent Board has no socket-password
-enrollment, so production calls take the ordinary `open -a cmux` fallback
-without attempting socket access. The adapter contains no terminal read, write,
-send-key, paste, screen-capture, or prompt-submission command.
+admitted by `capabilities`, verifies the same-user socket device/inode and fixed
+cmux bundle identity, negotiates `system.identify`, `workspace.select`, and
+`surface.focus`, and allowlists only workspace/surface focus commands. Exact
+focus also requires one fresh, single-use human authorization receipt and an
+exact `password` access mode. Current HASP snapshots expose no locator, Agent
+Board has no authorization issuer or socket-password enrollment, and production
+calls therefore take the ordinary `open -a cmux` fallback without attempting
+socket access. The adapter contains no terminal read, write, send-key, paste,
+screen-capture, or prompt-submission command.
 
 ### Ashlr Hub
 
