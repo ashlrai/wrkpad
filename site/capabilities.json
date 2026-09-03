@@ -1,0 +1,8 @@
+{"schema":"ai.ashlr.wrkpad.capabilities/v1","last_verified":"2026-09-02","capabilities":[
+  {"id":"source","label":"Source, licenses, CI, security policy","status":"available","scope":"Current public repository","evidence":"https://github.com/ashlrai/wrkpad"},
+  {"id":"local-build","label":"Unsigned local macOS build","status":"available","scope":"Source-built architecture-specific artifact","evidence":"https://github.com/ashlrai/wrkpad/blob/main/app/docs/release-readiness.md"},
+  {"id":"hardware-route","label":"Hardware route and provider hooks","status":"manual","scope":"Explicit local setup and acceptance","evidence":"https://github.com/ashlrai/wrkpad/blob/main/app/docs/setup.md"},
+  {"id":"signed-release","label":"Signed, notarized public distribution","status":"planned","scope":"No public artifact is claimed","evidence":"https://github.com/ashlrai/wrkpad/blob/main/docs/release.md"},
+  {"id":"sbom","label":"Release SBOM and provenance","status":"planned","scope":"Required before binary distribution","evidence":"https://github.com/ashlrai/wrkpad/blob/main/docs/release.md"},
+  {"id":"certifications","label":"Compliance certifications","status":"unsupported","scope":"No certification or authorization is claimed","evidence":"https://github.com/ashlrai/wrkpad/blob/main/SECURITY.md"}
+]}

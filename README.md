@@ -5,6 +5,8 @@
 [![Security](https://github.com/ashlrai/wrkpad/actions/workflows/security.yml/badge.svg)](https://github.com/ashlrai/wrkpad/actions/workflows/security.yml)
 [![Licenses: MIT core and Apache-2.0 app](https://img.shields.io/badge/licenses-MIT%20core%20%7C%20Apache--2.0%20app-2f6feb)](#license)
 
+[Project landing page source](site/index.html) · [Machine-readable capabilities](site/capabilities.json)
+
 **A local-first control plane and on-screen mission control for Work Louder
 Creator Micro 2, Codex, Claude Code, and agentic engineering fleets.**
 

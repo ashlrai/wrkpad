@@ -1,0 +1,13 @@
+# wrkpad
+> Local-first tactile control plane for Creator Micro 2, Codex, Claude Code, and agentic engineering fleets.
+
+- Repository: https://github.com/ashlrai/wrkpad
+- Agent instructions: https://github.com/ashlrai/wrkpad/blob/main/AGENTS.md
+- Architecture: https://github.com/ashlrai/wrkpad/blob/main/docs/architecture.md
+- Security: https://github.com/ashlrai/wrkpad/blob/main/SECURITY.md
+- Controls: https://github.com/ashlrai/wrkpad/blob/main/app/docs/controls.md
+- Setup: https://github.com/ashlrai/wrkpad/blob/main/app/docs/setup.md
+- Release evidence: https://github.com/ashlrai/wrkpad/blob/main/docs/release.md
+- Capabilities: capabilities.json
+
+The core is MIT; the desktop app is Apache-2.0. This is a developer preview with no signed public binary. Device operation is observe-only. Provider approvals and release authority remain outside wrkpad. The landing demo is synthetic. An Amplify, Verify, Polish, and Advance delivery contract is proposed for Codex and Claude Code/cmux; the current landing does not claim that contract is released. It does not submit prompts or terminal input.
