@@ -5,7 +5,7 @@ import {
   Mic2, Play, RotateCcw, Send, ShieldCheck, Sparkles, Split, TerminalSquare, Waypoints, X, Zap,
 } from 'lucide-react'
 import {
-  actions, controls, correctedInputProfileObserved, correctedInputProfileObservedForVariant, dualPlaneInputProfileConfigured, effortLevels, hardware, profileOrder, profiles,
+  actions, controls, correctedInputProfileObserved, correctedInputProfileObservedForVariant, dualPlaneInputProfileConfigured, effortLevels, hardware, hybridNativeInputProfileConfigured, profileOrder, profiles,
   type ActionDefinition, type AgentSlotSummary, type BoardRoute, type ControlId, type ExecutionResult, type InputInstallationStatus, type MissionControlSnapshot, type NativeAcceptanceAttestations, type NativeAcceptanceSnapshot, type PhysicalSignalEnvelope, type ProfileId, type ProfileRepairResult, type ReceiverRuntimeStatus, type SystemStatus, type WorkspaceSnapshot,
 } from './board'
 import { agentProviderLabel, agentStateClassName, agentStateLabels, agentStateLegendOrder, agentVisibleStateLabel } from './agent-accessibility'
@@ -27,6 +27,7 @@ const initialStatus: SystemStatus = {
   boardRoute: 'unknown',
   workspace: '/Choose a working directory', shortcutCount: 0, shortcutRegistrations: [], workspaceSnapshot: null, receiverIdentity: null,
   receiverRuntime: { status: 'unavailable', instanceCount: 0, distinctBuildCount: 0, currentAsarSha256: null, candidateAsarSha256: null, candidateMatchesCurrent: null },
+  inputApplication: { status: 'unavailable' },
 }
 const initialMission: MissionControlSnapshot = {
   schemaVersion: 1, observedAt: new Date(0).toISOString(), agentSource: 'unavailable', fleetSource: 'unavailable',
@@ -118,14 +119,26 @@ const hardwareIds: Partial<Record<ControlId, string>> = {
 const STATUS_REFRESH_TIMEOUT_MS = 13_000
 const NATIVE_ACCEPTANCE_POLL_MS = 5_000
 const viewOrder = ['operate', 'flight', 'setup'] as const
+const HYBRID_SHORTCUT_COUNT = 14
+const agentControls = new Set<ControlId>(['agent1', 'agent2', 'agent3', 'agent4', 'agent5', 'agent6'])
+const shortcutCountForRoute = (route: BoardRoute) => route === 'hybrid_native' ? HYBRID_SHORTCUT_COUNT : hardware.bindableSignals
 
-const flightLiveGatesReady = (status: SystemStatus, variant: FlightVariant, dualPlaneAshlrLayerAttested = false) =>
-  status.boardRoute === 'ashlr_layer'
-  && status.boardConnected
-  && status.shortcutCount === hardware.bindableSignals
-  && verifiedInputInstallation(status.inputInstallation ?? initialStatus.inputInstallation)
-  && exclusiveReceiverRuntime(status.receiverRuntime ?? initialStatus.receiverRuntime)
-  && correctedInputProfileObservedForVariant(status.inputProfile ?? initialStatus.inputProfile, variant, dualPlaneAshlrLayerAttested)
+const flightLiveGatesReady = (status: SystemStatus, variant: FlightVariant, dualPlaneAshlrLayerAttested = false) => {
+  const commonReady = status.boardConnected
+    && verifiedInputInstallation(status.inputInstallation ?? initialStatus.inputInstallation)
+    && exclusiveReceiverRuntime(status.receiverRuntime ?? initialStatus.receiverRuntime)
+  if (status.boardRoute === 'hybrid_native') {
+    return commonReady
+      && variant === 'daily'
+      && status.shortcutCount === HYBRID_SHORTCUT_COUNT
+      && status.inputApplication?.status === 'not_running'
+      && hybridNativeInputProfileConfigured(status.inputProfile ?? initialStatus.inputProfile)
+  }
+  return status.boardRoute === 'ashlr_layer'
+    && commonReady
+    && status.shortcutCount === hardware.bindableSignals
+    && correctedInputProfileObservedForVariant(status.inputProfile ?? initialStatus.inputProfile, variant, dualPlaneAshlrLayerAttested)
+}
 
 function App() {
   const bridge = window.agentBoard
@@ -286,12 +299,19 @@ function App() {
     const signalTime = Date.now()
     if (signalTime - (lastSignal.current[control] ?? 0) < 140) return
     lastSignal.current[control] = signalTime
-    if (status.boardRoute !== 'ashlr_layer') {
+    if (status.boardRoute !== 'ashlr_layer' && status.boardRoute !== 'hybrid_native') {
       internalResult(
         status.boardRoute === 'codex_native' ? 'Codex Native observer only' : 'Ashlr action route not selected',
         status.boardRoute === 'codex_native'
           ? 'Agent Board does not execute its Ashlr shortcut map while Codex owns the board keys and lighting.'
           : 'Select Ashlr Layer before using mapped Agent Board actions. Software-only Agent-slot focus remains available.',
+      )
+      return
+    }
+    if (status.boardRoute === 'hybrid_native' && agentControls.has(control)) {
+      internalResult(
+        'Codex owns this Agent key',
+        'Hybrid Native reserves AG00–AG05 for Codex. Agent Board has no shortcut receipt for these six keys, and exact Codex task focus remains unproven until a fresh native receipt is recorded.',
       )
       return
     }
@@ -331,7 +351,7 @@ function App() {
             accelerator: signal.accelerator, monotonicNs: signal.monotonicNs,
             expectedSignals, matched: expectedSignals.includes(rawControl),
           }]
-          flightExpected.current = expectedSignalsAfter(flightVariant, nextEvents)
+          flightExpected.current = expectedSignalsAfter(flightVariant, nextEvents, status.boardRoute)
           return nextEvents
         })
         return
@@ -339,7 +359,7 @@ function App() {
       executeControl(rawControl)
     })
     return () => { window.clearInterval(interval); window.clearInterval(missionInterval); unsubscribe?.() }
-  }, [bridge, executeControl, flightActive, flightVariant, refreshMission, refreshStatus])
+  }, [bridge, executeControl, flightActive, flightVariant, refreshMission, refreshStatus, status.boardRoute])
 
   useEffect(() => {
     let current = true
@@ -439,25 +459,40 @@ function App() {
       internalResult('Native verification is separate', 'The Ashlr Flight Check validates only the Work Louder Input shortcut layer. Keep Codex Native declared so Agent Board remains passive, quit Work Louder Input, restart ChatGPT Desktop, then verify Settings → Creator Micro.')
       return
     }
+    if (status.boardRoute === 'hybrid_native' && variant !== 'daily') {
+      setView('flight')
+      internalResult('Hybrid diagnostic unavailable', 'Hybrid Native has one exact 14-gesture acceptance sequence. Its six Codex Agent keys require separate native evidence and are never intercepted by Agent Board.')
+      return
+    }
     if (!verifiedInputInstallation(status.inputInstallation ?? initialStatus.inputInstallation)
       || !exclusiveReceiverRuntime(status.receiverRuntime ?? initialStatus.receiverRuntime)) {
       setView('flight')
       setFlightPhase('inactive')
       return
     }
-    if (!correctedInputProfileObservedForVariant(status.inputProfile ?? initialStatus.inputProfile, variant, dualPlaneAshlrLayerAttested)) {
+    const expectedProfileObserved = status.boardRoute === 'hybrid_native'
+      ? hybridNativeInputProfileConfigured(status.inputProfile ?? initialStatus.inputProfile)
+      : correctedInputProfileObservedForVariant(status.inputProfile ?? initialStatus.inputProfile, variant, dualPlaneAshlrLayerAttested)
+    if (!expectedProfileObserved) {
       setView('setup')
       internalResult(
         'Activate the corrected Input profile first',
         status.inputProfile?.encoderDirection === 'reversed'
           ? 'The read-only Input receipt shows clockwise and counterclockwise are reversed. Flight Check cannot produce a valid first gesture until the corrected profile is active.'
-          : variant === 'daily'
+          : status.boardRoute === 'hybrid_native'
+            ? 'Hybrid Flight Check requires the exact Ashlr Hybrid Dual Plane (UNOFFICIAL) profile: hybrid native first, Ashlr Daily second. A matching name or layer number alone is not sufficient.'
+            : variant === 'daily'
             ? 'Daily Flight Check requires either the corrected one-layer profile or a current Dual Plane profile with an exact Ashlr Daily layer. The active firmware layer is proved only by the physical receipt.'
             : 'Diagnostic Flight Check requires the temporary Ashlr Flight Check Corrected - diagnostic profile, Ashlr Diagnostic layer, and the corrected encoder order.',
       )
       return
     }
-    if (!status.boardConnected || status.shortcutCount !== hardware.bindableSignals) {
+    if (status.boardRoute === 'hybrid_native' && status.inputApplication?.status !== 'not_running') {
+      setView('setup')
+      internalResult('Quit Work Louder Input first', 'Hybrid Native shortcut ownership is fail-closed while Input is running or its state is unavailable. Quit Input, refresh Setup, and require an exact not-running observation.')
+      return
+    }
+    if (!status.boardConnected || status.shortcutCount !== shortcutCountForRoute(status.boardRoute)) {
       setView('flight')
       setFlightPhase('inactive')
       return
@@ -470,7 +505,7 @@ function App() {
     setFlightExport(null)
     setFlightStartedAt(null)
     setFlightVariant(variant)
-    flightExpected.current = stepsForVariant(variant)[0].signals
+    flightExpected.current = stepsForVariant(variant, status.boardRoute)[0].signals
     setView('flight')
     setApproval(null)
     cancelHold()
@@ -580,7 +615,7 @@ function App() {
         return
       }
       setFlightStartedAt(acknowledgement.startedAt)
-      flightExpected.current = stepsForVariant(flightVariant)[0].signals
+      flightExpected.current = stepsForVariant(flightVariant, status.boardRoute)[0].signals
       const confirmedStatus = await refreshStatus()
       if (request !== flightRequest.current) return
       if (!confirmedStatus || !flightLiveGatesReady(confirmedStatus, flightVariant, dualPlaneAshlrLayerAttested)) {
@@ -601,12 +636,13 @@ function App() {
     if (!bridge || !flightStartedAt || flightPhase !== 'active') return
     if (flightRun.current.invalidated || flightInvalidatedRun === flightRequest.current || !flightLiveGatesReady(status, flightVariant, dualPlaneAshlrLayerAttested)) return
     const request = flightRequest.current
-    const selectedSteps = stepsForVariant(flightVariant)
-    const acceptance = flightAcceptance(flightVariant, flightEvents, status.boardConnected, status.shortcutCount, hardware.bindableSignals)
+    const selectedSteps = stepsForVariant(flightVariant, status.boardRoute)
+    const routeShortcutCount = shortcutCountForRoute(status.boardRoute)
+    const acceptance = flightAcceptance(flightVariant, flightEvents, status.boardConnected, status.shortcutCount, routeShortcutCount, status.boardRoute)
     const missing = selectedSteps.filter((step) => !flightStepComplete(step, flightEvents)).flatMap((step) => step.signals)
     const receipt = {
       schemaVersion: 1,
-      device: { name: hardware.name, usbName: hardware.usbName, expectedSignals: hardware.bindableSignals },
+      device: { name: hardware.name, usbName: hardware.usbName, expectedSignals: routeShortcutCount },
       status: acceptance.passed ? 'passed' : acceptance.routesComplete ? 'failed' : 'incomplete',
       profileKind: flightVariant,
       startedAt: flightStartedAt,
@@ -650,6 +686,8 @@ function App() {
   }, [dualPlaneAshlrLayerAttestedAt, flightPhase])
 
   const nativeRoute = status.boardRoute === 'codex_native'
+  const hybridRoute = status.boardRoute === 'hybrid_native'
+  const nativeAgentKeys = nativeRoute || hybridRoute
   const nativeEvidenceFresh = nativeCodexMicro.fresh === true
   const nativeControlContextKey = JSON.stringify([
     status.boardRoute,
@@ -668,7 +706,9 @@ function App() {
     return () => { current = false }
   }, [bridge, nativeControlContextKey, nativeRoute])
   const nativePill = status.boardRoute !== 'codex_native'
-    ? { label: status.boardRoute === 'ashlr_layer' ? 'Native not in use' : 'Native route not selected', tone: 'off' as const }
+    ? hybridRoute
+      ? { label: 'Native Agent keys unproven', tone: 'warn' as const }
+      : { label: status.boardRoute === 'ashlr_layer' ? 'Native not in use' : 'Native route not selected', tone: 'off' as const }
     : nativeCodexMicro.status === 'connected' && nativeEvidenceFresh
       ? { label: 'Native initialization inferred', tone: 'warn' as const }
       : nativeCodexMicro.status === 'firmware_rpc_missing'
@@ -768,6 +808,8 @@ function App() {
           <div className={`profile-rail-note route-${status.boardRoute}`} aria-live="polite">
             {status.boardRoute === 'ashlr_layer'
               ? 'JOYSTICK ← → CHANGES LENS · ↑ ↓ RUNS LENS ACTIONS'
+              : status.boardRoute === 'hybrid_native'
+                ? 'AG00–05 CODEX NATIVE · 14 WORKFLOW GESTURES ASHLR'
               : status.boardRoute === 'codex_native'
                 ? 'JOYSTICK OWNED BY CODEX · SCREEN TWIN DISABLED'
                 : 'CHOOSE A BOARD ROUTE · SCREEN TWIN IS PREVIEW ONLY'}
@@ -777,7 +819,7 @@ function App() {
 
         <BoardRouteRail route={status.boardRoute} saving={routeSaving} error={routeError} onChange={(route) => void declareBoardRoute(route)} />
 
-        <div className="readiness-ribbon">
+        <div className={`readiness-ribbon route-${status.boardRoute}`}>
           <span className={status.boardConnected ? 'check observed' : 'check'}><Keyboard size={12} /> {status.boardConnected ? 'USB identity only · controls unproven' : 'USB identity not observed'}</span>
           {status.boardRoute === 'codex_native' ? <>
             <span className={chatgptDesktop.status === 'metadata_observed' ? 'check observed' : 'check warn'}><Sparkles size={12} /> {chatgptDesktop.status === 'metadata_observed' ? `ChatGPT Desktop ${chatgptDesktop.version ?? ''} metadata observed`.replace('  ', ' ') : chatgptDesktop.status === 'missing' ? 'ChatGPT Desktop not found' : 'ChatGPT Desktop metadata unavailable'}</span>
@@ -786,13 +828,19 @@ function App() {
             <span className={status.shortcutCount === hardware.bindableSignals ? 'check ready' : 'check'}><Check size={12} /> {status.shortcutCount}/{hardware.bindableSignals} desktop endpoints registered</span>
             <span className={inputInstallationReady ? 'check ready' : 'check warn'}><Check size={12} /> {inputInstallationReady ? `Input app integrity ${inputInstallation.version ?? ''} verified`.replace('  ', ' ') : inputInstallationDescription.state}</span>
             <span className={receiverExclusive ? 'check ready' : 'check warn'}><ShieldCheck size={12} /> {receiverExclusive ? 'One shortcut receiver' : receiverRuntime.status === 'unavailable' ? 'Receiver ownership unavailable' : `${receiverRuntime.instanceCount} receivers · ownership disabled`}</span>
+          </> : status.boardRoute === 'hybrid_native' ? <>
+            <span className={status.shortcutCount === HYBRID_SHORTCUT_COUNT ? 'check ready' : 'check warn'}><Check size={12} /> {status.shortcutCount}/{HYBRID_SHORTCUT_COUNT} Ashlr workflow endpoints registered</span>
+            <span className={hybridNativeInputProfileConfigured(status.inputProfile ?? initialStatus.inputProfile) ? 'check observed' : 'check warn'}><ShieldCheck size={12} /> {hybridNativeInputProfileConfigured(status.inputProfile ?? initialStatus.inputProfile) ? 'Exact hybrid profile cache verified' : 'Exact hybrid profile unverified'}</span>
+            <span className={status.inputApplication?.status === 'not_running' ? 'check ready' : 'check warn'}><CircleStop size={12} /> {status.inputApplication?.status === 'not_running' ? 'Input quit · shortcut ownership available' : status.inputApplication?.status === 'running' ? 'Input running · shortcuts disabled' : 'Input process state unavailable · shortcuts disabled'}</span>
+            <span className="check warn"><Sparkles size={12} /> 6 native Agent keys · no hybrid native receipt</span>
           </> : <span className="check warn"><ShieldCheck size={12} /> Select a board route before commissioning</span>}
           {status.workspaceSnapshot?.isGit && <span className={!status.workspaceSnapshot.statusKnown || status.workspaceSnapshot.dirtyFiles ? 'check warn' : 'check ready'}><GitBranch size={12} /> {status.workspaceSnapshot.branch} · {!status.workspaceSnapshot.statusKnown ? 'status unknown' : status.workspaceSnapshot.dirtyFiles ? `${status.workspaceSnapshot.dirtyFiles} changed` : 'clean'}</span>}
-          <span className="check"><Keyboard size={12} /> {status.boardRoute === 'codex_native' ? 'Native profile: operator verification required' : status.boardRoute === 'ashlr_layer' ? 'Ashlr layer: physical check required' : 'Physical route: not selected'}</span>
-          <button type="button" onClick={() => changeView('setup')}><span className="attention-dot" /> {status.boardRoute === 'codex_native' ? 'Open native acceptance handoff' : status.boardRoute === 'ashlr_layer' ? 'Input Monitoring needs human verification' : 'Choose a route in Setup'} <ChevronRight size={13} /></button>
+          <span className="check"><Keyboard size={12} /> {status.boardRoute === 'codex_native' ? 'Native profile: operator verification required' : status.boardRoute === 'ashlr_layer' ? 'Ashlr layer: physical check required' : status.boardRoute === 'hybrid_native' ? 'Split route: both planes require separate acceptance' : 'Physical route: not selected'}</span>
+          <button type="button" onClick={() => changeView('setup')}><span className="attention-dot" /> {status.boardRoute === 'codex_native' ? 'Open native acceptance handoff' : status.boardRoute === 'ashlr_layer' ? 'Input Monitoring needs human verification' : status.boardRoute === 'hybrid_native' ? 'Open hybrid acceptance gates' : 'Choose a route in Setup'} <ChevronRight size={13} /></button>
         </div>
 
         {nativeRoute && <NativeRouteTruth status={status} receipt={nativeControlReceipt} onOpenSetup={() => changeView('setup')} />}
+        {hybridRoute && <HybridRouteTruth status={status} onOpenSetup={() => changeView('setup')} />}
 
         <div className="mission-control-grid">
           <AttentionDeck agents={mission.agents} selectedSlot={selectedAgentSlot} source={mission.agentSource} boardRoute={status.boardRoute} onSelect={setSelectedAgentSlot} onFocus={(slot) => void focusAgentSlot(slot)} />
@@ -810,8 +858,9 @@ function App() {
             </div>
 
             {nativeRoute && <div className="native-observer-note"><ShieldCheck size={15} /><span><strong>Codex Native observer only.</strong> This Ashlr twin does not represent Codex’s native key map or RGB, and its mapped actions are disabled.</span></div>}
+            {hybridRoute && <div className="native-observer-note hybrid"><ShieldCheck size={15} /><span><strong>Experimental split ownership.</strong> AG00–AG05 stay Codex-native and disabled in this twin; exactly 14 workflow gestures use the Ashlr shortcut receiver. Input must remain quit. Exact Claude task or cmux pane focus is not claimed.</span></div>}
             <div className={nativeRoute ? 'deck-and-trace native-observer' : 'deck-and-trace'}>
-              <div className="device-frame" aria-label={`Creator Micro 2 screen twin with black caps and transparent ACT12${nativeRoute ? '; disabled while Codex Native owns the controls' : ''}`} aria-disabled={nativeRoute}>
+              <div className="device-frame" aria-label={`Creator Micro 2 screen twin with black caps and transparent ACT12${nativeRoute ? '; disabled while Codex Native owns the controls' : hybridRoute ? '; six Agent keys are disabled because Codex owns them' : ''}`} aria-disabled={nativeRoute || undefined}>
                 <div className="device-inner">
                   <span className="case-copy left">Work Louder | Creator Micro 2</span>
                   <span className="case-copy right">Screen legend</span>
@@ -820,10 +869,10 @@ function App() {
                   <span className="case-screw tl" /><span className="case-screw tr" /><span className="case-screw bl" /><span className="case-screw br" />
                   <div className="hardware-grid">
                     <Dial active={activeControl} onSelect={selectControl} showIds={showIds} disabled={nativeRoute} />
-                    <BoardKey control="agent1" action={actions[profile.mapping.agent1]} agent={mission.agents[0]} active={activeControl === 'agent1'} onSelect={selectControl} kind="agent" showIds={showIds} disabled={nativeRoute} />
-                    <BoardKey control="agent2" action={actions[profile.mapping.agent2]} agent={mission.agents[1]} active={activeControl === 'agent2'} onSelect={selectControl} kind="agent" showIds={showIds} disabled={nativeRoute} />
+                    <BoardKey control="agent1" action={actions[profile.mapping.agent1]} agent={mission.agents[0]} active={activeControl === 'agent1'} onSelect={selectControl} kind="agent" showIds={showIds} disabled={nativeAgentKeys} />
+                    <BoardKey control="agent2" action={actions[profile.mapping.agent2]} agent={mission.agents[1]} active={activeControl === 'agent2'} onSelect={selectControl} kind="agent" showIds={showIds} disabled={nativeAgentKeys} />
                     <Joystick active={activeControl} onSelect={selectControl} showIds={showIds} disabled={nativeRoute} />
-                    {(['agent3', 'agent4', 'agent5', 'agent6'] as ControlId[]).map((control, index) => <BoardKey key={control} control={control} action={actions[profile.mapping[control]]} agent={mission.agents[index + 2]} active={activeControl === control} onSelect={selectControl} kind="agent" showIds={showIds} disabled={nativeRoute} />)}
+                    {(['agent3', 'agent4', 'agent5', 'agent6'] as ControlId[]).map((control, index) => <BoardKey key={control} control={control} action={actions[profile.mapping[control]]} agent={mission.agents[index + 2]} active={activeControl === control} onSelect={selectControl} kind="agent" showIds={showIds} disabled={nativeAgentKeys} />)}
                     <BoardKey control="cmd1" action={actions[profile.mapping.cmd1]} active={activeControl === 'cmd1'} onSelect={selectControl} kind="action" factoryIcon={<Zap />} showIds={showIds} disabled={nativeRoute} />
                     <BoardKey control="cmd2" action={actions[profile.mapping.cmd2]} active={activeControl === 'cmd2'} onSelect={selectControl} kind="action" factoryIcon={<CircleCheck />} showIds={showIds} disabled={nativeRoute} />
                     <BoardKey control="cmd3" action={actions[profile.mapping.cmd3]} active={activeControl === 'cmd3'} onSelect={selectControl} kind="action" factoryIcon={<CircleX />} showIds={showIds} disabled={nativeRoute} />
@@ -928,9 +977,32 @@ function NativeRouteTruth({ status, receipt, onOpenSetup }: { status: SystemStat
   </section>
 }
 
+function HybridRouteTruth({ status, onOpenSetup }: { status: SystemStatus; onOpenSetup: () => void }) {
+  const profileExact = hybridNativeInputProfileConfigured(status.inputProfile ?? initialStatus.inputProfile)
+  const inputQuit = status.inputApplication?.status === 'not_running'
+  const shortcutsExact = status.shortcutCount === HYBRID_SHORTCUT_COUNT
+  return <section className="native-route-truth hybrid" role="region" aria-labelledby="hybrid-route-truth-title">
+    <div className="native-truth-heading">
+      <div>
+        <span className="eyebrow">HYBRID NATIVE / SPLIT EVIDENCE</span>
+        <h2 id="hybrid-route-truth-title">Two owners. Two proofs.</h2>
+        <p>Codex owns the six Agent keys. Agent Board owns exactly 14 workflow gestures. Neither plane proves the other.</p>
+      </div>
+      <button type="button" onClick={onOpenSetup}>Open hybrid gates <ChevronRight size={14} /></button>
+    </div>
+    <ol className="native-truth-grid">
+      <li className={status.boardConnected ? 'observed' : 'problem'}><span>01 · Transport</span><strong>{status.boardConnected ? 'USB identity observed' : 'USB identity not observed'}</strong><small>Detection alone proves no key response.</small></li>
+      <li className={profileExact ? 'observed' : 'problem'}><span>02 · Exact profile</span><strong>{profileExact ? 'Hybrid cache verified' : 'Hybrid profile unverified'}</strong><small>Read-only cache evidence; device sync and selected layer remain unproven.</small></li>
+      <li className={inputQuit && shortcutsExact ? 'observed' : 'problem'}><span>03 · Ashlr workflow plane</span><strong>{inputQuit ? `${status.shortcutCount}/${HYBRID_SHORTCUT_COUNT} endpoints registered` : 'Input must be quit'}</strong><small>Flight Check must physically accept ACT06–ACT12, stick, and dial.</small></li>
+      <li className="pending"><span>04 · Codex Agent plane</span><strong>AG00–AG05 unproven</strong><small>No hybrid native receipt is available. Do not infer exact task focus or RGB from USB, cache, or shortcuts.</small></li>
+    </ol>
+  </section>
+}
+
 const boardRouteOptions: Array<{ id: BoardRoute; label: string; detail: string }> = [
   { id: 'unknown', label: 'Not selected', detail: 'No physical route is inferred.' },
   { id: 'ashlr_layer', label: 'Ashlr Layer · recommended', detail: 'Codex + Claude Code/cmux; Input sends shared shortcuts.' },
+  { id: 'hybrid_native', label: 'Hybrid Native · experimental', detail: '6 Codex Agent keys + 14 Ashlr workflow gestures; Input quit.' },
   { id: 'codex_native', label: 'Codex Native', detail: 'Codex Desktop only; Codex owns keys and lighting.' },
 ]
 
@@ -1022,8 +1094,13 @@ function ActionConsole({ activeControl, action, result, approval, isRunning, hol
   onRun: () => void; onConfirm: (token: string) => void; onBeginHold: () => void; onCancelHold: () => void; onCancelApproval: () => void; onChooseWorkspace: () => void
 }) {
   const snapshot = workspaceSnapshot
-  const mappedActionsDisabled = boardRoute !== 'ashlr_layer'
-  const mappedActionsLabel = boardRoute === 'codex_native' ? 'Disabled in Codex Native' : 'Select Ashlr Layer for mapped actions'
+  const hybridNativeAgent = boardRoute === 'hybrid_native' && agentControls.has(activeControl)
+  const mappedActionsDisabled = (boardRoute !== 'ashlr_layer' && boardRoute !== 'hybrid_native') || hybridNativeAgent
+  const mappedActionsLabel = boardRoute === 'codex_native'
+    ? 'Disabled in Codex Native'
+    : hybridNativeAgent
+      ? 'Codex-native Agent key · no Ashlr action'
+      : 'Select Ashlr Layer for mapped actions'
   return <aside className="action-console">
     <div className="console-head">
       <div><span className="eyebrow">SELECTED PHYSICAL SIGNAL</span><span className="binding">{hardwareIds[activeControl]} <i /> {controls.hotkeys[activeControl]}</span><span className="last-signal">Last hardware receipt: {lastPhysicalSignal ? formatClock(lastPhysicalSignal) : 'never'}</span></div>
@@ -1110,12 +1187,13 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
     const timer = window.setInterval(() => setClock(Date.now()), 1_000)
     return () => window.clearInterval(timer)
   }, [active, events.length, startedAt])
-  const selectedSteps = stepsForVariant(variant)
-  const expectedSignals = 20
+  const hybridRoute = status.boardRoute === 'hybrid_native'
+  const selectedSteps = stepsForVariant(variant, status.boardRoute)
+  const expectedSignals = shortcutCountForRoute(status.boardRoute)
   const expectedGestures = selectedSteps.length
   const completedGestures = selectedSteps.filter((step) => flightStepComplete(step, events)).length
   const completedSignals = selectedSteps.filter((step) => flightStepComplete(step, events)).reduce((count, step) => count + step.signals.length, 0)
-  const acceptance = flightAcceptance(variant, events, status.boardConnected, status.shortcutCount, hardware.bindableSignals)
+  const acceptance = flightAcceptance(variant, events, status.boardConnected, status.shortcutCount, expectedSignals, status.boardRoute)
   const routesComplete = acceptance.routesComplete
   const nextStep = selectedSteps.find((step) => !flightStepComplete(step, events))
   const progress = Math.round((completedSignals / expectedSignals) * 100)
@@ -1128,25 +1206,30 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
   const inputInstallationReady = verifiedInputInstallation(inputInstallation)
   const receiverExclusive = exclusiveReceiverRuntime(receiverRuntime)
   const dualPlaneConfigured = dualPlaneInputProfileConfigured(currentInputProfile)
-  const hardwareReady = status.boardRoute === 'ashlr_layer' && status.boardConnected && inputInstallationReady && receiverExclusive && status.shortcutCount === hardware.bindableSignals
-  const dailyPreflightReady = hardwareReady && correctedInputProfileObservedForVariant(currentInputProfile, 'daily', dualPlaneAshlrLayerAttested)
-  const diagnosticPreflightReady = hardwareReady && correctedInputProfileObservedForVariant(currentInputProfile, 'diagnostic')
+  const inputQuitForHybrid = status.inputApplication?.status === 'not_running'
+  const hardwareReady = (status.boardRoute === 'ashlr_layer' || hybridRoute) && status.boardConnected && inputInstallationReady && receiverExclusive && status.shortcutCount === expectedSignals
+  const dailyPreflightReady = hardwareReady && (hybridRoute
+    ? inputQuitForHybrid && hybridNativeInputProfileConfigured(currentInputProfile)
+    : correctedInputProfileObservedForVariant(currentInputProfile, 'daily', dualPlaneAshlrLayerAttested))
+  const diagnosticPreflightReady = !hybridRoute && hardwareReady && correctedInputProfileObservedForVariant(currentInputProfile, 'diagnostic')
   const preflightReady = dailyPreflightReady || diagnosticPreflightReady
   const selectedVariantReady = variant === 'daily' ? dailyPreflightReady : diagnosticPreflightReady
   const runUnderTest = phase !== 'inactive' || startedAt !== null || events.length > 0
   const currentGateFailure = runUnderTest && !selectedVariantReady
   const runInvalidated = liveGateInvalidated || currentGateFailure
   const complete = phase === 'active' && acceptance.passed && selectedVariantReady && !runInvalidated
-  const profileBlocked = !correctedInputProfileObservedForVariant(currentInputProfile, variant, dualPlaneAshlrLayerAttested)
+  const profileBlocked = hybridRoute
+    ? !hybridNativeInputProfileConfigured(currentInputProfile)
+    : !correctedInputProfileObservedForVariant(currentInputProfile, variant, dualPlaneAshlrLayerAttested)
   const runCannotPass = problems.length > 0 || runInvalidated
   const concurrentCodexTraffic = status.inputRuntime?.codexProtocolTraffic?.status === 'recurring_unresolved_response'
     && status.inputRuntime.codexProtocolTraffic.fresh
-  const phaseLabel = active ? 'ASHLR ACTIONS SUPPRESSED · NATIVE PATH NOT INTERCEPTED' : phase === 'arming' ? 'ARMING ASHLR INTERLOCK' : phase === 'disarming' ? 'RELEASING ASHLR INTERLOCK' : phase === 'error' ? 'ASHLR INTERLOCK UNVERIFIED' : status.boardRoute === 'ashlr_layer' ? 'ASHLR ACTIONS ENABLED' : 'ASHLR ACTIONS DISABLED'
+  const phaseLabel = active ? 'ASHLR ACTIONS SUPPRESSED · NATIVE PATH NOT INTERCEPTED' : phase === 'arming' ? 'ARMING ASHLR INTERLOCK' : phase === 'disarming' ? 'RELEASING ASHLR INTERLOCK' : phase === 'error' ? 'ASHLR INTERLOCK UNVERIFIED' : status.boardRoute === 'ashlr_layer' ? 'ASHLR ACTIONS ENABLED' : hybridRoute ? '14 ASHLR GESTURES ENABLED · 6 NATIVE KEYS UNPROVEN' : 'ASHLR ACTIONS DISABLED'
   const blockedCompletion = routesComplete && !complete
   const showNoSignalRecovery = noSignalRecoveryNeeded(active, startedAt, events, clock)
   return <section className="flight-view">
     <div className="flight-hero">
-      <div><span className="eyebrow">HARDWARE ACCEPTANCE / {phaseLabel}</span><h2>{nativeRoute ? 'Flight Check belongs to Ashlr Layer.' : complete ? 'Every signal is accounted for.' : blockedCompletion ? 'Acceptance is blocked by evidence.' : active ? 'Prove the physical path.' : phase === 'arming' ? 'Establishing the safety barrier…' : 'Run a safe Flight Check.'}</h2><p>{nativeRoute ? 'This receipt validates Work Louder Input shortcuts, not Codex’s native keys or lighting. Keep Codex Native declared so Agent Board remains passive, quit Work Louder Input, restart ChatGPT Desktop, then verify Settings → Creator Micro.' : 'Press the real board controls only after the app confirms Ashlr Actions Suppressed. Native Codex HID is never intercepted. For a Dual Plane profile, first use the bottom-left touch selector to choose Ashlr layer 2. The board twin and mouse clicks do not count; ordinary keyboard use can generate the same shortcuts, so keep your hands on the board during acceptance.'}</p></div>
+      <div><span className="eyebrow">HARDWARE ACCEPTANCE / {phaseLabel}</span><h2>{nativeRoute ? 'Flight Check belongs to Ashlr Layer.' : complete ? 'Every signal is accounted for.' : blockedCompletion ? 'Acceptance is blocked by evidence.' : active ? 'Prove the physical path.' : phase === 'arming' ? 'Establishing the safety barrier…' : hybridRoute ? 'Prove the 14-gesture workflow plane.' : 'Run a safe Flight Check.'}</h2><p>{nativeRoute ? 'This receipt validates Work Louder Input shortcuts, not Codex’s native keys or lighting. Keep Codex Native declared so Agent Board remains passive, quit Work Louder Input, restart ChatGPT Desktop, then verify Settings → Creator Micro.' : hybridRoute ? 'This check intercepts only ACT06–ACT12, the four stick directions, and three dial gestures while Ashlr actions are suppressed. Work Louder Input must be quit. AG00–AG05 remain Codex-native and require a separate fresh native receipt; this check never claims exact Codex task focus, Claude task focus, or cmux pane focus.' : 'Press the real board controls only after the app confirms Ashlr Actions Suppressed. Native Codex HID is never intercepted. For a Dual Plane profile, first use the bottom-left touch selector to choose Ashlr layer 2. The board twin and mouse clicks do not count; ordinary keyboard use can generate the same shortcuts, so keep your hands on the board during acceptance.'}</p></div>
       <div className={complete ? 'flight-score complete' : 'flight-score'} role="progressbar" aria-label="Physical Flight Check progress" aria-valuemin={0} aria-valuemax={expectedSignals} aria-valuenow={completedSignals} aria-valuetext={`${completedSignals} of ${expectedSignals} routed signals; ${completedGestures} of ${expectedGestures} gestures complete`}><strong>{completedSignals}<small>/{expectedSignals}</small></strong><span>{completedGestures}/{expectedGestures} gestures</span><i aria-hidden="true" style={{ '--flight-progress': `${progress}%` } as React.CSSProperties} /></div>
     </div>
 
@@ -1154,10 +1237,10 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
       <div className="flight-sequence">
         <div className="flight-prompt">
           <div className={complete ? 'prompt-icon complete' : active ? 'prompt-icon live' : 'prompt-icon'}>{complete ? <Check /> : active ? <Activity /> : <Keyboard />}</div>
-          <div><span className="eyebrow">{complete ? 'ACCEPTANCE PASSED' : runCannotPass ? 'THIS RUN CANNOT PASS' : blockedCompletion ? 'ACCEPTANCE FAILED' : active ? 'NEXT PHYSICAL GESTURE' : phase === 'arming' ? 'WAIT FOR INTERLOCK' : 'READY WHEN YOU ARE'}</span><h3>{complete ? `${expectedSignals} routed signals received` : runInvalidated ? 'A live acceptance gate changed' : runCannotPass ? 'A signal arrived out of order' : blockedCompletion ? 'Resolve the recorded blockers and restart' : active && nextStep ? nextStep.label : preflightReady ? 'Start a clean receipt' : 'Complete preflight first'}</h3><p>{complete ? 'ACT10 and ACT11 each reported from their own physical key.' : runInvalidated ? 'USB, Input trust, receiver ownership, the declared route, the exact selected profile, or desktop endpoint readiness changed during this run. Recover every gate, then end and restart; this run cannot become passing.' : runCannotPass ? `${problems.length} misroute recorded. Restart to clear this failed evidence; continuing cannot produce a passing receipt.` : blockedCompletion ? `${problems.length} misroutes; USB ${status.boardConnected ? 'present' : 'absent'}; shortcuts ${status.shortcutCount}/${hardware.bindableSignals}.` : active && nextStep ? nextStep.instruction : phase === 'arming' ? 'Do not touch the board until the main process acknowledges action suppression.' : preflightReady ? 'This clears prior observations and temporarily turns every shortcut into a no-op test signal.' : receiverRuntime.status === 'unavailable' ? 'Agent Board could not verify shortcut receiver ownership, so Flight Check is disabled. Refresh Setup; do not assume this copy owns the shortcuts.' : !receiverExclusive ? 'Multiple Agent Board receivers are running, so shortcut ownership is disabled. Fully quit every copy manually, then reopen one exact build.' : !inputInstallationReady ? inputInstallationDescription.guidance : profileBlocked ? status.inputProfile?.encoderDirection === 'reversed' ? 'The active Input receipt has clockwise and counterclockwise reversed. Open Setup and create the corrected profile before Flight Check.' : 'Flight Check requires Ashlr Agent Board Corrected, Ashlr Daily, and a corrected encoder receipt. Open Setup to finish profile recovery.' : `USB must be present and all ${hardware.bindableSignals} desktop endpoints must be registered before physical acceptance starts.`}</p></div>
+          <div><span className="eyebrow">{complete ? 'ACCEPTANCE PASSED' : runCannotPass ? 'THIS RUN CANNOT PASS' : blockedCompletion ? 'ACCEPTANCE FAILED' : active ? 'NEXT PHYSICAL GESTURE' : phase === 'arming' ? 'WAIT FOR INTERLOCK' : 'READY WHEN YOU ARE'}</span><h3>{complete ? `${expectedSignals} routed signals received` : runInvalidated ? 'A live acceptance gate changed' : runCannotPass ? 'A signal arrived out of order' : blockedCompletion ? 'Resolve the recorded blockers and restart' : active && nextStep ? nextStep.label : preflightReady ? 'Start a clean receipt' : 'Complete preflight first'}</h3><p>{complete ? hybridRoute ? 'All 14 Ashlr-owned workflow gestures reported. The six native Agent keys remain separately unproven.' : 'ACT10 and ACT11 each reported from their own physical key.' : runInvalidated ? 'USB, Input trust, Input process state, receiver ownership, the declared route, the exact selected profile, or desktop endpoint readiness changed during this run. Recover every gate, then end and restart; this run cannot become passing.' : runCannotPass ? `${problems.length} misroute recorded. Restart to clear this failed evidence; continuing cannot produce a passing receipt.` : blockedCompletion ? `${problems.length} misroutes; USB ${status.boardConnected ? 'present' : 'absent'}; shortcuts ${status.shortcutCount}/${expectedSignals}.` : active && nextStep ? nextStep.instruction : phase === 'arming' ? 'Do not touch the board until the main process acknowledges action suppression.' : preflightReady ? 'This clears prior observations and temporarily turns every owned shortcut into a no-op test signal.' : receiverRuntime.status === 'unavailable' ? 'Agent Board could not verify shortcut receiver ownership, so Flight Check is disabled. Refresh Setup; do not assume this copy owns the shortcuts.' : !receiverExclusive ? 'Multiple Agent Board receivers are running, so shortcut ownership is disabled. Fully quit every copy manually, then reopen one exact build.' : !inputInstallationReady ? inputInstallationDescription.guidance : hybridRoute && !inputQuitForHybrid ? 'Fully quit Work Louder Input, refresh Setup, and require a not-running observation. Hybrid shortcuts remain fail-closed otherwise.' : profileBlocked ? hybridRoute ? 'Hybrid Flight Check requires an exact verified hybrid profile cache. Follow the experimental offline profile guide, then return without leaving Input running.' : status.inputProfile?.encoderDirection === 'reversed' ? 'The active Input receipt has clockwise and counterclockwise reversed. Open Setup and create the corrected profile before Flight Check.' : 'Flight Check requires Ashlr Agent Board Corrected, Ashlr Daily, and a corrected encoder receipt. Open Setup to finish profile recovery.' : `USB must be present and all ${expectedSignals} desktop endpoints must be registered before physical acceptance starts.`}</p></div>
           {phase === 'inactive' && !complete && <div className="flight-start-actions">
-            {dualPlaneConfigured && <label className="dual-plane-attestation"><input type="checkbox" checked={dualPlaneAshlrLayerAttested} onChange={(event) => onDualPlaneAshlrLayerAttested(event.target.checked)} /><span>I just proved native layer 1, then short-tapped the bottom-left touch selector exactly once to reach Ashlr layer 2.</span></label>}
-            <button type="button" disabled={!dailyPreflightReady} onClick={() => onStart('daily')}><Play size={15} /> Daily profile</button><button type="button" disabled={!diagnosticPreflightReady} onClick={() => onStart('diagnostic')}>20-signal diagnostic</button>
+            {dualPlaneConfigured && !hybridRoute && <label className="dual-plane-attestation"><input type="checkbox" checked={dualPlaneAshlrLayerAttested} onChange={(event) => onDualPlaneAshlrLayerAttested(event.target.checked)} /><span>Operator self-attestation: within the last 30 seconds, I personally observed native layer 1 working, then short-tapped the bottom-left touch selector exactly once toward Ashlr layer 2. The app cannot observe this touch or selected layer.</span></label>}
+            <button type="button" disabled={!dailyPreflightReady} onClick={() => onStart('daily')}><Play size={15} /> {hybridRoute ? '14-gesture hybrid check' : 'Daily profile'}</button>{!hybridRoute && <button type="button" disabled={!diagnosticPreflightReady} onClick={() => onStart('diagnostic')}>20-signal diagnostic</button>}
           </div>}
           {active && runCannotPass && <div className="flight-start-actions"><button type="button" className="stop-flight" disabled={!selectedVariantReady} onClick={onRestart}><RotateCcw size={15} /> {selectedVariantReady ? dualPlaneConfigured ? 'End and re-establish layers' : 'End and restart' : 'Recover gates to restart'}</button><button type="button" className="stop-flight" onClick={onStop}><CircleStop size={15} /> End invalidated check</button></div>}
           {active && !complete && !runCannotPass && <button type="button" className="stop-flight" onClick={onStop}><CircleStop size={15} /> End check</button>}
@@ -1182,10 +1265,11 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
         <span className="eyebrow">LIVE RECEIPT</span><h3>{status.boardConnected ? 'USB identity observed — controls unproven' : 'USB identity not observed'}</h3>
         <dl>
           <div><dt>USB</dt><dd className={status.boardConnected ? 'observed' : ''}>{status.boardConnected ? 'Identity observed' : 'Not observed'}</dd></div>
-          <div><dt>Shortcuts</dt><dd className={status.shortcutCount === hardware.bindableSignals ? 'ready' : ''}>{status.shortcutCount}/20</dd></div>
+          <div><dt>Shortcuts</dt><dd className={status.shortcutCount === expectedSignals ? 'ready' : ''}>{status.shortcutCount}/{expectedSignals}</dd></div>
+          {hybridRoute && <div><dt>Input app</dt><dd className={inputQuitForHybrid ? 'ready' : 'problem'}>{inputQuitForHybrid ? 'Quit' : status.inputApplication?.status === 'running' ? 'Running · blocked' : 'Unverified · blocked'}</dd></div>}
           <div><dt>Receiver</dt><dd className={receiverExclusive ? 'ready' : 'problem'}>{receiverExclusive ? 'Exclusive' : receiverRuntime.status === 'unavailable' ? 'Unavailable' : 'Contended'}</dd></div>
           <div><dt>Started</dt><dd>{startedAt ? formatClock(new Date(startedAt)) : 'Not started'}</dd></div>
-          <div><dt>Ashlr mapped actions</dt><dd className={active ? 'safe' : phase === 'error' ? 'problem' : ''}>{active ? 'Suppressed · native path untouched' : phase === 'arming' ? 'Arming' : phase === 'disarming' ? 'Releasing' : phase === 'error' ? 'Unverified' : status.boardRoute === 'ashlr_layer' ? 'Enabled' : 'Disabled'}</dd></div>
+          <div><dt>Ashlr mapped actions</dt><dd className={active ? 'safe' : phase === 'error' ? 'problem' : ''}>{active ? 'Suppressed · native path untouched' : phase === 'arming' ? 'Arming' : phase === 'disarming' ? 'Releasing' : phase === 'error' ? 'Unverified' : status.boardRoute === 'ashlr_layer' ? '20 enabled' : hybridRoute ? '14 enabled · 6 native' : 'Disabled'}</dd></div>
           <div><dt>Raw receipts</dt><dd className={events.length ? 'ready' : ''}>{events.length}</dd></div>
           <div><dt>Misroutes</dt><dd className={problems.length ? 'problem' : 'ready'}>{problems.length}</dd></div>
         </dl>
@@ -1197,13 +1281,15 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
           <strong>No physical shortcut arrived</strong>
           <p>{concurrentCodexTraffic
             ? <>Input is currently receiving recurring Codex-protocol responses, so this check is not an exclusive Input-only window. This proves co-presence, not ownership or cause. End the check, then follow the recovery checklist; no application was automatically quit.</>
-            : <>Use the top-left rotary dial—not the bottom-left layer and connection selector. If the Dual Plane profile is current, end the check, re-establish and prove native layer 1, then short-tap exactly once to Ashlr layer 2 and provide a fresh attestation. Never infer the selected layer from a zero-signal run. Otherwise open verified Work Louder Input alone, set the intended profile current, fully quit Input, and run a fresh check. Do not jump to firmware from one zero-signal receipt.</>}</p>
+            : hybridRoute
+              ? <>Hybrid Native must keep Work Louder Input fully quit. Confirm the exact hybrid cache, then press ACT06 first; this check intentionally ignores AG00–AG05. Never infer selected content or native Agent-key function from a zero-signal run.</>
+              : <>Use the top-left rotary dial—not the bottom-left layer and connection selector. If the Dual Plane profile is current, end the check, re-establish and prove native layer 1, then short-tap exactly once to Ashlr layer 2 and provide a fresh attestation. Never infer the selected layer from a zero-signal run. Otherwise open verified Work Louder Input alone, set the intended profile current, fully quit Input, and run a fresh check. Do not jump to firmware from one zero-signal receipt.</>}</p>
           <button type="button" onClick={onSetup}>Open recovery checklist</button>
         </div>}
         {exportPath && !runInvalidated && <div className="exported-receipt"><Check size={14} /><span>Receipt saved</span><code title={exportPath}>{exportPath}</code></div>}
         {!status.boardConnected && <button type="button" className="flight-secondary" onClick={onSetup}>Open connection setup</button>}
         {complete && <button type="button" className="flight-secondary" onClick={onOperate}>Start operating</button>}
-        <p className="flight-caveat"><ShieldCheck size={13} /> Both profiles expect separate ACT10 and ACT11 key presses. A passing receipt does not validate native Codex RGB or authorize consequential actions.</p>
+        <p className="flight-caveat"><ShieldCheck size={13} /> ACT10 and ACT11 are separate physical keys. A passing {hybridRoute ? '14-gesture hybrid' : 'Ashlr'} receipt does not validate AG00–AG05, native Codex task focus/RGB, exact Claude task or cmux pane focus, or authorize consequential actions.</p>
       </aside>
     </div>
   </section>
@@ -1255,8 +1341,12 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
   const recentCodexTraffic = inputRuntime.codexProtocolTraffic?.status === 'recurring_unresolved_response'
     && inputRuntime.codexProtocolTraffic.fresh
   const dualPlaneProfileObserved = dualPlaneInputProfileConfigured(inputProfile)
+  const hybridProfileObserved = hybridNativeInputProfileConfigured(inputProfile)
+  const inputApplicationStatus = status.inputApplication?.status ?? 'unavailable'
   const observedInputProfile = inputProfile.activeProfile && inputProfile.activeLayer
     ? `${inputProfile.activeProfile} · ${inputProfile.activeLayer}`
+    : hybridProfileObserved
+      ? `${inputProfile.activeProfile} · Hybrid Native 1 + Ashlr Daily 2`
     : dualPlaneProfileObserved
       ? `${inputProfile.activeProfile} · Native 1 + Ashlr 2`
       : inputProfile.activeProfile
@@ -1286,6 +1376,15 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
     { number: '06', title: "Inspect Input's cached profile", detail: !inputInstallationReady ? 'Profile repair, import, activation, and synchronization stay paused until the installed Input copy passes publisher, signature, and Gatekeeper verification.' : inputProfile.encoderDirection === 'reversed' ? 'The read-only Input cache shows the known clockwise/counterclockwise inversion. Import and activate the uniquely named corrected profile through Input before restarting Flight Check.' : dualPlaneProfileObserved ? 'The current profile contains an exact native layer first and exact Ashlr Daily layer second. Input does not expose the selected firmware layer here, so only the ordered physical Flight Check can prove the Ashlr route.' : correctedProfileObserved ? 'Input’s header is only the profile being edited. The cache-current profile and the profile physically emitting are separate states; a fresh physical Flight Check may supersede older log evidence.' : 'Choose the corrected one-layer profile or generate the guarded Dual Plane candidate. A correct encoder-only receipt under another profile name is not enough; cache observation does not prove the board write or physical route.', state: !inputInstallationReady ? 'Blocked by Input integrity' : dualPlaneProfileObserved ? 'Cache observed · Dual Plane · selected layer unobservable · device sync unproven' : correctedProfileObserved ? 'Cache observed · Ashlr Agent Board Corrected · Ashlr Daily · device sync unproven' : profileState, ready: false, observed: inputInstallationReady && ashlrProfileConfigured },
     { number: '07', title: 'Verify the declared physical route', detail: 'Run all 20 gestures. The first gesture uses the top-left rotary dial; the bottom-left circle selects layers and the wired/Bluetooth connection.', state: `${status.shortcutCount}/${hardware.bindableSignals} desktop endpoints registered · physical layer unverified`, ready: false },
   ]
+  const hybridSteps: Array<{ number: string; title: string; detail: string; state: string; ready: boolean; observed?: boolean }> = [
+    { number: '01', title: 'Observe the USB identity', detail: 'Use a direct USB-C data connection in white WIRED mode. USB identity remains transport evidence only; it proves neither native Agent keys nor Ashlr workflow gestures.', state: status.boardConnected ? 'Creator Micro 2 identity observed · both planes unproven' : 'USB identity not observed', ready: false, observed: status.boardConnected },
+    { number: '02', title: 'Declare experimental Hybrid Native', detail: 'This local declaration changes expected receiver ownership only. It never imports a profile, changes Input, writes the board, or claims native Codex readiness.', state: status.boardRoute === 'hybrid_native' ? 'Hybrid Native declared · acceptance pending' : 'Hybrid Native not declared', ready: status.boardRoute === 'hybrid_native' },
+    { number: '03', title: 'Verify Work Louder Input integrity', detail: inputInstallationDescription.guidance, state: inputInstallationDescription.state, ready: inputInstallationReady },
+    { number: '04', title: 'Verify the exact hybrid profile cache', detail: 'Require Ashlr Hybrid Dual Plane (UNOFFICIAL), with exact Hybrid Native content first and unchanged Ashlr Daily second. Cache verification does not prove import, activation, board sync, selected content, or any physical response. Follow app/docs/hybrid-native-profile.md; never Reset or let Agent Board write Input.', state: hybridProfileObserved ? 'Exact hybrid cache observed · device sync unproven' : 'Exact hybrid profile not observed · workflow plane blocked', ready: false, observed: inputInstallationReady && hybridProfileObserved },
+    { number: '05', title: 'Fully quit Work Louder Input', detail: 'Hybrid shortcut ownership is fail-closed unless the Input process is observed not running. Agent Board never quits it for you.', state: inputApplicationStatus === 'not_running' ? 'Input not running · process snapshot observed' : inputApplicationStatus === 'running' ? 'Input running · 14 shortcuts disabled' : 'Input process state unavailable · 14 shortcuts disabled', ready: inputApplicationStatus === 'not_running' },
+    { number: '06', title: 'Prove one 14-endpoint receiver', detail: 'Exactly ACT06–ACT12, four stick directions, and three dial gestures belong to Agent Board. AG00–AG05 are absent by design. One exact build must own all 14 endpoints.', state: receiverExclusive ? `${status.shortcutCount}/${HYBRID_SHORTCUT_COUNT} endpoints registered · one receiver observed` : `${receiverRuntime?.instanceCount ?? 0} receivers / ${receiverRuntime?.distinctBuildCount ?? 0} builds · shortcuts disabled`, ready: receiverExclusive && status.shortcutCount === HYBRID_SHORTCUT_COUNT },
+    { number: '07', title: 'Accept each plane separately', detail: 'Run the ordered 14-gesture Flight Check for the Ashlr plane. Then obtain a separate fresh native receipt for AG00–AG05 in Codex. This build does not expose that hybrid native receipt, so the six Agent keys remain unproven and no exact Codex task, Claude task, or cmux pane focus is claimed.', state: '14-gesture physical receipt pending · 6 native Agent keys unproven', ready: false },
+  ]
   const nativeInitializationObserved = nativeCodexMicro.status === 'connected' && nativeCodexMicro.fresh === true
   const handoffInitializationObserved = nativeAcceptance?.evaluation.status === 'initialization_observed'
     || nativeAcceptance?.evaluation.status === 'accepted'
@@ -1304,11 +1403,11 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
     { number: '06', title: 'Exercise the dial', detail: 'Turn the top-left dial left and right, then press it. Confirm each configured Codex response yourself.', state: attestationState('dial'), ready: false, observed: displayedNativeAttestations.dial },
     { number: '07', title: 'Exercise the joystick', detail: 'Move the top-right planar stick up, right, down, and left. The bottom-left circle is not the joystick.', state: attestationState('joystick'), ready: false, observed: displayedNativeAttestations.joystick },
     { number: '08', title: 'Exercise all six agent keys', detail: 'Press both upper Agent keys and all four second-row Agent keys once, observing each configured Codex behavior.', state: attestationState('agentKeys'), ready: false, observed: displayedNativeAttestations.agentKeys },
-    { number: '09', title: 'Exercise all seven action keys', detail: 'Press each action switch once. Do not treat a mouse click or ordinary keyboard shortcut as board evidence.', state: attestationState('actionKeys'), ready: false, observed: displayedNativeAttestations.actionKeys },
+    { number: '09', title: 'Exercise the five native action switches', detail: 'Press ACT06 through ACT09 and ACT12 once each. Do not treat a mouse click or ordinary keyboard shortcut as board evidence.', state: attestationState('actionKeys'), ready: false, observed: displayedNativeAttestations.actionKeys },
     { number: '10', title: 'Exercise the bottom keys', detail: 'Press ACT10 and ACT11 separately and observe each configured response.', state: attestationState('microphone'), ready: false, observed: displayedNativeAttestations.microphone },
     { number: '11', title: 'Observe lighting', detail: 'Inspect the black-opaque caps and edge glow in the room lighting you normally use. The on-screen legend remains authoritative.', state: attestationState('lighting'), ready: false, observed: displayedNativeAttestations.lighting },
   ]
-  const steps = status.boardRoute === 'codex_native' ? nativeSteps : ashlrSteps
+  const steps = status.boardRoute === 'codex_native' ? nativeSteps : status.boardRoute === 'hybrid_native' ? hybridSteps : ashlrSteps
   const repairNeeded = inputInstallationReady && inputRecoveryState === 'profile_repair'
   const handoffPersistenceFailed = repairResult?.status === 'saved' && repairResult.handoffPersisted === false
   const recoveryHandoff = handoffPersistenceFailed ? null : recoveryGuide.handoff
@@ -1665,15 +1764,15 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
       </div>
       <aside className="hardware-truth">
         <span className="eyebrow">PHYSICAL CONTRACT</span><h3>{hardware.name}</h3>
-        <dl><div><dt>13</dt><dd>Mechanical switches</dd></div><div><dt>06</dt><dd>Live Agent positions</dd></div><div><dt>07</dt><dd>Action switches</dd></div><div><dt>20</dt><dd>Bindable signals</dd></div></dl>
+        <dl><div><dt>13</dt><dd>Mechanical switches</dd></div><div><dt>06</dt><dd>Live Agent positions</dd></div><div><dt>07</dt><dd>Action switches</dd></div><div><dt>{status.boardRoute === 'hybrid_native' ? '14' : '20'}</dt><dd>{status.boardRoute === 'hybrid_native' ? 'Ashlr-owned gestures' : 'Bindable signals'}</dd></div></dl>
         <div className="hardware-note"><Mic2 size={18} /><p><strong>ACT10 and ACT11 are two separate keys.</strong> The Ashlr Daily map assigns Voice and guarded Continue independently; native Codex assignments remain visible in Codex settings.</p></div>
-        <div className="hardware-note"><ShieldCheck size={18} /><p>{status.boardRoute === 'codex_native' ? <><strong>Native firmware changes require a guarded qualification.</strong> Back up Input, quit Codex, use only the exact reviewed vendor-published candidate, then re-prove both native RPCs and every control.</> : <><strong>Freeze firmware during acceptance for Ashlr Layer.</strong> Defer it until the active profile is backed up and a separate qualification is planned.</>}</p></div>
+        <div className="hardware-note"><ShieldCheck size={18} /><p>{status.boardRoute === 'codex_native' ? <><strong>Native firmware changes require a guarded qualification.</strong> Back up Input, quit Codex, use only the exact reviewed vendor-published candidate, then re-prove both native RPCs and every control.</> : status.boardRoute === 'hybrid_native' ? <><strong>Hybrid Native is experimental and fail-closed.</strong> Keep Input quit, require the exact profile cache, accept 14 Ashlr gestures physically, and treat all six native Agent keys as unproven until a separate fresh native receipt exists.</> : <><strong>Freeze firmware during acceptance for Ashlr Layer.</strong> Defer it until the active profile is backed up and a separate qualification is planned.</>}</p></div>
         <div className="hardware-note"><RotateCcw size={18} /><p><strong>The bottom-left circle is not a bindable key.</strong> A short tap changes layer; a three-second hold opens the selector for three Bluetooth channels and wired mode.</p></div>
         <div className="rgb-legend" aria-label="Black-opaque state language"><span className="eyebrow">BLACK-OPAQUE STATE LANGUAGE</span><div>{agentStateLegendOrder.map((state) => <span key={state}><i className={agentStateClassName(state)} />{agentStateLabels[state]}{' '}</span>)}</div><small>The screen is the complete legend. Black caps use edge and underglow only after lighting transport is qualified; a frosted hero cap is optional.</small></div>
         {status.receiverIdentity && <div className="receiver-identity"><span className="eyebrow">CURRENT RECEIVER BUILD</span><strong>{status.receiverIdentity.packaged ? 'Packaged' : 'Development'} · v{status.receiverIdentity.appVersion}</strong>{status.receiverIdentity.appAsarSha256 && <code title={status.receiverIdentity.appAsarSha256}>app.asar {status.receiverIdentity.appAsarSha256.slice(0, 12)}</code>}<p>{status.boardRoute === 'codex_native' ? 'Agent Board is observing this build in passive native mode; it is not claiming the native HID route.' : receiverExclusive ? 'This is the only observed Agent Board receiver.' : `${receiverRuntime?.instanceCount ?? 0} receivers across ${receiverRuntime?.distinctBuildCount ?? 0} builds are contending. Fully quit every copy manually, then reopen one exact build. No process was quit automatically.`} Build identity does not prove macOS permission, shortcut receipt, signing, or physical acceptance.</p></div>}
         {status.boardRoute === 'codex_native'
           ? <div className="native-manual-gate"><ShieldCheck size={16} /><span><strong>Operator acceptance handoff</strong> Prepare the handoff at left. Agent Board unregisters its shortcuts and may remain open in passive Codex Native mode; quit Work Louder Input, Command-Q and reopen ChatGPT Desktop, then record the checks you personally perform. Automatic evidence watching never checks a box or accepts for you.</span></div>
-          : <button type="button" className="operate-button" onClick={onFlightCheck}>Run Ashlr Flight Check <ChevronRight size={16} /></button>}
+          : <button type="button" className="operate-button" onClick={onFlightCheck}>Run {status.boardRoute === 'hybrid_native' ? '14-gesture Hybrid' : 'Ashlr'} Flight Check <ChevronRight size={16} /></button>}
         <button type="button" className="operate-button secondary" onClick={onOperate}>Return to board</button>
       </aside>
     </div>

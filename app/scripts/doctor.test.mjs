@@ -33,6 +33,17 @@ const missingOptionalProbes = {
   logitech: { ok: true, detail: 'not running' },
 }
 
+const hybridInputProfile = {
+  cacheStatus: 'available',
+  activeProfile: 'Ashlr Hybrid Dual Plane (UNOFFICIAL)',
+  activeLayer: null,
+  encoderDirection: 'unavailable',
+  configuredLayers: [
+    { name: 'Ashlr Hybrid Native (UNOFFICIAL)', mapping: 'hybrid_native', encoderDirection: 'correct' },
+    { name: 'Ashlr Daily', mapping: 'ashlr_daily', encoderDirection: 'correct' },
+  ],
+}
+
 test('recognizes both documented Creator Micro 2 identities without broad USB matching', () => {
   const usb = (vendor, product, productId) => `"USB Vendor Name" = "${vendor}"\n"USB Product Name" = "${product}"\n"idProduct" = ${productId}`
   assert.equal(detectCreatorMicro2(usb('Work Louder', 'Creator Micro 2', 33432)).vidPid, '303A:8298')
@@ -301,6 +312,82 @@ test('Codex Native exposes its own ordered manual acceptance checks', () => {
   assert.equal(result.manualChecks.every((check) => check.category === 'manual'), true)
   assert.equal(result.manualChecks.every((check) => check.status === 'manual' && !check.blocking), true)
   assert.doesNotMatch(JSON.stringify(result.manualChecks), /Input layer|Flight Check/)
+})
+
+test('Hybrid Native projects exact profile and quit-Input gates without claiming native acceptance', () => {
+  const result = evaluateDoctor({
+    ...requiredProbes,
+    ...missingOptionalProbes,
+    boardRoute: 'hybrid_native',
+    chatgpt: { ok: true, detail: 'installed' },
+    inputApplication: { status: 'not_running', privateProcess: '/Users/example/Input' },
+    inputProfile: hybridInputProfile,
+  })
+
+  assert.equal(result.route, 'hybrid_native')
+  assert.equal(result.ok, true)
+  assert.deepEqual(result.inputApplication, { status: 'not_running' })
+  assert.equal(result.inputProfile.hybridProfileMatch, true)
+  assert.equal(result.inputProfile.hybridLayersMatch, true)
+  assert.equal(result.inputProfile.hybridProfileReady, true)
+  assert.deepEqual(result.readiness.hybridNative, {
+    status: 'manual', reason: 'separate_physical_acceptance_required',
+  })
+  assert.deepEqual(result.manualChecks.map((check) => check.id), [
+    'input-monitoring',
+    'hybrid-layer',
+    'hybrid-non-agent-flight-check',
+    'hybrid-native-agent-acceptance',
+  ])
+  assert.match(result.manualChecks[2].detail, /cmd1, cmd2, cmd3, cmd4, cmd5, cmd6, cmd7, joyUp, joyRight, joyDown, joyLeft, dialLeft, dialRight, dialPress/)
+  assert.match(result.manualChecks[2].detail, /does not test the six native Agent keys/)
+  assert.match(result.manualChecks[3].detail, /Separately verify/)
+  assert.doesNotMatch(JSON.stringify(result), /privateProcess|Users|firmware qualification|all native controls accepted/)
+})
+
+test('Hybrid Native fails closed when Input is running, unavailable, or profile evidence drifts', () => {
+  for (const [overrides, reason, next] of [
+    [{ inputApplication: { status: 'running', raw: '/Users/private' } }, 'input_application_running', /Fully quit Work Louder Input manually/],
+    [{ inputApplication: { status: 'unavailable', raw: 'secret' } }, 'input_application_probe_unavailable', /confirm it is no longer running/],
+    [{ inputProfile: { ...hybridInputProfile, configuredLayers: [...hybridInputProfile.configuredLayers].reverse() } }, 'hybrid_profile_requires_activation', /exact hybrid profile current with its hybrid layer first/],
+    [{ inputProfile: { ...hybridInputProfile, activeProfile: 'Private forged profile' } }, 'hybrid_profile_requires_activation', /exact hybrid profile current/],
+  ]) {
+    const result = evaluateDoctor({
+      ...requiredProbes,
+      ...missingOptionalProbes,
+      boardRoute: 'hybrid_native',
+      chatgpt: { ok: true, detail: 'installed' },
+      inputApplication: { status: 'not_running' },
+      inputProfile: hybridInputProfile,
+      ...overrides,
+    })
+    assert.equal(result.readiness.hybridNative.status, 'blocked')
+    assert.equal(result.readiness.hybridNative.reason, reason)
+    assert.match(result.nextAction, next)
+    assert.doesNotMatch(JSON.stringify(result), /Users|private|secret|forged/)
+  }
+})
+
+test('Hybrid Native requires USB, verified Input, and ChatGPT without promoting native firmware work', () => {
+  for (const probes of [
+    { board: { ok: false, detail: 'not detected' } },
+    { inputInstallation: { status: 'invalid_signature', version: '0.18.4' } },
+    { chatgpt: { ok: false, detail: 'missing' } },
+  ]) {
+    const result = evaluateDoctor({
+      ...requiredProbes,
+      ...missingOptionalProbes,
+      boardRoute: 'hybrid_native',
+      chatgpt: { ok: true, detail: 'installed' },
+      inputApplication: { status: 'not_running' },
+      inputProfile: hybridInputProfile,
+      ...probes,
+    })
+    assert.equal(result.ok, false)
+    assert.equal(result.readiness.hybridNative.status, 'blocked')
+    assert.equal(result.readiness.hybridNative.reason, 'required_prerequisite_missing')
+    assert.doesNotMatch(result.nextAction, /guarded vendor firmware qualification|prepare Agent Board’s passive Codex Native handoff|verify Settings → Creator Micro/i)
+  }
 })
 
 test('available optional integrations are reported as passing', () => {

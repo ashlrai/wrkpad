@@ -108,6 +108,7 @@ test('rejects future timestamps, malformed time, invalid current time, and conte
   assert.equal(sanitizeNativeControlCheck(valid, { now: 'not-a-time' }), null)
   for (const currentContext of [
     { ...context, route: 'ashlr_layer' },
+    { ...context, route: 'hybrid_native' },
     { ...context, device: { vidPid: '303A:8297' } },
     { ...context, codex: { ...context.codex, version: '26.818.70000' } },
     { ...context, codex: { ...context.codex, build: '7020' } },
@@ -119,6 +120,7 @@ test('rejects future timestamps, malformed time, invalid current time, and conte
 test('bounds route, VID:PID, Codex version, and Codex build', () => {
   for (const invalidContext of [
     { ...context, route: 'ashlr_layer' },
+    { ...context, route: 'hybrid_native' },
     { ...context, device: { vidPid: '303a:8298' } },
     { ...context, device: { vidPid: '303A:8298', firmwareVersion: '0.6.2' } },
     { ...context, codex: { ...context.codex, version: 'x'.repeat(65) } },

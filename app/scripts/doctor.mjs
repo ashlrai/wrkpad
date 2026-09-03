@@ -7,7 +7,10 @@ import { fileURLToPath } from 'node:url'
 
 const require = createRequire(import.meta.url)
 const { detectCreatorMicro2 } = require('../electron/creator-micro-identity.cjs')
+const { HYBRID_NATIVE_ROUTE, HYBRID_NATIVE_SIGNAL_IDS } = require('../electron/board-route-policy.cjs')
 const { inspectCodexMicroLogs } = require('../electron/codex-micro-diagnostics.cjs')
+const { exactHybridLayers } = require('../electron/flight-gates.cjs')
+const { inspectInputApplicationRuntime } = require('../electron/input-application-runtime.cjs')
 const { inspectInputInstallation } = require('../electron/input-installation-diagnostics.cjs')
 const { inspectInputProfile } = require('../electron/input-profile-diagnostics.cjs')
 const { inspectInputRuntime } = require('../electron/input-runtime-diagnostics.cjs')
@@ -80,7 +83,30 @@ const NATIVE_MANUAL_CHECKS = [
     detail: 'Verify the dial, joystick, agent keys, action keys, separate ACT10 and ACT11 behavior, and lighting in Codex.',
   },
 ]
+const HYBRID_MANUAL_CHECKS = [
+  {
+    id: 'input-monitoring',
+    name: 'Input Monitoring',
+    detail: 'Verify Agent Board in System Settings → Privacy & Security → Input Monitoring.',
+  },
+  {
+    id: 'hybrid-layer',
+    name: 'Hybrid profile and layer',
+    detail: 'Verify the exact hybrid profile is current, its hybrid layer is first, then fully quit Work Louder Input before Agent Board receives shortcuts.',
+  },
+  {
+    id: 'hybrid-non-agent-flight-check',
+    name: 'Hybrid 14-control Flight Check',
+    detail: `With actions suppressed, prove only the ordered non-agent controls: ${HYBRID_NATIVE_SIGNAL_IDS.join(', ')}. This does not test the six native Agent keys.`,
+  },
+  {
+    id: 'hybrid-native-agent-acceptance',
+    name: 'Native Agent-key acceptance',
+    detail: 'Separately verify the six Agent keys inside ChatGPT. The hybrid Flight Check does not intercept or accept them.',
+  },
+]
 const INPUT_RUNTIME_STATUSES = new Set(['unresolved_profile_layer', 'not_observed', 'log_missing', 'log_unsafe', 'log_unavailable'])
+const INPUT_APPLICATION_STATUSES = new Set(['running', 'not_running', 'unavailable'])
 const CODEX_PROTOCOL_TRAFFIC_STATUSES = new Set(['recurring_unresolved_response', 'not_observed', 'log_missing', 'log_unsafe', 'log_unavailable'])
 const INPUT_INSTALLATION_STATUSES = new Set(['verified', 'missing', 'multiple_installations', 'unsafe', 'invalid_metadata', 'publisher_unrecognized', 'invalid_signature', 'known_resource_mutation', 'gatekeeper_rejected', 'probe_unavailable'])
 const RECEIVER_RUNTIME_STATUSES = new Set(['exclusive', 'contended_same_build', 'contended_distinct_builds', 'not_running', 'unavailable'])
@@ -173,15 +199,22 @@ const makeCheck = (definition, probe, category) => ({
 })
 
 export function evaluateDoctor(probes, options = {}) {
-  const route = ['codex_native', 'ashlr_layer'].includes(probes.boardRoute)
+  const route = ['codex_native', 'ashlr_layer', HYBRID_NATIVE_ROUTE].includes(probes.boardRoute)
     ? probes.boardRoute
     : 'unknown'
   const inputInstallation = projectInputInstallation(probes.inputInstallation)
+  const inputApplication = {
+    status: INPUT_APPLICATION_STATUSES.has(probes.inputApplication?.status)
+      ? probes.inputApplication.status
+      : 'unavailable',
+  }
   const receiverRuntime = projectReceiverRuntime(probes.receiverRuntime)
   const evaluatedProbes = { ...probes, input: inputCheck(inputInstallation) }
   const requiredDefinitions = route === 'codex_native'
     ? [BOARD_CHECK, CHATGPT_CHECK]
-    : [BOARD_CHECK, INPUT_CHECK]
+    : route === HYBRID_NATIVE_ROUTE
+      ? [BOARD_CHECK, INPUT_CHECK, CHATGPT_CHECK]
+      : [BOARD_CHECK, INPUT_CHECK]
   const requiredKeys = new Set(requiredDefinitions.map((definition) => definition.key))
   const requiredChecks = requiredDefinitions.map((definition) =>
     makeCheck(definition, evaluatedProbes[definition.key], 'required'),
@@ -206,6 +239,12 @@ export function evaluateDoctor(probes, options = {}) {
   const dailyProfileReady = inputProfile.activeProfile === 'Ashlr Agent Board Corrected'
     && inputProfile.activeLayer === 'Ashlr Daily'
     && inputProfile.encoderDirection === 'correct'
+  const hybridProfileMatch = inputProfile.activeProfile === 'Ashlr Hybrid Dual Plane (UNOFFICIAL)'
+  const hybridLayersMatch = exactHybridLayers(inputProfile.configuredLayers)
+  const hybridProfileReady = inputProfile.cacheStatus === 'available'
+    && inputProfile.activeLayer === null
+    && hybridProfileMatch
+    && hybridLayersMatch
   const rawInputRuntime = probes.inputRuntime ?? {}
   const inputRuntimeStatus = INPUT_RUNTIME_STATUSES.has(rawInputRuntime.status) ? rawInputRuntime.status : 'log_unavailable'
   const runtimeProfileIndex = Number.isInteger(rawInputRuntime.profileIndex) && rawInputRuntime.profileIndex >= 0 && rawInputRuntime.profileIndex <= 31 ? rawInputRuntime.profileIndex : null
@@ -248,7 +287,25 @@ export function evaluateDoctor(probes, options = {}) {
           : recurringCodexTrafficObserved
             ? 'recurring_codex_protocol_traffic'
             : 'physical_acceptance_required'
-  const manualDefinitions = route === 'codex_native' ? NATIVE_MANUAL_CHECKS : ASHLR_MANUAL_CHECKS
+  const hybridPrerequisitesReady = Boolean(probes.board?.ok)
+    && inputInstallation.status === 'verified'
+    && Boolean(probes.chatgpt?.ok)
+  const hybridReason = !hybridPrerequisitesReady
+    ? 'required_prerequisite_missing'
+    : receiverBlocked
+      ? receiverReason
+      : receiverRuntime.status === 'not_running'
+        ? 'receiver_not_running'
+        : inputApplication.status === 'running'
+          ? 'input_application_running'
+          : inputApplication.status !== 'not_running'
+            ? 'input_application_probe_unavailable'
+            : !hybridProfileReady
+              ? 'hybrid_profile_requires_activation'
+              : 'separate_physical_acceptance_required'
+  const manualDefinitions = route === 'codex_native'
+    ? NATIVE_MANUAL_CHECKS
+    : route === HYBRID_NATIVE_ROUTE ? HYBRID_MANUAL_CHECKS : ASHLR_MANUAL_CHECKS
   const manualChecks = manualDefinitions.map((check) => ({
     ...check,
     category: 'manual',
@@ -264,6 +321,7 @@ export function evaluateDoctor(probes, options = {}) {
     ok: failedRequiredIndex === -1,
     checks: [...requiredChecks, ...optionalChecks],
     inputInstallation,
+    inputApplication,
     receiverRuntime,
     inputProfile: {
       cacheStatus: inputProfile.cacheStatus,
@@ -271,6 +329,11 @@ export function evaluateDoctor(probes, options = {}) {
       dailyLayerMatch: inputProfile.activeLayer === 'Ashlr Daily',
       encoderDirection: inputProfile.encoderDirection,
       dailyProfileReady,
+      ...(route === HYBRID_NATIVE_ROUTE ? {
+        hybridProfileMatch,
+        hybridLayersMatch,
+        hybridProfileReady,
+      } : {}),
     },
     inputRuntime: {
       status: projectedRuntimeStatus,
@@ -307,6 +370,14 @@ export function evaluateDoctor(probes, options = {}) {
         status: ashlrPrerequisitesReady && !receiverBlocked ? 'manual' : 'blocked',
         reason: ashlrReason,
       },
+      hybridNative: {
+        status: hybridPrerequisitesReady
+          && !receiverBlocked
+          && receiverRuntime.status !== 'not_running'
+          && inputApplication.status === 'not_running'
+          && hybridProfileReady ? 'manual' : 'blocked',
+        reason: hybridReason,
+      },
     },
     modeGuidance: {
       codexNative: !nativePrerequisitesReady
@@ -323,6 +394,15 @@ export function evaluateDoctor(probes, options = {}) {
           : recurringCodexTrafficObserved
             ? 'Input is receiving recurring Codex-protocol responses for which it had no active resolver. This is co-presence evidence, not ownership; Input-only reconciliation is not exclusive.'
             : 'The Ashlr shortcut route remains independently commissionable through Work Louder Input and the physical Flight Check.',
+      hybridNative: !hybridPrerequisitesReady
+        ? 'Hybrid Native requires USB, verified Work Louder Input installation, and ChatGPT desktop. These prerequisites do not prove either control plane.'
+        : receiverBlocked || receiverRuntime.status === 'not_running'
+          ? 'Hybrid shortcut ownership is unavailable. Exactly one reviewed Agent Board receiver must own only the 14 non-agent shortcuts.'
+          : inputApplication.status !== 'not_running'
+            ? 'Hybrid operation requires Work Louder Input to be verifiably quit. Installation and exact-profile evidence remain separate gates.'
+            : !hybridProfileReady
+              ? 'The exact two-layer hybrid profile is not proven by the bounded Input cache. Do not infer active firmware state from a profile name alone.'
+              : 'The profile and ownership prerequisites are ready for two separate human checks: the ordered 14-control Flight Check and native six-key acceptance in ChatGPT.',
     },
     nextAction:
       failedRequiredIndex === -1
@@ -334,7 +414,15 @@ export function evaluateDoctor(probes, options = {}) {
             ? 'Keep Work Louder Input quit, prepare Agent Board’s passive Codex Native handoff successfully, restart Codex, then re-run the explicit native connection check. Historical RPC evidence is advisory and does not authorize firmware work.'
             : nativeRouteSelected
               ? 'Keep Work Louder Input quit, prepare Agent Board’s passive Codex Native handoff successfully, restart Codex, then verify Settings → Creator Micro and the physical controls.'
-          : route === 'ashlr_layer' && receiverBlocked
+          : route === HYBRID_NATIVE_ROUTE && receiverBlocked
+            ? receiverRecoveryAction
+            : route === HYBRID_NATIVE_ROUTE && receiverRuntime.status === 'not_running'
+              ? 'Open exactly one reviewed Ashlr Agent Board build, then rerun the doctor before Hybrid Flight Check.'
+              : route === HYBRID_NATIVE_ROUTE && inputApplication.status !== 'not_running'
+                ? 'Fully quit Work Louder Input manually, confirm it is no longer running, then rerun the doctor. No process was quit automatically.'
+                : route === HYBRID_NATIVE_ROUTE && !hybridProfileReady
+                  ? 'In an isolated Input-only window, make the exact hybrid profile current with its hybrid layer first; then quit Input and rerun the doctor. A cache match will not prove device synchronization or physical controls.'
+                  : route === 'ashlr_layer' && receiverBlocked
             ? receiverRecoveryAction
             : route === 'ashlr_layer' && receiverRuntime.status === 'not_running'
               ? 'Open exactly one reviewed Ashlr Agent Board build, then rerun the doctor before Flight Check.'
@@ -376,6 +464,7 @@ export function collectProbes() {
   const receiverPidText = run('/usr/bin/pgrep', ['-of', RECEIVER_PROCESS_PATTERN])
   const receiverPid = /^\d{1,10}$/.test(receiverPidText ?? '') ? Number(receiverPidText) : null
   const receiverRuntime = inspectReceiverRuntime(receiverPid ? { currentPid: receiverPid } : {})
+  const inputApplication = inspectInputApplicationRuntime()
   const logitechOwner = run('/usr/bin/pgrep', ['-fl', 'logioptionsplus_agent'])
   const nativeCodex = inspectCodexMicroLogs(home)
   const settings = readAppSettings(appSettingsPath(join(home, 'Library', 'Application Support')), home)
@@ -385,6 +474,7 @@ export function collectProbes() {
     inputInstallation,
     input: inputCheck(projectInputInstallation(inputInstallation)),
     receiverRuntime,
+    inputApplication,
     chatgpt: { ok: chatgptInstalled, detail: chatgptInstalled ? 'installed' : 'missing' },
     codex: toolProbe('codex'),
     nativeCodex: {
@@ -425,6 +515,7 @@ function printHuman(result) {
   if (result.inputRuntime.fresh) console.log(`Input runtime: unresolved profile ${result.inputRuntime.profileIndex} / layer ${result.inputRuntime.layerIndex} observed recently`)
   if (result.inputRuntime.codexProtocolTraffic.fresh) console.log('Input runtime: recurring Codex-protocol responses observed; co-presence only, ownership unproven')
   console.log(`Input integrity: ${result.inputInstallation.status}${result.inputInstallation.version ? ` v${result.inputInstallation.version}` : ''}`)
+  if (result.route === HYBRID_NATIVE_ROUTE) console.log(`Work Louder Input process: ${result.inputApplication.status}`)
   console.log(`Agent Board receiver: ${result.receiverRuntime.status}; ${result.receiverRuntime.instanceCount} instance(s)`)
   console.log(`Next: ${result.nextAction}`)
 }

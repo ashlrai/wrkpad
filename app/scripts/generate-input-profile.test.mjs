@@ -15,6 +15,11 @@ import {
   inspectDualPlaneInputProfile,
   writeGeneratedDualPlaneProfile,
 } from './generate-dual-plane-profile.mjs'
+import {
+  generateHybridNativeInputProfile,
+  inspectHybridNativeInputProfile,
+  writeGeneratedHybridNativeProfile,
+} from './generate-hybrid-native-profile.mjs'
 
 const source = () => ({
   keyboard: 'creator_micro_v2',
@@ -150,6 +155,86 @@ test('dual-plane writer is private, exclusive, bounded, and macOS-only', () => {
     const unsupported = source()
     unsupported.profile.layers[0].os = 1
     assert.throws(() => generateDualPlaneInputProfile(unsupported), /only a macOS source export/)
+  } finally {
+    rmSync(directory, { recursive: true })
+  }
+})
+
+test('generates a hybrid-native first layer with one unchanged Ashlr Daily fallback', () => {
+  const input = source()
+  const daily = generateInputProfile(input, 'daily')
+  const profile = generateHybridNativeInputProfile(input)
+  const [hybridLayer, dailyLayer] = profile.profile.layers
+
+  assert.match(profile.profile.name, /UNOFFICIAL/)
+  assert.equal(hybridLayer.id, 0)
+  assert.match(hybridLayer.name, /UNOFFICIAL/)
+  assert.deepEqual(hybridLayer.layout.base.map((row) => row.map((cell) => cell.keycode)), [
+    ['KV_OAI_AG00', 'KV_OAI_AG01'],
+    ['KV_OAI_AG02', 'KV_OAI_AG03', 'KV_OAI_AG04', 'KV_OAI_AG05'],
+    ['KA_6', 'KA_7', 'KA_8', 'KA_9'],
+    ['KA_10', 'KA_11', 'KA_12'],
+  ])
+  assert.deepEqual(hybridLayer.layout.encoders, daily.profile.layers[0].layout.encoders)
+  assert.deepEqual(hybridLayer.layout.joystick, daily.profile.layers[0].layout.joystick)
+  assert.deepEqual(dailyLayer, { ...daily.profile.layers[0], id: 1 })
+  assert.deepEqual(profile.actions, daily.actions)
+  assert.deepEqual(inspectHybridNativeInputProfile(profile), { status: 'match', reason: 'exact_hybrid_native_profile' })
+})
+
+test('hybrid-native verifier rejects changed native, shortcut, motion, and ownership surfaces', () => {
+  const candidate = generateHybridNativeInputProfile(source())
+  const mutations = [
+    (value) => { value.profile.layers[0].layout.base[0][0].keycode = 'KA_0' },
+    (value) => { value.profile.layers[0].layout.base[2][0].keycode = 'KV_OAI_ACT06' },
+    (value) => { value.profile.layers[0].layout.encoders[0][0].keycode = 'KV_OAI_ENC_CC' },
+    (value) => { value.profile.layers[0].layout.joystick = { type: 'VENDOR', sectors: [] } },
+    (value) => { value.profile.layers[1].layout.base[0][0].keycode = 'KV_OAI_AG00' },
+    (value) => { value.profile.layers[1].color = '#123456' },
+    (value) => { value.actions[6].keyInputs[3].keycode = 'KC_Z' },
+    (value) => { value.linkedApps = [] },
+    (value) => { value.smartActions = [{ id: 1 }] },
+    (value) => { value.profile.layers[0].lights.backlight.color = '#123456' },
+  ]
+  for (const mutate of mutations) {
+    const changed = structuredClone(candidate)
+    mutate(changed)
+    assert.doesNotThrow(() => inspectHybridNativeInputProfile(changed))
+    assert.equal(inspectHybridNativeInputProfile(changed).status, 'mismatch')
+  }
+})
+
+test('hybrid-native writer is private, exclusive, bounded, and macOS-only', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'ashlr-hybrid-profile-'))
+  const sourcePath = join(directory, 'source.json')
+  const outputPath = join(directory, 'hybrid.json')
+  try {
+    writeFileSync(sourcePath, JSON.stringify(source()))
+    const receipt = writeGeneratedHybridNativeProfile(sourcePath, outputPath)
+    assert.deepEqual({
+      layers: receipt.layers,
+      hybridLayer: receipt.hybridLayer,
+      sharedLayer: receipt.sharedLayer,
+      nativeAgentKeys: receipt.nativeAgentKeys,
+      shortcutGestures: receipt.shortcutGestures,
+      physicalGestures: receipt.physicalGestures,
+      mutatesInputOrDevice: receipt.mutatesInputOrDevice,
+    }, {
+      layers: 2,
+      hybridLayer: 1,
+      sharedLayer: 2,
+      nativeAgentKeys: 6,
+      shortcutGestures: 14,
+      physicalGestures: 20,
+      mutatesInputOrDevice: false,
+    })
+    assert.equal(statSync(outputPath).mode & 0o777, 0o600)
+    assert.equal(inspectHybridNativeInputProfile(JSON.parse(readFileSync(outputPath, 'utf8'))).status, 'match')
+    assert.throws(() => writeGeneratedHybridNativeProfile(sourcePath, outputPath), /EEXIST/)
+
+    const unsupported = source()
+    unsupported.profile.layers[0].os = 1
+    assert.throws(() => generateHybridNativeInputProfile(unsupported), /only a macOS source export/)
   } finally {
     rmSync(directory, { recursive: true })
   }

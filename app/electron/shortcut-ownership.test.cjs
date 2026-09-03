@@ -7,7 +7,7 @@ function fixture() {
   let runtime = { status: 'exclusive' }
   const controller = createShortcutOwnershipController({
     clearApprovals: () => { calls.clear += 1 },
-    expectedRegistrationCount: 2,
+    expectedRegistrationCount: () => 2,
     inspectRuntime: () => { calls.inspect += 1; return runtime },
     registerShortcuts: () => {
       calls.register += 1
@@ -15,7 +15,9 @@ function fixture() {
     },
     registrationsAreActive: () => true,
     resetFlight: () => { calls.reset += 1 },
-    runtimeOwnsShortcuts: (candidate) => candidate.status === 'exclusive',
+    runtimeOwnsShortcuts: (candidate, route) => candidate.status === 'exclusive'
+      && (route !== 'hybrid_native' || candidate.inputApplication?.status === 'not_running'),
+    routeOwnsShortcuts: (route) => route === 'ashlr_layer' || route === 'hybrid_native',
     shortcutsAreReleased: () => true,
     unregisterAll: () => { calls.unregister += 1 },
   })
@@ -63,12 +65,50 @@ test('switching back to Ashlr Layer re-inspects ownership before registration', 
   assert.equal(calls.inspect, 3)
 })
 
+test('switching between full and Hybrid Native ownership replaces registrations and guarded state', () => {
+  const calls = { clear: 0, register: [], reset: 0, unregister: 0 }
+  const controller = createShortcutOwnershipController({
+    clearApprovals: () => { calls.clear += 1 },
+    expectedRegistrationCount: (route) => route === 'hybrid_native' ? 1 : 2,
+    inspectRuntime: () => ({ status: 'exclusive', inputApplication: { status: 'not_running' } }),
+    registerShortcuts: (route) => {
+      calls.register.push(route)
+      return route === 'hybrid_native'
+        ? [{ signalId: 'cmd1', registered: true }]
+        : [{ signalId: 'agent1', registered: true }, { signalId: 'cmd1', registered: true }]
+    },
+    registrationsAreActive: () => true,
+    resetFlight: () => { calls.reset += 1 },
+    runtimeOwnsShortcuts: () => true,
+    routeOwnsShortcuts: (route) => route === 'ashlr_layer' || route === 'hybrid_native',
+    shortcutsAreReleased: () => true,
+    unregisterAll: () => { calls.unregister += 1 },
+  })
+
+  assert.deepEqual(controller.synchronize('ashlr_layer').registrations.map((item) => item.signalId), ['agent1', 'cmd1'])
+  assert.deepEqual(controller.synchronize('hybrid_native').registrations.map((item) => item.signalId), ['cmd1'])
+  assert.deepEqual(calls.register, ['ashlr_layer', 'hybrid_native'])
+  assert.equal(calls.unregister, 1)
+  assert.equal(calls.reset, 1)
+  assert.equal(calls.clear, 1)
+})
+
+test('Hybrid Native refuses ownership unless Input is explicitly not running', () => {
+  for (const status of ['running', 'unavailable']) {
+    const { calls, controller, setRuntime } = fixture()
+    setRuntime({ status: 'exclusive', inputApplication: { status } })
+    const state = controller.synchronize('hybrid_native')
+    assert.deepEqual(state.registrations, [])
+    assert.equal(calls.register, 0)
+  }
+})
+
 test('failed or incomplete registrations are retried only on Ashlr Layer', () => {
   let attempts = 0
   let unregisters = 0
   const controller = createShortcutOwnershipController({
     clearApprovals() {},
-    expectedRegistrationCount: 2,
+    expectedRegistrationCount: () => 2,
     inspectRuntime: () => ({ status: 'exclusive' }),
     registerShortcuts: () => {
       attempts += 1
@@ -77,6 +117,7 @@ test('failed or incomplete registrations are retried only on Ashlr Layer', () =>
     registrationsAreActive: () => true,
     resetFlight() {},
     runtimeOwnsShortcuts: () => true,
+    routeOwnsShortcuts: (route) => route === 'ashlr_layer',
     shortcutsAreReleased: () => true,
     unregisterAll() { unregisters += 1 },
   })
@@ -92,9 +133,9 @@ test('failed or incomplete registrations are retried only on Ashlr Layer', () =>
 test('validates dependency and registration contracts', () => {
   assert.throws(() => createShortcutOwnershipController({}), /must be a function/)
   const controller = createShortcutOwnershipController({
-    clearApprovals() {}, expectedRegistrationCount: 1, inspectRuntime: () => ({}),
+    clearApprovals() {}, expectedRegistrationCount: () => 1, inspectRuntime: () => ({}),
     registerShortcuts: () => null, resetFlight() {}, runtimeOwnsShortcuts: () => true,
-    registrationsAreActive: () => true, shortcutsAreReleased: () => true,
+    registrationsAreActive: () => true, routeOwnsShortcuts: (route) => route === 'ashlr_layer', shortcutsAreReleased: () => true,
     unregisterAll() {},
   })
   assert.deepEqual(controller.synchronize('ashlr_layer').registrations, [])
@@ -104,14 +145,14 @@ test('a throwing registration attempt is immediately cleaned up and remains retr
   let attempts = 0
   let unregisters = 0
   const controller = createShortcutOwnershipController({
-    clearApprovals() {}, expectedRegistrationCount: 1, inspectRuntime: () => ({ status: 'exclusive' }),
+    clearApprovals() {}, expectedRegistrationCount: () => 1, inspectRuntime: () => ({ status: 'exclusive' }),
     registerShortcuts: () => {
       attempts += 1
       if (attempts === 1) throw new Error('partial Electron registration')
       return [{ signalId: 'one', registered: true }]
     },
     registrationsAreActive: () => true,
-    resetFlight() {}, runtimeOwnsShortcuts: () => true,
+    resetFlight() {}, runtimeOwnsShortcuts: () => true, routeOwnsShortcuts: (route) => route === 'ashlr_layer',
     shortcutsAreReleased: () => true,
     unregisterAll: () => { unregisters += 1 },
   })
@@ -123,9 +164,9 @@ test('a throwing registration attempt is immediately cleaned up and remains retr
 
 test('native state reports an unregister failure instead of trusting empty bookkeeping', () => {
   const controller = createShortcutOwnershipController({
-    clearApprovals() {}, expectedRegistrationCount: 1, inspectRuntime: () => ({ status: 'exclusive' }),
+    clearApprovals() {}, expectedRegistrationCount: () => 1, inspectRuntime: () => ({ status: 'exclusive' }),
     registerShortcuts: () => [{ signalId: 'one', registered: true }],
-    registrationsAreActive: () => true, resetFlight() {}, runtimeOwnsShortcuts: () => true,
+    registrationsAreActive: () => true, resetFlight() {}, runtimeOwnsShortcuts: () => true, routeOwnsShortcuts: (route) => route === 'ashlr_layer',
     shortcutsAreReleased: () => false, unregisterAll() {},
   })
 
@@ -159,12 +200,13 @@ test('an unregister exception still clears flight evidence and approvals before 
   const effects = { clear: 0, reset: 0 }
   const controller = createShortcutOwnershipController({
     clearApprovals: () => { effects.clear += 1 },
-    expectedRegistrationCount: 1,
+    expectedRegistrationCount: () => 1,
     inspectRuntime: () => ({ status: 'exclusive' }),
     registerShortcuts: () => [{ signalId: 'one', registered: true }],
     registrationsAreActive: () => true,
     resetFlight: () => { effects.reset += 1 },
     runtimeOwnsShortcuts: () => true,
+    routeOwnsShortcuts: (route) => route === 'ashlr_layer',
     shortcutsAreReleased: () => false,
     unregisterAll: () => { throw new Error('Electron unregister failure') },
   })
@@ -179,9 +221,9 @@ test('a composed synchronization failure invalidates a previously enabled callba
   let deliveries = 0
   const captured = guard.bind(() => { deliveries += 1 })
   const controller = createShortcutOwnershipController({
-    clearApprovals() {}, expectedRegistrationCount: 1, inspectRuntime: () => runtime,
+    clearApprovals() {}, expectedRegistrationCount: () => 1, inspectRuntime: () => runtime,
     registerShortcuts: () => [{ signalId: 'one', registered: true }],
-    registrationsAreActive: () => true, resetFlight() {},
+    registrationsAreActive: () => true, resetFlight() {}, routeOwnsShortcuts: (route) => route === 'ashlr_layer',
     runtimeOwnsShortcuts: (candidate) => candidate.status === 'exclusive',
     shortcutsAreReleased: () => false,
     unregisterAll: () => { throw new Error('Electron unregister failure') },

@@ -1,5 +1,3 @@
-const ACTIVE_SHORTCUT_ROUTE = 'ashlr_layer'
-
 function assertFunction(options, name) {
   if (typeof options?.[name] !== 'function') throw new TypeError(`${name} must be a function`)
 }
@@ -8,18 +6,17 @@ function createShortcutOwnershipController(options) {
   for (const name of [
     'clearApprovals',
     'inspectRuntime',
+    'expectedRegistrationCount',
     'registerShortcuts',
     'registrationsAreActive',
     'resetFlight',
     'runtimeOwnsShortcuts',
+    'routeOwnsShortcuts',
     'shortcutsAreReleased',
     'unregisterAll',
   ]) assertFunction(options, name)
-  if (!Number.isInteger(options.expectedRegistrationCount) || options.expectedRegistrationCount < 1) {
-    throw new TypeError('expectedRegistrationCount must be a positive integer')
-  }
-
   let registrations = []
+  let registrationRoute = null
   let runtime = null
 
   function deactivate(forceUnregister = false) {
@@ -27,6 +24,7 @@ function createShortcutOwnershipController(options) {
       if (forceUnregister || registrations.length) options.unregisterAll()
     } finally {
       registrations = []
+      registrationRoute = null
       options.resetFlight()
       options.clearApprovals()
     }
@@ -35,23 +33,37 @@ function createShortcutOwnershipController(options) {
 
   function synchronize(boardRoute) {
     runtime = options.inspectRuntime()
-    if (boardRoute !== ACTIVE_SHORTCUT_ROUTE || !options.runtimeOwnsShortcuts(runtime)) {
-      const released = deactivate(boardRoute !== ACTIVE_SHORTCUT_ROUTE)
+    if (!options.routeOwnsShortcuts(boardRoute) || !options.runtimeOwnsShortcuts(runtime, boardRoute)) {
+      const released = deactivate(!options.routeOwnsShortcuts(boardRoute))
       return { runtime, registrations: [...registrations], released }
     }
 
-    const complete = registrations.length === options.expectedRegistrationCount
+    const expectedRegistrationCount = options.expectedRegistrationCount(boardRoute)
+    if (!Number.isInteger(expectedRegistrationCount) || expectedRegistrationCount < 1) {
+      deactivate(true)
+      return { runtime, registrations: [], released: false }
+    }
+    const complete = registrationRoute === boardRoute
+      && registrations.length === expectedRegistrationCount
       && registrations.every((registration) => registration?.registered === true)
-      && options.registrationsAreActive(registrations)
+      && options.registrationsAreActive(registrations, boardRoute)
     if (!complete) {
+      const replacingOwnedRoute = registrationRoute !== null || registrations.length > 0
       if (registrations.length) options.unregisterAll()
+      registrations = []
+      registrationRoute = null
+      if (replacingOwnedRoute) {
+        options.resetFlight()
+        options.clearApprovals()
+      }
       try {
-        registrations = options.registerShortcuts()
+        registrations = options.registerShortcuts(boardRoute)
         if (!Array.isArray(registrations)) throw new TypeError('registerShortcuts must return an array')
-        const registeredEveryShortcut = registrations.length === options.expectedRegistrationCount
+        const registeredEveryShortcut = registrations.length === expectedRegistrationCount
           && registrations.every((registration) => registration?.registered === true)
-          && options.registrationsAreActive(registrations)
+          && options.registrationsAreActive(registrations, boardRoute)
         if (!registeredEveryShortcut) deactivate(true)
+        else registrationRoute = boardRoute
       } catch {
         // Electron can throw after registering only part of the map. Remove every
         // application shortcut immediately rather than waiting for the next poll.
@@ -83,4 +95,4 @@ function createShortcutCallbackGuard() {
   })
 }
 
-module.exports = { ACTIVE_SHORTCUT_ROUTE, createShortcutCallbackGuard, createShortcutOwnershipController }
+module.exports = { createShortcutCallbackGuard, createShortcutOwnershipController }

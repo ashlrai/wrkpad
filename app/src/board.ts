@@ -90,6 +90,7 @@ export interface SystemStatus {
   workspaceSnapshot: WorkspaceSnapshot | null
   receiverIdentity: ReceiverIdentity | null
   receiverRuntime: ReceiverRuntimeStatus
+  inputApplication?: InputApplicationStatus
 }
 
 export interface ChatGPTDesktopStatus {
@@ -112,6 +113,10 @@ export interface ReceiverRuntimeStatus {
   candidateMatchesCurrent: boolean | null
 }
 
+export interface InputApplicationStatus {
+  status: 'running' | 'not_running' | 'unavailable'
+}
+
 export interface InputProfileStatus {
   cacheStatus: 'available' | 'missing' | 'invalid' | 'unsafe'
   activeProfile: string | null
@@ -119,7 +124,7 @@ export interface InputProfileStatus {
   encoderDirection: 'correct' | 'reversed' | 'unrecognized' | 'unavailable'
   configuredLayers?: Array<{
     name: string | null
-    mapping: 'ashlr_daily' | 'codex_native' | 'unknown'
+    mapping: 'ashlr_daily' | 'codex_native' | 'hybrid_native' | 'unknown'
     encoderDirection: 'correct' | 'reversed' | 'unrecognized' | 'unavailable'
   }>
 }
@@ -149,6 +154,17 @@ export const dualPlaneInputProfileConfigured = (profile: InputProfileStatus): bo
   && profile.configuredLayers?.length === 2
   && profile.configuredLayers[0]?.name === 'Codex Native Recovery (UNOFFICIAL)'
   && profile.configuredLayers[0]?.mapping === 'codex_native'
+  && profile.configuredLayers[1]?.name === 'Ashlr Daily'
+  && profile.configuredLayers[1]?.mapping === 'ashlr_daily'
+  && profile.configuredLayers[1]?.encoderDirection === 'correct'
+
+export const hybridNativeInputProfileConfigured = (profile: InputProfileStatus): boolean =>
+  profile.activeProfile === 'Ashlr Hybrid Dual Plane (UNOFFICIAL)'
+  && profile.activeLayer === null
+  && profile.configuredLayers?.length === 2
+  && profile.configuredLayers[0]?.name === 'Ashlr Hybrid Native (UNOFFICIAL)'
+  && profile.configuredLayers[0]?.mapping === 'hybrid_native'
+  && profile.configuredLayers[0]?.encoderDirection === 'correct'
   && profile.configuredLayers[1]?.name === 'Ashlr Daily'
   && profile.configuredLayers[1]?.mapping === 'ashlr_daily'
   && profile.configuredLayers[1]?.encoderDirection === 'correct'
@@ -235,7 +251,7 @@ export interface NativeAcceptanceActionResult {
   snapshot: NativeAcceptanceSnapshot
 }
 
-export type BoardRoute = 'unknown' | 'codex_native' | 'ashlr_layer'
+export type BoardRoute = 'unknown' | 'codex_native' | 'ashlr_layer' | 'hybrid_native'
 
 export type AgentProvider = 'codex' | 'claude' | 'manual' | 'unknown'
 export type AgentState = 'off' | 'idle' | 'unread' | 'working' | 'needs_input' | 'error'

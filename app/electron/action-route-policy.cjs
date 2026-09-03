@@ -1,7 +1,7 @@
-const ACTIVE_ACTION_ROUTE = 'ashlr_layer'
+const ACTIVE_ACTION_ROUTES = new Set(['ashlr_layer', 'hybrid_native'])
 
 function routeAllowsConfiguredActions(settings) {
-  return settings?.boardRoute === ACTIVE_ACTION_ROUTE
+  return typeof settings?.boardRoute === 'string' && ACTIVE_ACTION_ROUTES.has(settings.boardRoute)
 }
 
 function passiveRouteActionResult(now = () => new Date()) {
@@ -12,9 +12,9 @@ function passiveRouteActionResult(now = () => new Date()) {
   return {
     ok: false,
     title: 'Ashlr actions unavailable',
-    message: 'Configured actions are disabled unless the Ashlr Layer route is active.',
+    message: 'Configured actions are disabled unless an explicit Ashlr shortcut route is active.',
     timestamp: timestamp.toISOString(),
   }
 }
 
-module.exports = { ACTIVE_ACTION_ROUTE, passiveRouteActionResult, routeAllowsConfiguredActions }
+module.exports = { ACTIVE_ACTION_ROUTES, passiveRouteActionResult, routeAllowsConfiguredActions }

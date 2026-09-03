@@ -78,14 +78,16 @@ export default function AttentionDeck({ agents, selectedSlot, source, boardRoute
   return <section className="attention-deck" aria-labelledby="attention-title">
     <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{urgentAnnouncement}</div>
     <div className="attention-heading">
-      <div><span className="eyebrow">LIVE ATTENTION RUNWAY</span><h2 id="attention-title">Your agents, one stable map.</h2></div>
-      <span className={`source-receipt ${source}`}>{source === 'observer_online' ? 'SESSION FEED LIVE' : source === 'invalid' ? 'SESSION FEED INVALID' : 'SESSION FEED UNAVAILABLE'}</span>
+      <div><span className="eyebrow">LIVE ATTENTION RUNWAY</span><h2 id="attention-title">One stable screen and Ashlr-layer map.</h2></div>
+      <span className={`source-receipt ${source}`}>{source === 'observer_online' ? 'CURRENT SNAPSHOT' : source === 'invalid' ? 'SESSION SNAPSHOT INVALID' : 'SESSION SNAPSHOT UNAVAILABLE'}</span>
     </div>
     <div className="provider-routing-row">
       <div className={`provider-contract route-${boardRoute}`} role="note">
-        <strong>{boardRoute === 'ashlr_layer' ? 'Unified physical map' : boardRoute === 'codex_native' ? 'Mixed screen map · Codex-only physical route' : 'Mixed screen map · physical route undeclared'}</strong>
+        <strong>{boardRoute === 'ashlr_layer' ? 'Unified physical map' : boardRoute === 'hybrid_native' ? 'Mixed screen map · split physical ownership' : boardRoute === 'codex_native' ? 'Mixed screen map · Codex-only physical route' : 'Mixed screen map · physical route undeclared'}</strong>
         <span>{boardRoute === 'ashlr_layer'
           ? 'AG00–AG05 keep the same mixed Codex + Claude Code slots in every workflow lens.'
+          : boardRoute === 'hybrid_native'
+            ? 'Physical AG00–AG05 remain Codex-native; they do not focus Claude sessions. The other 14 gestures use Ashlr shortcuts, while exact Claude task or cmux pane focus remains unavailable.'
           : boardRoute === 'codex_native'
             ? 'These screen slots remain mixed, but physical AG00–AG05 are owned by Codex. Choose Ashlr Layer for shared physical semantics.'
             : 'Declare Ashlr Layer for shared physical semantics; the screen runway remains usable without remapping slots.'}</span>

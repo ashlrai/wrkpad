@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { actions, allControlIds, correctedInputProfileObserved, correctedInputProfileObservedForVariant, dualPlaneInputProfileConfigured, hardware, profileOrder, profiles } from './board'
+import { actions, allControlIds, correctedInputProfileObserved, correctedInputProfileObservedForVariant, dualPlaneInputProfileConfigured, hardware, hybridNativeInputProfileConfigured, profileOrder, profiles } from './board'
 
 describe('board contract', () => {
   it('maps every physical signal in every profile', () => {
@@ -76,5 +76,20 @@ describe('board contract', () => {
     expect(correctedInputProfileObservedForVariant(dual, 'daily', true)).toBe(true)
     expect(correctedInputProfileObservedForVariant({ ...dual, configuredLayers: [] }, 'daily', true)).toBe(false)
     expect(correctedInputProfileObservedForVariant({ ...dual, configuredLayers: [...dual.configuredLayers].reverse() }, 'daily', true)).toBe(false)
+  })
+  it('requires the exact ordered hybrid profile cache', () => {
+    const hybrid = {
+      cacheStatus: 'available' as const,
+      activeProfile: 'Ashlr Hybrid Dual Plane (UNOFFICIAL)',
+      activeLayer: null,
+      encoderDirection: 'unavailable' as const,
+      configuredLayers: [
+        { name: 'Ashlr Hybrid Native (UNOFFICIAL)', mapping: 'hybrid_native' as const, encoderDirection: 'correct' as const },
+        { name: 'Ashlr Daily', mapping: 'ashlr_daily' as const, encoderDirection: 'correct' as const },
+      ],
+    }
+    expect(hybridNativeInputProfileConfigured(hybrid)).toBe(true)
+    expect(hybridNativeInputProfileConfigured({ ...hybrid, activeProfile: 'Almost hybrid' })).toBe(false)
+    expect(hybridNativeInputProfileConfigured({ ...hybrid, configuredLayers: [...hybrid.configuredLayers].reverse() })).toBe(false)
   })
 })

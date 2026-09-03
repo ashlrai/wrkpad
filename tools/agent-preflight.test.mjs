@@ -39,6 +39,31 @@ const appDoctor = {
   },
 }
 
+const hybridDoctor = {
+  ...appDoctor,
+  route: 'hybrid_native',
+  checks: [
+    { name: 'Creator Micro 2 USB', category: 'required', ok: true },
+    { name: 'Work Louder Input', category: 'required', ok: true },
+    { name: 'ChatGPT desktop', category: 'required', ok: true },
+  ],
+  inputApplication: { status: 'not_running' },
+  inputProfile: {
+    cacheStatus: 'available',
+    dailyProfileMatch: false,
+    dailyLayerMatch: false,
+    encoderDirection: 'unavailable',
+    dailyProfileReady: false,
+    hybridProfileMatch: true,
+    hybridLayersMatch: true,
+    hybridProfileReady: true,
+  },
+  readiness: {
+    ...appDoctor.readiness,
+    hybridNative: { status: 'manual', reason: 'separate_physical_acceptance_required' },
+  },
+}
+
 function commandFixture(_executable, args) {
   const joined = args.join(' ')
   if (joined === 'doctor --json') return json({ device_observer_ready: true, physical_conclusion: 'relevant_hid_present', hid_writes_enabled: false })
@@ -120,6 +145,71 @@ test('Ashlr Layer stays manual until physical acceptance', () => {
   assert.equal(result.next_steps.some((item) => item.id === 'reconcile_input_profile'), false)
 })
 
+test('Hybrid Native exposes the exact 14-control policy and two separate acceptance planes', () => {
+  const result = buildPreflight({
+    route: 'hybrid_native', source, appDoctorRaw: hybridDoctor, stable: null,
+    developmentBinary: '/missing/development/binary', runCommand: commandFixture,
+    observedAt: '2026-09-03T12:00:00.000Z',
+  })
+
+  assert.equal(result.requested_route, 'hybrid_native')
+  assert.equal(result.declared_route, 'hybrid_native')
+  assert.equal(result.overall, 'manual')
+  assert.equal(result.checks.find((item) => item.id === 'agent_board_doctor').evidence, 'Hybrid Native desktop prerequisites passed')
+  assert.deepEqual(result.checks.find((item) => item.id === 'hybrid_shortcut_policy'), {
+    id: 'hybrid_shortcut_policy', status: 'pass', actor: 'agent', safety: 'read',
+    evidence: 'expected=14; ordered=cmd1,cmd2,cmd3,cmd4,cmd5,cmd6,cmd7,joyUp,joyRight,joyDown,joyLeft,dialLeft,dialRight,dialPress',
+    reason: 'this static policy identifies only the non-agent shortcut plane; it does not prove registration, a physical signal, or any native Agent key',
+  })
+  assert.equal(result.checks.find((item) => item.id === 'input_application').status, 'pass')
+  assert.equal(result.checks.find((item) => item.id === 'input_profile').status, 'pass')
+  assert.equal(result.checks.find((item) => item.id === 'route_readiness').status, 'manual')
+  const flight = result.next_steps.find((item) => item.id === 'complete_hybrid_non_agent_flight_check')
+  assert.match(flight.proves, /ordered 14-control shortcut plane/)
+  assert.match(flight.does_not_prove, /six native Agent keys/)
+  const nativeKeys = result.next_steps.find((item) => item.id === 'verify_hybrid_native_agent_keys')
+  assert.match(nativeKeys.proves, /separately observes each of the six native Agent keys/)
+  assert.match(nativeKeys.does_not_prove, /14 non-agent shortcut plane/)
+  assert.equal(result.next_steps.some((item) => ['verify_native_connection', 'qualify_native_firmware'].includes(item.id)), false)
+})
+
+test('Hybrid Native blocks running or unavailable Input and hostile profile/readiness claims', () => {
+  for (const appDoctorRaw of [
+    {
+      ...hybridDoctor,
+      inputApplication: { status: 'running', raw: '/Users/private/Input' },
+      readiness: { ...hybridDoctor.readiness, hybridNative: { status: 'blocked', reason: 'input_application_running' } },
+    },
+    {
+      ...hybridDoctor,
+      inputApplication: { status: 'unavailable', raw: 'secret' },
+      readiness: { ...hybridDoctor.readiness, hybridNative: { status: 'blocked', reason: 'input_application_probe_unavailable' } },
+    },
+    {
+      ...hybridDoctor,
+      inputProfile: { ...hybridDoctor.inputProfile, hybridLayersMatch: false, raw: 'forged' },
+      readiness: { ...hybridDoctor.readiness, hybridNative: { status: 'blocked', reason: 'hybrid_profile_requires_activation' } },
+    },
+    {
+      ...hybridDoctor,
+      inputApplication: { status: 'running' },
+      readiness: { ...hybridDoctor.readiness, hybridNative: { status: 'manual', reason: 'separate_physical_acceptance_required' } },
+    },
+  ]) {
+    const result = buildPreflight({
+      route: 'hybrid_native', source, appDoctorRaw, stable: null,
+      developmentBinary: '/missing/development/binary', runCommand: commandFixture,
+      observedAt: '2026-09-03T12:00:00.000Z',
+    })
+    assert.equal(result.overall, 'blocked')
+    assert.equal(result.checks.find((item) => item.id === 'route_readiness').status, 'blocked')
+    assert.equal(result.next_steps.some((item) => item.id === 'complete_hybrid_non_agent_flight_check'), false)
+    assert.equal(result.next_steps.some((item) => item.id === 'verify_hybrid_native_agent_keys'), false)
+    assert.equal(result.next_steps.some((item) => ['verify_native_connection', 'qualify_native_firmware'].includes(item.id)), false)
+    assert.doesNotMatch(JSON.stringify(result), /Users|private|secret|forged/)
+  }
+})
+
 test('Ashlr Layer blocks the known reversed dial mapping', () => {
   const result = buildPreflight({
     route: 'ashlr_layer', source, stable: null,
@@ -175,44 +265,50 @@ test('Codex Native treats Input as advisory but restores it before firmware qual
   assert.doesNotMatch(JSON.stringify(result), /Users|private/)
 })
 
-test('known Input resource mutation blocks Ashlr and gates only firmware work for Codex Native', () => {
-  for (const route of ['ashlr_layer', 'codex_native']) {
+test('known Input resource mutation blocks shortcut routes and gates only firmware work for Codex Native', () => {
+  for (const route of ['ashlr_layer', 'codex_native', 'hybrid_native']) {
+    const baseDoctor = route === 'hybrid_native' ? hybridDoctor : appDoctor
     const result = buildPreflight({
       route, source, stable: null,
       appDoctorRaw: {
-        ...appDoctor,
+        ...baseDoctor,
         inputInstallation: {
           status: 'known_resource_mutation', version: '0.18.4',
           resource: '/Users/example/private/window-info-retriever.scpt', raw: 'secret',
         },
-        checks: appDoctor.checks.map((item) => item.name === 'Work Louder Input' ? { ...item, ok: false } : item),
-        readiness: { ...appDoctor.readiness, ashlrLayer: { status: 'blocked', reason: 'required_prerequisite_missing' } },
+        checks: baseDoctor.checks.map((item) => item.name === 'Work Louder Input' ? { ...item, ok: false } : item),
+        readiness: {
+          ...baseDoctor.readiness,
+          ashlrLayer: { status: 'blocked', reason: 'required_prerequisite_missing' },
+          ...(route === 'hybrid_native' ? { hybridNative: { status: 'blocked', reason: 'required_prerequisite_missing' } } : {}),
+        },
       },
       developmentBinary: '/missing/development/binary', runCommand: commandFixture,
       observedAt: '2026-09-01T20:00:00.000Z',
     })
 
     const integrity = result.checks.find((item) => item.id === 'input_installation_integrity')
-    assert.equal(integrity.status, route === 'ashlr_layer' ? 'blocked' : 'warn')
+    assert.equal(integrity.status, route === 'codex_native' ? 'warn' : 'blocked')
     assert.equal(integrity.evidence, 'status=known_resource_mutation; version=0.18.4')
     assert.match(
       integrity.reason,
-      route === 'ashlr_layer'
-        ? /fully quit Input, preserve a stopped-state profile backup/
-        : /advisory for a read-only native retry/,
+      route === 'codex_native'
+        ? /advisory for a read-only native retry/
+        : /fully quit Input, preserve a stopped-state profile backup/,
     )
     const recovery = result.next_steps.find((item) => item.id === 'restore_signed_input')
     assert.deepEqual(recovery.requires, [
       'fully quit Work Louder Input',
       'preserve a stopped-state profile backup before replacement',
       'replace the modified app with one official signed Work Louder Input release',
-      route === 'ashlr_layer'
-        ? 'rerun the read-only doctor before reopening board controllers or considering firmware'
-        : 'rerun the read-only doctor before considering another firmware operation',
+      route === 'codex_native'
+        ? 'rerun the read-only doctor before considering another firmware operation'
+        : 'rerun the read-only doctor before reopening board controllers or considering firmware',
     ])
     assert.equal(result.next_steps.some((item) => item.id === 'qualify_native_firmware'), false)
     assert.equal(result.next_steps.some((item) => item.id === 'reconcile_input_profile'), false)
     assert.equal(result.next_steps.some((item) => item.id === 'complete_ashlr_flight_check'), false)
+    assert.equal(result.next_steps.some((item) => item.id === 'complete_hybrid_non_agent_flight_check'), false)
     assert.doesNotMatch(JSON.stringify(result), /Users|private|secret|window-info-retriever/)
   }
 })
@@ -511,7 +607,7 @@ test('recognized unresolved status with malformed fields cannot pass', () => {
 })
 
 test('preflight output never publishes executable firmware or permission steps', () => {
-  for (const route of ['ashlr_layer', 'codex_native']) {
+  for (const route of ['ashlr_layer', 'codex_native', 'hybrid_native']) {
     const result = buildPreflight({
       route, source, appDoctorRaw: appDoctor, stable: null,
       developmentBinary: '/missing/development/binary', runCommand: commandFixture,

@@ -17,16 +17,31 @@ right.
 This preserves Codex's supported device path instead of emulating it. On the
 shared layer, provider hooks normalize Codex and Claude Code lifecycle events
 into the same six stable slots. An occupied slot opens ChatGPT or cmux based on
-its observed provider. Exact Codex-task focus remains native-only. Exact cmux
-pane focus is used only after a fresh locator and human-enabled cmux capability
-pass validation; otherwise Agent Board safely foregrounds cmux and sends no
-terminal input.
+its observed provider. Exact Codex-task focus remains native-only. The
+source-tested exact cmux-focus substrate is unreachable in the current installed
+app because locator capture, authorization issuance, and credential enrollment
+are not implemented. Current Claude slots safely foreground cmux at the
+application level and send no terminal input.
+
+## Prepare a trusted source export
+
+1. Turn on Creator Micro 2 Pro, attach a data-capable USB-C cable, hold the
+   bottom-left touch surface for three seconds, select the fourth communication
+   channel with white underglow, and let the selector exit.
+2. Run `npm run doctor` from `wrkpad/app`. Before profile work, require the Work
+   Louder Input installation check to pass strict publisher, signature,
+   Gatekeeper, and resource-integrity validation. If it reports
+   `known_resource_mutation`, fully quit Input and replace it with a pristine
+   official copy first.
+3. Open that verified Input copy alone. Export every current profile needed for
+   rollback, record the current profile and layer, and then export an ordinary
+   macOS Creator Micro 2 source profile containing no protected `KV_OAI_*`
+   layer. Fully quit Input.
 
 ## Generate the candidate offline
 
-Start from an exported, ordinary macOS Creator Micro 2 profile that contains no
-protected `KV_OAI_*` layer. Keep that original export as rollback evidence.
-From `wrkpad/app`, write a new output path:
+Keep the ordinary source export unchanged as rollback evidence. From
+`wrkpad/app`, write a new output path:
 
 ```bash
 npm run profile:generate-dual -- ORDINARY-profile.json ashlr-dual-plane.json
@@ -42,30 +57,32 @@ all 20 expected shortcut actions. A `match` result proves only the file.
 
 ## Human import and acceptance
 
-1. Require a fresh strict-signature, publisher, and Gatekeeper check for Work
-   Louder Input. If the installed bundle reports `known_resource_mutation`,
-   replace it with a pristine official copy before profile work.
-2. Open verified Input alone. Export every profile needed for rollback and
-   record the current profile.
-3. Choose **Import Profile** and select the generated candidate. Never use
+1. Re-run `npm run doctor` and require the verified Input result to remain
+   current.
+2. Open verified Input alone and choose **Import Profile** for the generated
+   candidate. Never use
    **Reset Settings**, edit the cache, or write `keymap.json` directly.
-4. Inspect the candidate before activation. Confirm **Codex Native Recovery
+3. Inspect the candidate before activation. Confirm **Codex Native Recovery
    (UNOFFICIAL)** is visible position **1** and **Ashlr Daily** is position
    **2**. Confirm the profile name includes **UNOFFICIAL**.
-5. Set that candidate current and wait for Input to finish without an update
+4. Set that candidate current and wait for Input to finish without an update
    error. Export it again to a new file, fully quit Input, rerun the integrity
    check, and run `profile:check-dual` against the post-import export.
-6. Leave Input quit. Declare **Codex Native** in Agent Board, establish layer 1,
-   and perform the native physical acceptance. Without another layer change,
-   short-tap the touch selector exactly once, declare **Ashlr Layer**, and begin
-   the 20-gesture Flight Check within 30 seconds. The app requires that explicit
-   transition from the just-proven layer-1 state; one blind tap from an unknown
-   state is not accepted. A failed or interrupted Dual Plane run must be ended;
-   re-establish layer 1 and repeat the one-tap transition before starting another
-   receipt. The prior attestation is never reused for a restart. For the multi-layer profile, the read-only cache proves the exact
-   Ashlr layer exists but cannot identify the selected firmware layer; the
-   fresh attestation admits the test and the ordered physical receipt is the
-   route evidence.
+5. Leave Input quit. Declare **Codex Native** in Agent Board. Establish layer 1
+   by testing a harmless assigned Codex Agent Key and personally observing the
+   expected native response. If that response is absent, short-tap once and
+   retest; the generated candidate has exactly two layers. Perform the remaining
+   native physical acceptance only after the visible native response succeeds.
+6. Without another layer change, short-tap the touch selector exactly once,
+   declare **Ashlr Layer**, and check the operator self-attestation within 30
+   seconds before starting the 20-gesture Flight Check. The checkbox records
+   what the operator reports doing; Agent Board does not observe the touch,
+   selected firmware layer, or bind this assertion to a native HID receipt. A
+   failed or interrupted run must be ended; personally re-establish layer 1 and
+   repeat the one-tap transition before supplying a new self-attestation. The
+   previous attestation is never reused for a restart. The read-only cache proves
+   only that the exact Ashlr layer exists; the ordered physical Flight Check is
+   the route evidence.
 7. If either acceptance fails, stop. Reopen a currently verified Input copy
    alone, restore the recorded rollback profile through Input's UI, quit Input,
    and reconcile integrity and device state again.

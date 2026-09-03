@@ -6,6 +6,11 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 
 ### Fixed
 
+- Replace ambiguous layer-selection and Dual Plane claims with an explicit
+  operator self-attestation, a visible native-response check, and the exact
+  five-plus-two native action-switch grouping. The attention runway now labels
+  a current snapshot without implying that native and Ashlr slot identities are
+  identical.
 - Keep both Codex Native and an unselected board route fail-closed for mapped
   actions while preserving software-only Agent-slot focus.
 - Read Codex Desktop's current and previous UTC log folders so native evidence
@@ -17,6 +22,11 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 
 ### Added
 
+- An experimental `hybrid_native` source path: the offline generator creates
+  two layers and twenty shared action definitions, the mixed first layer
+  references only fourteen non-Agent shortcuts, and the route-specific Flight
+  Check excludes all six Codex-owned Agent keys. No Input import, physical
+  14+6 acceptance, exact Claude pane focus, or public release is claimed.
 - An offline-generated, verifier-enforced Dual Plane profile with protected
   Codex Native controls in layer 1 and the provider-neutral Ashlr workflow in
   layer 2. Multi-layer diagnostics verify the configured Ashlr mapping without

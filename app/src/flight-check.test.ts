@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { allControlIds, type ControlId } from './board'
-import { dailyFlightSteps, diagnosticFlightSteps, expectedSignalsAfter, flightAcceptance, flightStepComplete, noSignalRecoveryNeeded, type FlightEvent } from './flight-check'
+import { dailyFlightSteps, diagnosticFlightSteps, expectedSignalsAfter, flightAcceptance, flightStepComplete, hybridNativeFlightSteps, noSignalRecoveryNeeded, type FlightEvent } from './flight-check'
 
 const event = (signal: ControlId, expectedSignals: ControlId[], at: number, matched = expectedSignals.includes(signal)): FlightEvent => ({
   signal, expectedSignals, matched, sequence: at, receivedAt: new Date(at).toISOString(), accelerator: 'test', monotonicNs: String(at),
@@ -11,6 +11,16 @@ describe('Flight Check model', () => {
     expect(dailyFlightSteps).toHaveLength(20)
     expect(dailyFlightSteps.flatMap((step) => step.signals)).toHaveLength(20)
     expect(new Set(diagnosticFlightSteps.flatMap((step) => step.signals))).toEqual(new Set(allControlIds))
+  })
+  it('models exactly the 14 Ashlr-owned Hybrid Native gestures', () => {
+    expect(hybridNativeFlightSteps).toHaveLength(14)
+    const signals = hybridNativeFlightSteps.flatMap((step) => step.signals)
+    expect(new Set(signals).size).toBe(14)
+    expect(signals).not.toEqual(expect.arrayContaining(['agent1', 'agent6']))
+    expect(expectedSignalsAfter('daily', [], 'hybrid_native')).toEqual(['cmd1'])
+    const events = hybridNativeFlightSteps.map((step, index) => event(step.signals[0], step.signals, index))
+    expect(flightAcceptance('daily', events, true, 14, 14, 'hybrid_native').passed).toBe(true)
+    expect(flightAcceptance('daily', events, true, 20, 14, 'hybrid_native').passed).toBe(false)
   })
   it('does not bank an out-of-order signal for a later step', () => {
     const wrong = event('agent1', ['dialLeft'], 1, false)

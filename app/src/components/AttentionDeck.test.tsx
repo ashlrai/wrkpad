@@ -66,4 +66,11 @@ describe('black-cap attention runway', () => {
     expect(screen.getByRole('button', { name: /Agent 2.*Claude Code.*Outside the current screen lens/i }).className).toContain('outside-lens')
     expect(screen.getByRole('button', { name: /Agent 1.*Codex/i }).className).not.toContain('outside-lens')
   })
+
+  it('states the Hybrid Native ownership boundary without promising Claude pane focus', () => {
+    render(<AttentionDeck agents={agents} selectedSlot={1} source="observer_online" boardRoute="hybrid_native" onSelect={() => {}} onFocus={() => {}} />)
+    expect(screen.getByText('Mixed screen map · split physical ownership')).toBeTruthy()
+    expect(screen.getByText(/AG00–AG05 remain Codex-native/i)).toBeTruthy()
+    expect(screen.getByText(/exact Claude task or cmux pane focus remains unavailable/i)).toBeTruthy()
+  })
 })

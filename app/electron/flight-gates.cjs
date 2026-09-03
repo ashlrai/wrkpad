@@ -1,4 +1,5 @@
 const VARIANTS = new Set(['daily', 'diagnostic'])
+const { HYBRID_NATIVE_ROUTE, shortcutSignalsForRoute } = require('./board-route-policy.cjs')
 
 const EXPECTED_PROFILE = Object.freeze({
   daily: Object.freeze({ profile: 'Ashlr Agent Board Corrected', layer: 'Ashlr Daily' }),
@@ -6,6 +7,7 @@ const EXPECTED_PROFILE = Object.freeze({
 })
 
 const DUAL_PLANE_PROFILE = 'Ashlr Dual Plane (UNOFFICIAL)'
+const HYBRID_NATIVE_PROFILE = 'Ashlr Hybrid Dual Plane (UNOFFICIAL)'
 
 function exactDualPlaneLayers(layers) {
   return Array.isArray(layers)
@@ -17,8 +19,25 @@ function exactDualPlaneLayers(layers) {
     && layers[1]?.encoderDirection === 'correct'
 }
 
-function profileReady(profile, variant, expected, dualPlaneAshlrLayerSelected) {
+function exactHybridLayers(layers) {
+  return Array.isArray(layers)
+    && layers.length === 2
+    && layers[0]?.name === 'Ashlr Hybrid Native (UNOFFICIAL)'
+    && layers[0]?.mapping === 'hybrid_native'
+    && layers[0]?.encoderDirection === 'correct'
+    && layers[1]?.name === 'Ashlr Daily'
+    && layers[1]?.mapping === 'ashlr_daily'
+    && layers[1]?.encoderDirection === 'correct'
+}
+
+function profileReady(profile, route, variant, expected, dualPlaneAshlrLayerSelected) {
   if (!expected || profile?.cacheStatus !== 'available') return false
+  if (route === HYBRID_NATIVE_ROUTE) {
+    return variant === 'daily'
+      && profile.activeProfile === HYBRID_NATIVE_PROFILE
+      && profile.activeLayer === null
+      && exactHybridLayers(profile.configuredLayers)
+  }
   if (profile.activeProfile === expected.profile
     && profile.activeLayer === expected.layer
     && profile.encoderDirection === 'correct') return true
@@ -33,37 +52,39 @@ function validVersion(value) {
   return typeof value === 'string' && /^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$/.test(value)
 }
 
-function registeredSignals(registrations, expectedSignals) {
-  if (!Array.isArray(registrations) || !Array.isArray(expectedSignals)) return []
-  const allowed = new Set(expectedSignals)
+function exactRegisteredSignals(registrations, expectedSignals) {
+  if (!Array.isArray(registrations) || registrations.length !== expectedSignals.length) return []
+  const expected = new Set(expectedSignals)
   const observed = new Set()
   for (const item of registrations) {
-    if (!item || item.registered !== true || !allowed.has(item.signalId) || observed.has(item.signalId)) continue
+    if (!item || item.registered !== true || !expected.has(item.signalId) || observed.has(item.signalId)) return []
     observed.add(item.signalId)
   }
-  return [...observed]
+  return observed.size === expected.size ? [...observed] : []
 }
 
 function evaluateFlightGates(evidence) {
   const variant = VARIANTS.has(evidence?.variant) ? evidence.variant : null
+  const route = evidence?.boardRoute
   const expected = variant ? EXPECTED_PROFILE[variant] : null
-  const expectedSignals = Array.isArray(evidence?.expectedSignals) ? evidence.expectedSignals : []
-  const registered = registeredSignals(evidence?.shortcutRegistrations, expectedSignals)
+  const expectedSignals = shortcutSignalsForRoute(route)
+  const registered = exactRegisteredSignals(evidence?.shortcutRegistrations, expectedSignals)
   const input = evidence?.inputInstallation
   const profile = evidence?.inputProfile
   const receiver = evidence?.receiverRuntime
 
   const gates = {
-    variant: Boolean(variant),
-    route: evidence?.boardRoute === 'ashlr_layer',
+    variant: Boolean(variant) && (route !== HYBRID_NATIVE_ROUTE || variant === 'daily'),
+    route: expectedSignals.length > 0,
     usb: evidence?.usbDetected === true,
     input: input?.status === 'verified' && validVersion(input?.version),
-    profile: profileReady(profile, variant, expected, evidence?.dualPlaneAshlrLayerSelected),
+    profile: profileReady(profile, route, variant, expected, evidence?.dualPlaneAshlrLayerSelected),
     receiver: receiver?.status === 'exclusive'
       && receiver?.instanceCount === 1
       && receiver?.distinctBuildCount === 1,
     shortcuts: expectedSignals.length > 0 && registered.length === expectedSignals.length,
   }
+  if (route === HYBRID_NATIVE_ROUTE) gates.inputApplication = evidence?.inputApplication?.status === 'not_running'
 
   return {
     ready: Object.values(gates).every(Boolean),
@@ -84,7 +105,7 @@ function evaluateFlightGates(evidence) {
         configuredLayers: Array.isArray(profile?.configuredLayers)
           ? profile.configuredLayers.slice(0, 6).map((layer) => ({
             name: typeof layer?.name === 'string' ? layer.name : null,
-            mapping: ['ashlr_daily', 'codex_native', 'unknown'].includes(layer?.mapping) ? layer.mapping : 'unknown',
+            mapping: ['ashlr_daily', 'codex_native', 'hybrid_native', 'unknown'].includes(layer?.mapping) ? layer.mapping : 'unknown',
             encoderDirection: typeof layer?.encoderDirection === 'string' ? layer.encoderDirection : 'unavailable',
           }))
           : [],
@@ -97,9 +118,10 @@ function evaluateFlightGates(evidence) {
           ? receiver.currentAsarSha256
           : null,
       },
+      inputApplication: { status: ['running', 'not_running', 'unavailable'].includes(evidence?.inputApplication?.status) ? evidence.inputApplication.status : 'unavailable' },
       shortcuts: { registeredCount: registered.length, expectedCount: expectedSignals.length },
     },
   }
 }
 
-module.exports = { EXPECTED_PROFILE, evaluateFlightGates }
+module.exports = { EXPECTED_PROFILE, evaluateFlightGates, exactHybridLayers }

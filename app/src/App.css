@@ -95,3 +95,10 @@ body{margin:0;min-width:0;min-height:100vh;background:radial-gradient(circle at 
 @media(max-width:900px){.topbar{height:auto;min-height:78px;grid-template-columns:minmax(0,1fr) auto;gap:10px}.system-strip{grid-column:1/-1;justify-self:start;flex-wrap:wrap}.profile-rail{overflow-x:auto}.board-route-rail{grid-template-columns:1fr}.board-route-options{grid-template-columns:1fr}.readiness-ribbon{height:auto;min-height:36px;padding-block:8px;flex-wrap:wrap}.readiness-ribbon button{margin-left:0}.native-truth-heading{align-items:flex-start;flex-direction:column;gap:10px}.native-truth-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.mission-control-grid{padding:12px;grid-template-columns:minmax(0,1fr)}.attention-deck{padding:12px}.slot-row{gap:.4rem}.attention-slot{padding:.625rem}.workspace-grid,.setup-grid,.flight-layout,.flight-hero{grid-template-columns:minmax(0,1fr)}.deck-stage{border-right:0}.flight-score{width:160px}.signal-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.recovery-actions{grid-template-columns:1fr}.native-evidence-ladder,.native-attestations,.native-control-results{grid-template-columns:1fr}.native-evidence-ladder:before{display:none}.native-control-check-head{display:grid}.native-control-check-state{justify-self:start}}
 @media(max-width:560px){.native-route-truth{padding-inline:14px}.native-truth-grid,.provider-routing-row{grid-template-columns:1fr}.provider-lens-row{padding-inline:0}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+.board-route-options{grid-template-columns:repeat(4,minmax(0,1fr))}
+.profile-rail-note.route-hybrid_native{color:#87591f}
+.readiness-ribbon.route-hybrid_native{height:auto;min-height:50px;flex-wrap:wrap;padding-block:7px;gap:7px 15px}
+.provider-contract.route-hybrid_native{border-color:rgba(237,155,74,.25);background:rgba(237,155,74,.07)}
+.provider-contract.route-hybrid_native strong{color:#87591f}
+.native-observer-note.hybrid{border-color:rgba(237,155,74,.28);background:rgba(237,155,74,.08);color:#6f501f}
+@media(max-width:900px){.board-route-options{grid-template-columns:1fr}}

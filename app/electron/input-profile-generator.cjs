@@ -16,6 +16,8 @@ const DEFAULT_LIGHTS = Object.freeze({
 
 const CODEX_NATIVE_RECOVERY_LAYER_NAME = 'Codex Native Recovery (UNOFFICIAL)'
 const DUAL_PLANE_PROFILE_NAME = 'Ashlr Dual Plane (UNOFFICIAL)'
+const HYBRID_NATIVE_LAYER_NAME = 'Ashlr Hybrid Native (UNOFFICIAL)'
+const HYBRID_NATIVE_PROFILE_NAME = 'Ashlr Hybrid Dual Plane (UNOFFICIAL)'
 const CODEX_NATIVE_KEYMAP = Object.freeze([
   Object.freeze(['KV_OAI_AG00', 'KV_OAI_AG01']),
   Object.freeze(['KV_OAI_AG02', 'KV_OAI_AG03', 'KV_OAI_AG04', 'KV_OAI_AG05']),
@@ -280,6 +282,115 @@ function generateDualPlaneInputProfile(source) {
   }
 }
 
+/**
+ * Build an experimental first layer that leaves the six Agent keys on Codex's
+ * vendor protocol while routing every other bindable control through the same
+ * ordinary shortcuts as Ashlr Daily. The unchanged all-shortcut layer remains
+ * second as a provider-neutral fallback.
+ *
+ * This function only creates an offline import artifact. It does not establish
+ * that ChatGPT accepts a mixed layer or that Input synchronized it to a device.
+ */
+function generateHybridNativeInputProfile(source) {
+  const daily = generateInputProfile(source, 'daily')
+  if (daily.profile.layers[0].os !== 0) throw new Error('Hybrid Native currently supports only a macOS source export')
+  const hybridLayer = structuredClone(daily.profile.layers[0])
+  hybridLayer.id = 0
+  hybridLayer.name = HYBRID_NATIVE_LAYER_NAME
+  hybridLayer.layout.base[0] = CODEX_NATIVE_KEYMAP[0].map(keycodeCell)
+  hybridLayer.layout.base[1] = CODEX_NATIVE_KEYMAP[1].map(keycodeCell)
+  const dailyLayer = structuredClone(daily.profile.layers[0])
+  dailyLayer.id = 1
+  return {
+    ...daily,
+    profile: {
+      id: 0,
+      name: HYBRID_NATIVE_PROFILE_NAME,
+      layers: [hybridLayer, dailyLayer],
+    },
+  }
+}
+
+function layerHasExactHybridNativeLayout(layer) {
+  if (!layer || layer.name !== HYBRID_NATIVE_LAYER_NAME || layer.os !== 0 || layer.layout?.joystick?.type !== 'RADIAL') return false
+  const base = layer.layout.base?.map((row) => Array.isArray(row) ? row.map((cell) => cell?.keycode) : null)
+  const encoders = layer.layout.encoders?.[0]?.map((cell) => cell?.keycode)
+  const sectors = layer.layout.joystick.sectors
+  return JSON.stringify(base) === JSON.stringify([
+    ['KV_OAI_AG00', 'KV_OAI_AG01'],
+    ['KV_OAI_AG02', 'KV_OAI_AG03', 'KV_OAI_AG04', 'KV_OAI_AG05'],
+    ['KA_6', 'KA_7', 'KA_8', 'KA_9'],
+    ['KA_10', 'KA_11', 'KA_12'],
+  ])
+    && JSON.stringify(encoders) === JSON.stringify(['KA_18', 'KA_17', 'KA_19'])
+    && JSON.stringify(sectors) === JSON.stringify([
+      { k: 'KA_15', a1: 0.1875, a2: 0.3125 }, { k: 'KC_NONE', a1: 0.3125, a2: 0.4375 },
+      { k: 'KA_16', a1: 0.4375, a2: 0.5625 }, { k: 'KC_NONE', a1: 0.5625, a2: 0.6875 },
+      { k: 'KA_13', a1: 0.6875, a2: 0.8125 }, { k: 'KC_NONE', a1: 0.8125, a2: 0.9375 },
+      { k: 'KA_14', a1: 0.9375, a2: 0.0625 }, { k: 'KC_NONE', a1: 0.0625, a2: 0.1875 },
+    ])
+}
+
+function inspectHybridNativeInputProfile(value) {
+  if (!value || value.keyboard !== 'creator_micro_v2' || value.language !== 'us') {
+    return { status: 'mismatch', reason: 'expected_us_creator_micro_v2' }
+  }
+  if (!hasExactKeys(value, ['keyboard', 'language', 'profile', 'actions', 'actionGroups', 'multiactions', 'multiactionGroups', 'smartActions', 'smartActionGroups'])
+    || !hasExactKeys(value.profile, ['id', 'name', 'layers'])
+    || value.profile.id !== 0
+    || value.profile.name !== HYBRID_NATIVE_PROFILE_NAME
+    || !Array.isArray(value.profile.layers)
+    || value.profile.layers.length !== 2) {
+    return { status: 'mismatch', reason: 'expected_exact_hybrid_two_layer_profile' }
+  }
+  const [hybridLayer, dailyLayer] = value.profile.layers
+  if (!hasExactKeys(hybridLayer, ['id', 'name', 'color', 'layout', 'os', 'lights'])
+    || hybridLayer.id !== 0
+    || hybridLayer.color !== '#4E70FF'
+    || !hasExactKeys(hybridLayer.layout, ['base', 'encoders', 'joystick'])
+    || !hasExactLights(hybridLayer.lights)
+    || !layerHasExactHybridNativeLayout(hybridLayer)) {
+    return { status: 'mismatch', reason: 'hybrid_native_layer_missing_or_changed' }
+  }
+  const exactActionGroups = JSON.stringify(value.actionGroups) === JSON.stringify([{ id: 0, name: 'Ashlr Agent Board', actionIds: shortcutActions.map((_, id) => id) }])
+  const exactEmptyGroups = JSON.stringify(value.multiactions) === '[]'
+    && JSON.stringify(value.smartActions) === '[]'
+    && JSON.stringify(value.multiactionGroups) === JSON.stringify([{ id: 0, name: 'Default', actionIds: [] }])
+    && JSON.stringify(value.smartActionGroups) === JSON.stringify([{ id: 0, name: 'Default', actionIds: [] }])
+  if (!hasExactKeys(dailyLayer, ['id', 'name', 'color', 'layout', 'os', 'lights'])
+    || dailyLayer.id !== 1
+    || dailyLayer.color !== '#4E70FF'
+    || !hasExactKeys(dailyLayer.layout, ['base', 'encoders', 'joystick'])
+    || !hasExactLights(dailyLayer.lights)
+    || JSON.stringify(hybridLayer.lights) !== JSON.stringify(dailyLayer.lights)
+    || !layerHasExactAshlrDailyLayout(dailyLayer)
+    || !hasExactShortcutActions(value.actions)
+    || !exactActionGroups
+    || !exactEmptyGroups) {
+    return { status: 'mismatch', reason: 'ashlr_daily_layer_missing_or_changed' }
+  }
+  return { status: 'match', reason: 'exact_hybrid_native_profile' }
+}
+
+function writeGeneratedHybridNativeProfile(sourcePath, outputPath) {
+  const source = readSourceProfile(sourcePath)
+  const generated = generateHybridNativeInputProfile(source)
+  const output = `${JSON.stringify(generated, null, 2)}\n`
+  writeFileSync(outputPath, output, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+  return {
+    outputPath,
+    schema: 'work_louder_input_profile_import_unofficial',
+    sha256: createHash('sha256').update(output).digest('hex'),
+    layers: 2,
+    hybridLayer: 1,
+    sharedLayer: 2,
+    nativeAgentKeys: 6,
+    shortcutGestures: 14,
+    physicalGestures: 20,
+    mutatesInputOrDevice: false,
+  }
+}
+
 function inspectDualPlaneInputProfile(value) {
   if (!value || value.keyboard !== 'creator_micro_v2' || value.language !== 'us') {
     return { status: 'mismatch', reason: 'expected_us_creator_micro_v2' }
@@ -370,18 +481,24 @@ module.exports = {
   CODEX_NATIVE_KEYMAP,
   CODEX_NATIVE_RECOVERY_LAYER_NAME,
   DUAL_PLANE_PROFILE_NAME,
+  HYBRID_NATIVE_LAYER_NAME,
+  HYBRID_NATIVE_PROFILE_NAME,
   DEFAULT_LIGHTS,
   MAX_SOURCE_BYTES,
   generateCodexNativeRecoveryLayer,
   generateDualPlaneInputProfile,
+  generateHybridNativeInputProfile,
   generateInputProfile,
   inspectDualPlaneInputProfile,
+  inspectHybridNativeInputProfile,
   inspectCodexNativeRecovery,
   layerHasExactAshlrDailyLayout,
   layerHasExactCodexNativeLayout,
+  layerHasExactHybridNativeLayout,
   readSourceProfile,
   safeLights,
   writeGeneratedCodexNativeRecoveryLayer,
   writeGeneratedDualPlaneProfile,
+  writeGeneratedHybridNativeProfile,
   writeGeneratedProfile,
 }

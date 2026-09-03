@@ -20,3 +20,27 @@ test('both profiles require ACT10 and ACT11 as separate ordered gestures', () =>
   const reversed = [...prefix.map((signal, index) => event(signal, index * 10)), event('cmd6', 220), event('cmd5', 225), event('cmd7', 230)]
   assert.notEqual(evaluateFlightSignals('diagnostic', reversed).status, 'passed')
 })
+
+test('Hybrid Native requires exactly fourteen ordered non-Agent signals', () => {
+  const ordered = [
+    'cmd1', 'cmd2', 'cmd3', 'cmd4', 'cmd5', 'cmd6', 'cmd7',
+    'joyUp', 'joyRight', 'joyDown', 'joyLeft',
+    'dialLeft', 'dialRight', 'dialPress',
+  ]
+  const passed = evaluateFlightSignals('daily', ordered.map((signal, index) => event(signal, index * 10)), 'hybrid_native')
+  assert.equal(passed.status, 'passed')
+  assert.equal(passed.expectedSignals, 14)
+  assert.equal(passed.receivedSignals.some((signal) => signal.startsWith('agent')), false)
+
+  const withAgent = evaluateFlightSignals('daily', [event('agent1', 0), ...ordered.map((signal, index) => event(signal, (index + 1) * 10))], 'hybrid_native')
+  assert.equal(withAgent.status, 'failed')
+  assert.equal(withAgent.problems[0].kind, 'misroute')
+  const swapped = [...ordered]
+  ;[swapped[0], swapped[1]] = [swapped[1], swapped[0]]
+  assert.equal(evaluateFlightSignals('daily', swapped.map((signal, index) => event(signal, index * 10)), 'hybrid_native').status, 'failed')
+})
+
+test('passive routes cannot produce a passing Flight receipt', () => {
+  assert.equal(evaluateFlightSignals('daily', [], 'codex_native').status, 'incomplete')
+  assert.equal(evaluateFlightSignals('daily', [event('cmd1', 1)], 'unknown').status, 'failed')
+})

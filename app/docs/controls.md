@@ -2,11 +2,12 @@
 
 This document is the canonical physical map for Ashlr Agent Board.
 
-The shortcut and action map below applies only while **Ashlr Layer** is
-declared. **Codex Native** and **Not selected** unregister every Agent Board
-shortcut and disable mapped actions; native board behavior remains owned by
-Codex. Software-only Agent-slot focus remains available from the screen and
-never sends prompt or terminal input.
+The shortcut and action map below applies in full while **Ashlr Layer** is
+declared. The experimental **Hybrid Native** route applies the same map only to
+the fourteen non-Agent controls; its six physical Agent keys remain Codex-owned.
+**Codex Native** and **Not selected** unregister every Agent Board shortcut and
+disable mapped actions. Software-only Agent-slot focus remains available from
+the screen and never sends prompt or terminal input.
 
 ## Stable Agent-key geometry
 
@@ -31,6 +32,13 @@ shared Codex + Claude workflow in layer 2, use the guarded
 Agent Board's route declaration must be changed to match because it cannot
 truthfully infer the active firmware layer.
 
+The opt-in [Hybrid Native profile](hybrid-native-profile.md) instead keeps the
+six layer-1 Agent cells on `KV_OAI_AG00`–`KV_OAI_AG05` while mapping every
+action, joystick, and dial gesture below. Its generated two-layer profile
+contains all twenty shared action definitions, but the hybrid first layer
+references only the fourteen definitions for IDs `6`–`19`. This path is
+source-tested and physically unaccepted.
+
 | Physical ID | Desktop signal | Shortcut | Behavior |
 | --- | --- | --- | --- |
 | AG00 | Agent 1 | `Control+Option+Command+1` | Open slot 1 provider surface |
@@ -41,6 +49,11 @@ truthfully infer the active firmware layer.
 | AG05 | Agent 6 | `Control+Option+Command+6` | Open slot 6 provider surface |
 
 When a slot is active, Codex opens ChatGPT and Claude Code opens cmux. This is application-level focus. No prompt, approval, or terminal input is submitted, and the app does not claim exact task or pane focus.
+
+That six-slot shortcut behavior applies to Ashlr Layer, not Hybrid Native's six
+physical Agent keys. On Hybrid Native layer 1, those keys remain Codex-only and
+cannot select a Claude slot or exact cmux pane. The mixed screen queue remains
+an observer and software-control surface.
 
 That Ashlr Layer behavior is distinct from **Codex Native**. In Codex Native,
 ChatGPT owns the six keys on firmware layer 1: one tap selects an assigned chat

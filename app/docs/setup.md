@@ -56,14 +56,24 @@ Agent Board stores one local expectation:
 - **Codex Native:** Codex is expected to handle vendor HID events and lighting.
 - **Ashlr Layer:** Work Louder Input is expected to emit the canonical desktop
   shortcuts for Codex, Claude Code/cmux, and Ashlr Fleet.
+- **Hybrid Native (experimental):** the six physical Agent keys are expected to
+  remain Codex-owned while Agent Board receives only the fourteen action,
+  joystick, and dial shortcuts from the mixed first layer.
 - **Not selected:** no physical route is inferred.
 
 This is labeled **Declared here — not detected**. Changing it writes the private
 Agent Board settings file and changes only Agent Board's runtime global-shortcut
-ownership: Codex Native and Not selected release the known shortcuts, while
-Ashlr Layer may register them after its ownership checks pass. It does not
+ownership: Codex Native and Not selected release the known shortcuts, Ashlr
+Layer may register all twenty, and Hybrid Native may register only the fourteen
+non-Agent shortcuts after its ownership checks pass. It does not
 change the board, firmware, Input or Codex configuration, another process,
 hooks, or `wrkpad` occupancy.
+
+Hybrid Native is implemented as an opt-in source experiment, not an accepted
+desk configuration. Generate, import, roll back, and test it only through the
+[Hybrid Native evidence contract](hybrid-native-profile.md). Its two-layer
+artifact contains twenty action definitions total; the mixed first layer
+references fourteen and leaves all six Agent keys Codex-only.
 
 ### Codex Native restart-safe handoff
 
@@ -97,10 +107,12 @@ Use **Prepare handoff** before the controller-isolation restart:
    A fresh ordered `v.oai.rgbcfg` → `v.oai.thstatus` → HID notification →
    radial notification sequence may advance the ladder to **Initialization
    inferred**. It does not complete the Settings or physical checks.
-5. Confirm the board remains on firmware layer 1, which the current official
+5. Keep the board on the explicitly selected white wired channel and establish
+   firmware layer 1, which the current official
    [Codex Micro guide](https://learn.chatgpt.com/docs/features/codex-micro)
-   assigns to ChatGPT, and on the explicitly selected white wired channel. Do
-   not short-tap the bottom-left layer/connection touch sensor during this run.
+   assigns to ChatGPT. A short tap advances the layer; it does not identify or
+   select layer 1. Treat only the harmless visible native response in step 7 as
+   operator evidence, and do not touch the layer selector after that response.
 6. Isolate Agent-key navigation from commands before testing it. In ChatGPT's
    Creator Micro settings, choose a chat-following Agent-key mode rather than a
    Custom shortcut, action, or skill, and make at least two harmless existing
@@ -117,9 +129,9 @@ Use **Prepare handoff** before the controller-isolation restart:
    Pressing the already selected chat can have no visible navigation effect,
    and an unassigned or unlit slot does not prove failure. Leave an unassigned
    slot pending rather than claiming it passed.
-8. Exercise the left rotary dial, right planar toggle/joystick, safely isolated
-   action switches, separate ACT10 and ACT11 bottom-row keys, transparent ACT12,
-   and black-cap lighting. Do not press an
+8. Exercise the left rotary dial, right planar toggle/joystick, the five safely
+   isolated native action switches ACT06 through ACT09 plus transparent ACT12,
+   separate ACT10 and ACT11 bottom-row keys, and black-cap lighting. Do not press an
    approval, rejection, or other consequential native command against live work
    merely to complete this receipt. Leave that group pending when a harmless
    context cannot be established.
@@ -361,6 +373,7 @@ or activate the result, send HID packets, or write firmware.
 | --- | --- | --- | --- |
 | Ashlr Layer daily | Input, Agent Board, ChatGPT/Codex, Claude Code, Claude Desktop, and cmux | Input emits shortcuts; Agent Board receives them | Cross-provider shortcuts and hook state; no native Codex RGB claim |
 | Codex Native qualification | ChatGPT Desktop plus Agent Board in passive Codex Native mode; Input remains quit | Codex vendor protocol; Agent Board unregisters all shortcuts and reads bounded evidence without opening the device | Inferred initialization plus explicit operator attestation; not cryptographic device proof |
+| Hybrid Native experiment | ChatGPT Desktop and exactly one Agent Board receiver; Input remains quit after human import and post-import verification | ChatGPT is intended to own the six Agent keys; Agent Board registers the other fourteen shortcuts | Requires separate 14-signal and six-key physical acceptance; screen slots do not provide exact Claude pane focus |
 | Firmware qualification | Signed Input app only after all other board/HID controllers quit | Input updater | Download, install, restored profile, and post-update acceptance remain separate |
 
 Declaring `ashlr_layer` does not disable Codex's native device client. Daily
@@ -393,6 +406,13 @@ find release -maxdepth 3 -type d -name '*.app' -print
 Open the architecture directory created under `release/`, then select a working directory in the app.
 
 ## Run Flight Check
+
+The established Ashlr Layer check below expects twenty signals. The experimental
+Hybrid Native route has a separate fourteen-signal order—`ACT06` through
+`ACT12`, joystick up/right/down/left, then dial counterclockwise/clockwise/press—and
+must be paired with the separate six-key Codex observation in
+[its acceptance contract](hybrid-native-profile.md). Never use `20/20` as proof
+of Hybrid Native or `14/14` as proof of its native Agent keys.
 
 1. Open **Flight Check** and choose **Daily profile**.
 2. Wait until the app says **Actions suppressed**.

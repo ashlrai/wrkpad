@@ -4,7 +4,7 @@ const path = require('node:path')
 
 const APP_DATA_DIRECTORY_NAME = 'ashlr-agent-board'
 const MAX_SETTINGS_BYTES = 64 * 1024
-const BOARD_ROUTES = new Set(['unknown', 'codex_native', 'ashlr_layer'])
+const BOARD_ROUTES = new Set(['unknown', 'codex_native', 'ashlr_layer', 'hybrid_native'])
 
 function appSettingsPath(appDataRoot) {
   if (!validWorkspace(appDataRoot)) throw new TypeError('appDataRoot must be an absolute local path')

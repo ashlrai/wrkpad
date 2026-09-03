@@ -15,14 +15,15 @@ test('main synchronizes receiver ownership before registering shortcuts', () => 
   assert.match(source, /createShortcutOwnershipController\(\{/)
   assert.match(source, /function synchronizeShortcutOwnership\(boardRoute\)/)
   assert.match(source, /unregisterAll: \(\) => globalShortcut\.unregisterAll\(\)/)
-  assert.match(source, /globalShortcut\.register\(accelerator, shortcutCallbackGuard\.bind\(\(\) => \{[\s\S]*flightSession\.record\(envelope\)[\s\S]*webContents\.send\('board:control', envelope\)/)
-  assert.match(source, /if \(boardRoute !== 'ashlr_layer'\) shortcutCallbackGuard\.invalidate\(\)/)
+  assert.match(source, /for \(const control of shortcutSignalsForRoute\(boardRoute\)\)[\s\S]*globalShortcut\.register\(accelerator, shortcutCallbackGuard\.bind\(\(\) => \{[\s\S]*flightSession\.record\(envelope\)[\s\S]*webContents\.send\('board:control', envelope\)/)
+  assert.match(source, /if \(!routeOwnsShortcuts\(boardRoute\)\) shortcutCallbackGuard\.invalidate\(\)/)
+  assert.match(source, /boardRoute !== 'hybrid_native' \|\| runtime\?\.inputApplication\?\.status === 'not_running'/)
   assert.match(source, /catch \(error\) \{[\s\S]*shortcutRegistrations = \[\][\s\S]*shortcutCallbackGuard\.invalidate\(\)[\s\S]*throw error/)
 })
 
 test('startup and route switches apply the declared route before owning shortcuts', () => {
   assert.match(source, /app\.whenReady\(\)\.then\(\(\) => \{[\s\S]*?createWindow\(\)[\s\S]*?synchronizeShortcutOwnership\(readSettings\(\)\.boardRoute\)[\s\S]*?\n\s*\}\)/)
-  assert.match(source, /if \(boardRoute !== 'ashlr_layer'\) \{[\s\S]*shortcutState = synchronizeShortcutOwnership\(boardRoute\)[\s\S]*shortcutState\.released !== true[\s\S]*saveBoardRoute\(boardRoute\)[\s\S]*if \(boardRoute === 'ashlr_layer'\) synchronizeShortcutOwnership\(boardRoute\)/)
+  assert.match(source, /currentRoute = readSettings\(\)\.boardRoute[\s\S]*currentRoute !== boardRoute \|\| !routeOwnsShortcuts\(boardRoute\)[\s\S]*shortcutState = synchronizeShortcutOwnership\('unknown'\)[\s\S]*shortcutState\.released !== true[\s\S]*saveBoardRoute\(boardRoute\)[\s\S]*if \(routeOwnsShortcuts\(boardRoute\)\) synchronizeShortcutOwnership\(boardRoute\)/)
 })
 
 test('main independently revalidates every Flight Check admission and receipt', () => {

@@ -137,6 +137,39 @@ test('rejects near-match dual layers with changed native or joystick controls', 
   assert.deepEqual(classifyInputKeymap(raw).configuredLayers.map((layer) => layer.mapping), ['unknown', 'unknown'])
 })
 
+test('recognizes only the exact mixed Hybrid Native ownership surface', () => {
+  const taps = ['KC_1', 'KC_2', 'KC_3', 'KC_4', 'KC_5', 'KC_6', 'KC_A', 'KC_B', 'KC_C', 'KC_D', 'KC_E', 'KC_F', 'KC_G', 'KC_UP', 'KC_RGHT', 'KC_DOWN', 'KC_LEFT', 'KC_Q', 'KC_W', 'KC_R']
+  const hybrid = {
+    name: 'Ashlr Hybrid Native (UNOFFICIAL)',
+    layout: {
+      keymap: [
+        ['KV_OAI_AG00', 'KV_OAI_AG01'],
+        ['KV_OAI_AG02', 'KV_OAI_AG03', 'KV_OAI_AG04', 'KV_OAI_AG05'],
+        ['KA_A7', 'KA_A8', 'KA_A9', 'KA_A10'],
+        ['KA_A11', 'KA_A12', 'KA_A13'],
+      ],
+      encoders: [['KA_A19', 'KA_A18', 'KA_A20']],
+      joystick: {
+        type: 'RADIAL',
+        sectors: [
+          { k: 'KA_A16', a1: 0.1875, a2: 0.3125 }, { k: 'KC_NONE', a1: 0.3125, a2: 0.4375 },
+          { k: 'KA_A17', a1: 0.4375, a2: 0.5625 }, { k: 'KC_NONE', a1: 0.5625, a2: 0.6875 },
+          { k: 'KA_A14', a1: 0.6875, a2: 0.8125 }, { k: 'KC_NONE', a1: 0.8125, a2: 0.9375 },
+          { k: 'KA_A15', a1: 0.9375, a2: 0.0625 }, { k: 'KC_NONE', a1: 0.0625, a2: 0.1875 },
+        ],
+      },
+    },
+  }
+  const raw = {
+    activeProfileId: 1,
+    profiles: [{ id: 1, name: 'Ashlr Hybrid Dual Plane (UNOFFICIAL)', layers: [hybrid, { ...hybrid, name: 'fallback' }] }],
+    macros: taps.map((tap, index) => macro(index + 1, tap)),
+  }
+  assert.equal(classifyInputKeymap(raw).configuredLayers[0].mapping, 'hybrid_native')
+  raw.profiles[0].layers[0].layout.keymap[0][0] = 'KA_A1'
+  assert.equal(classifyInputKeymap(raw).configuredLayers[0].mapping, 'unknown')
+})
+
 test('fails closed for unknown macros and malformed cache data', () => {
   const unknown = fixture()
   unknown.macros[0].actions[3].kc = 'KC_Z'

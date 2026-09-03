@@ -23,6 +23,17 @@ const dualPlaneInputProfile = {
   ],
 }
 
+const hybridNativeInputProfile = {
+  cacheStatus: 'available' as const,
+  activeProfile: 'Ashlr Hybrid Dual Plane (UNOFFICIAL)',
+  activeLayer: null,
+  encoderDirection: 'unavailable' as const,
+  configuredLayers: [
+    { name: 'Ashlr Hybrid Native (UNOFFICIAL)', mapping: 'hybrid_native' as const, encoderDirection: 'correct' as const },
+    { name: 'Ashlr Daily', mapping: 'ashlr_daily' as const, encoderDirection: 'correct' as const },
+  ],
+}
+
 const trustedHardwareDiagnostics = {
   inputInstallation: { status: 'verified' as const, version: '0.18.4' },
   receiverRuntime: {
@@ -120,6 +131,35 @@ describe('operator interface', () => {
     expect(screen.getByText(/changed Agent Board’s local preference and runtime global-shortcut ownership/i)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /Agent 1, AG00, Codex, Native review.*open its provider app/i }))
     expect(focusAgentSlot).toHaveBeenCalledWith(1)
+  })
+
+  it('renders Hybrid Native as six disabled native Agent keys plus fourteen Ashlr workflow gestures', async () => {
+    window.agentBoard = {
+      getStatus: vi.fn().mockResolvedValue({
+        boardConnected: true, boardVidPid: '303A:8298', inputInstalled: true, inputMonitoring: 'unverified',
+        inputInstallation: trustedHardwareDiagnostics.inputInstallation,
+        inputProfile: hybridNativeInputProfile,
+        inputApplication: { status: 'not_running' },
+        receiverRuntime: trustedHardwareDiagnostics.receiverRuntime,
+        codex: true, claude: true, ashlr: true, boardRoute: 'hybrid_native',
+        workspace: '/tmp', shortcutCount: 14,
+        shortcutRegistrations: [], workspaceSnapshot: null, receiverIdentity: null,
+      }),
+      getMissionControl: vi.fn().mockResolvedValue(initialUnavailableMission()),
+      setBoardRoute: vi.fn(), focusAgentSlot: vi.fn(), setProfile: vi.fn(), setFlightCheck: vi.fn(),
+      requestAction: vi.fn().mockResolvedValue({ ok: true, title: 'Staged', message: 'Local only.', timestamp: new Date().toISOString() }),
+      confirmAction: vi.fn(), beginHold: vi.fn(), cancelHold: vi.fn(), chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(), onControl: vi.fn(() => () => {}),
+    } as unknown as NonNullable<typeof window.agentBoard>
+
+    render(<App />)
+    expect(await screen.findByRole('heading', { name: 'Two owners. Two proofs.' })).toBeTruthy()
+    expect(screen.getByText('14/14 Ashlr workflow endpoints registered')).toBeTruthy()
+    expect(screen.getByText(/6 native Agent keys · no hybrid native receipt/i)).toBeTruthy()
+    expect((screen.getByRole('button', { name: /AG00: Agent 1/i }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: /ACT06: Amplify the work/i }) as HTMLButtonElement).disabled).toBe(false)
+    expect((screen.getByRole('button', { name: 'Turn dial counterclockwise' }) as HTMLButtonElement).disabled).toBe(false)
+    expect((screen.getByRole('button', { name: 'Joystick up' }) as HTMLButtonElement).disabled).toBe(false)
+    expect(screen.getByText(/Exact Claude task or cmux pane focus is not claimed/i)).toBeTruthy()
   })
 
   it('keeps Codex Native observer-only and out of the Ashlr Flight Check', async () => {
@@ -245,7 +285,7 @@ describe('operator interface', () => {
     expect(screen.getByRole('heading', { name: 'Exercise the dial' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Exercise the joystick' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Exercise all six agent keys' })).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Exercise all seven action keys' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Exercise the five native action switches' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Exercise the bottom keys' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Observe lighting' })).toBeTruthy()
     expect(screen.queryByRole('heading', { name: 'Verify Work Louder Input' })).toBeNull()
@@ -1444,7 +1484,7 @@ describe('operator interface', () => {
     expect(screen.queryByRole('button', { name: /Create corrected Input profile/i })).toBeNull()
     fireEvent.click(screen.getByRole('tab', { name: 'Flight Check' }))
     const daily = screen.getByRole('button', { name: /Daily profile/i })
-    const attestation = await screen.findByRole('checkbox', { name: /just proved native layer 1/i })
+    const attestation = await screen.findByRole('checkbox', { name: /operator self-attestation.*personally observed native layer 1 working/i })
     expect((daily as HTMLButtonElement).disabled).toBe(true)
     expect(setFlightCheck).not.toHaveBeenCalled()
 

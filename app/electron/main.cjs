@@ -13,6 +13,7 @@ const { inspectChatGptInstallationAsync } = require('./chatgpt-installation.cjs'
 const { createInputInstallationInspector } = require('./input-installation-async.cjs')
 const { inspectInputProfile } = require('./input-profile-diagnostics.cjs')
 const { inspectInputRuntime } = require('./input-runtime-diagnostics.cjs')
+const { inspectInputApplicationRuntime } = require('./input-application-runtime.cjs')
 const { createCachedAsarHasher, inspectPackagedReceiverPeers, inspectReceiverRuntime, shouldRegisterShortcuts } = require('./receiver-runtime-diagnostics.cjs')
 const { createCmuxFocusAdapter } = require('./cmux-focus-adapter.cjs')
 const { hasFreshExactDualPlaneAshlrAttestation } = require('./dual-plane-attestation.cjs')
@@ -31,6 +32,7 @@ const { appForProvider, collectMissionControl } = require('./mission-control.cjs
 const { configuredRendererUrl, trustedRendererUrl } = require('./renderer-trust.cjs')
 const { appSettingsPath, readWorkspaceSettings, saveBoardRouteSettings, saveWorkspaceSettings, validBoardRoute } = require('./settings.cjs')
 const { passiveRouteActionResult, routeAllowsConfiguredActions } = require('./action-route-policy.cjs')
+const { routeOwnsShortcuts, shortcutSignalsForRoute } = require('./board-route-policy.cjs')
 const { createShortcutCallbackGuard, createShortcutOwnershipController } = require('./shortcut-ownership.cjs')
 const { resolveTool } = require('./tool-resolver.cjs')
 
@@ -272,10 +274,12 @@ function trustedCompactIpc(handler) {
   }
 }
 
-function registerShortcuts() {
+function registerShortcuts(boardRoute) {
   shortcutCallbackGuard.invalidate()
   const registrations = []
-  for (const [control, accelerator] of Object.entries(HOTKEYS)) {
+  for (const control of shortcutSignalsForRoute(boardRoute)) {
+    const accelerator = HOTKEYS[control]
+    if (typeof accelerator !== 'string') throw new Error('Shortcut route contains an unknown signal')
     const registered = globalShortcut.register(accelerator, shortcutCallbackGuard.bind(() => {
       const envelope = {
       schemaVersion: 1,
@@ -295,14 +299,15 @@ function registerShortcuts() {
 }
 
 function inspectCurrentReceiverRuntime() {
+  const inputApplication = inspectInputApplicationRuntime()
   if (!app.isPackaged) {
     const peers = inspectPackagedReceiverPeers()
     if (peers.status === 'none') {
-      return { status: 'exclusive', instanceCount: 1, distinctBuildCount: 1, currentAsarSha256: null, candidateAsarSha256: null, candidateMatchesCurrent: null }
+      return { status: 'exclusive', instanceCount: 1, distinctBuildCount: 1, currentAsarSha256: null, candidateAsarSha256: null, candidateMatchesCurrent: null, inputApplication }
     }
-    return { status: 'unavailable', instanceCount: peers.status === 'present' ? peers.instanceCount + 1 : 0, distinctBuildCount: 0, currentAsarSha256: null, candidateAsarSha256: null, candidateMatchesCurrent: null }
+    return { status: 'unavailable', instanceCount: peers.status === 'present' ? peers.instanceCount + 1 : 0, distinctBuildCount: 0, currentAsarSha256: null, candidateAsarSha256: null, candidateMatchesCurrent: null, inputApplication }
   }
-  return inspectReceiverRuntime({ currentPid: process.pid, hashAsar: cachedReceiverAsarHash })
+  return { ...inspectReceiverRuntime({ currentPid: process.pid, hashAsar: cachedReceiverAsarHash }), inputApplication }
 }
 
 function currentPackagedAsarSha256() {
@@ -319,12 +324,15 @@ function currentPackagedAsarSha256() {
   }
 }
 
-function receiverOwnsShortcuts(runtime) {
-  return app.isPackaged ? shouldRegisterShortcuts(runtime) : runtime?.status === 'exclusive'
+function receiverOwnsShortcuts(runtime, boardRoute) {
+  const receiverReady = app.isPackaged ? shouldRegisterShortcuts(runtime) : runtime?.status === 'exclusive'
+  return receiverReady && (boardRoute !== 'hybrid_native' || runtime?.inputApplication?.status === 'not_running')
 }
 
-function registrationsAreActive(registrations) {
-  if (registrations.length !== Object.keys(HOTKEYS).length) return false
+function registrationsAreActive(registrations, boardRoute) {
+  const expectedSignals = shortcutSignalsForRoute(boardRoute)
+  if (registrations.length !== expectedSignals.length) return false
+  if (!registrations.every((registration, index) => registration?.signalId === expectedSignals[index])) return false
   try {
     return registrations.every(({ accelerator, registered }) => registered === true && globalShortcut.isRegistered(accelerator))
   } catch {
@@ -342,22 +350,23 @@ function shortcutsAreReleased() {
 
 const shortcutOwnership = createShortcutOwnershipController({
   clearApprovals: () => approvals.clear(),
-  expectedRegistrationCount: Object.keys(HOTKEYS).length,
+  expectedRegistrationCount: (boardRoute) => shortcutSignalsForRoute(boardRoute).length,
   inspectRuntime: inspectCurrentReceiverRuntime,
   registerShortcuts,
   registrationsAreActive,
   resetFlight: resetFlightState,
   runtimeOwnsShortcuts: receiverOwnsShortcuts,
+  routeOwnsShortcuts,
   shortcutsAreReleased,
   unregisterAll: () => globalShortcut.unregisterAll(),
 })
 
 function synchronizeShortcutOwnership(boardRoute) {
-  if (boardRoute !== 'ashlr_layer') shortcutCallbackGuard.invalidate()
+  if (!routeOwnsShortcuts(boardRoute)) shortcutCallbackGuard.invalidate()
   try {
     const state = shortcutOwnership.synchronize(boardRoute)
     shortcutRegistrations = state.registrations
-    if (boardRoute === 'ashlr_layer' && registrationsAreActive(shortcutRegistrations)) shortcutCallbackGuard.enable()
+    if (routeOwnsShortcuts(boardRoute) && registrationsAreActive(shortcutRegistrations, boardRoute)) shortcutCallbackGuard.enable()
     else shortcutCallbackGuard.invalidate()
     return state
   } catch (error) {
@@ -411,8 +420,8 @@ async function verifyFlightGates(variant, forceInput = true, dualPlaneAshlrLayer
     inputInstallation,
     inputProfile: inspectInputProfile(home, board?.storageId),
     receiverRuntime: currentReceiverRuntime,
+    inputApplication: currentReceiverRuntime.inputApplication,
     shortcutRegistrations,
-    expectedSignals: Object.keys(HOTKEYS),
   })
 }
 
@@ -540,6 +549,7 @@ ipcMain.handle('board:getStatus', trustedIpc(async () => {
       appAsarSha256: currentReceiverRuntime.currentAsarSha256 ?? currentPackagedAsarSha256(),
     },
     receiverRuntime: currentReceiverRuntime,
+    inputApplication: currentReceiverRuntime.inputApplication,
   }
 }))
 ipcMain.handle('board:getMissionControl', trustedIpc(() => missionControl()))
@@ -572,14 +582,15 @@ ipcMain.handle('board:saveNativeControlCheck', trustedIpc(async (_event, report)
 ipcMain.handle('board:setBoardRoute', trustedIpc((_event, boardRoute) => {
   if (!validBoardRoute(boardRoute)) throw new TypeError('Unsupported board route declaration')
   return nativeAcceptanceOperations.mutateContext(() => {
-    if (boardRoute !== 'ashlr_layer') {
-      const shortcutState = synchronizeShortcutOwnership(boardRoute)
+    const currentRoute = readSettings().boardRoute
+    if (currentRoute !== boardRoute || !routeOwnsShortcuts(boardRoute)) {
+      const shortcutState = synchronizeShortcutOwnership('unknown')
       if (shortcutState.released !== true) throw new Error('Shortcut release could not be verified')
     }
     saveBoardRoute(boardRoute)
     flightAdmissionMutation += 1
     activeFlightAdmission = null
-    if (boardRoute === 'ashlr_layer') synchronizeShortcutOwnership(boardRoute)
+    if (routeOwnsShortcuts(boardRoute)) synchronizeShortcutOwnership(boardRoute)
     return boardRoute
   })
 }))
@@ -765,7 +776,8 @@ ipcMain.handle('board:saveFlightReceipt', trustedIpc(async (_event, receipt) => 
   if (Buffer.byteLength(JSON.stringify(receipt), 'utf8') > 200_000) return null
   if (!Array.isArray(receipt.receivedSignals) || !Array.isArray(receipt.missingSignals) || !Array.isArray(receipt.events)) return null
   if (receipt.events.length > 100 || receipt.receivedSignals.length > 20 || receipt.missingSignals.length > 20) return null
-  const allowedSignals = new Set(Object.keys(HOTKEYS))
+  const allowedSignals = new Set(shortcutSignalsForRoute(readSettings().boardRoute))
+  if (!allowedSignals.size) return null
   if (![...receipt.receivedSignals, ...receipt.missingSignals].every((signal) => allowedSignals.has(signal))) return null
   if (!receipt.events.every((item) => item && allowedSignals.has(item.signal) && typeof item.receivedAt === 'string')) return null
   const variant = receipt.profileKind === 'diagnostic' ? 'diagnostic' : 'daily'
@@ -778,7 +790,7 @@ ipcMain.handle('board:saveFlightReceipt', trustedIpc(async (_event, receipt) => 
       return result.canceled || !result.filePath ? null : result.filePath
     },
     buildDocument: ({ flight, admission }) => {
-      const evaluation = evaluateFlightSignals(variant, flight.rawEvents)
+      const evaluation = evaluateFlightSignals(variant, flight.rawEvents, admission.evidence.boardRoute)
       const usbDetected = admission.evidence.usbDetected
       const registeredCount = shortcutRegistrations.filter((item) => item.registered).length
       const status = evaluation.status === 'passed' && admission.ready ? 'passed' : evaluation.status === 'incomplete' ? 'incomplete' : 'failed'
@@ -869,7 +881,7 @@ ipcMain.handle('board:confirmAction', trustedIpc(async (_event, actionId, token)
   if (flightSession.isActive()) return { ok:false,title:'Flight Check interlock',message:'The pending approval was canceled when hardware acceptance began.',timestamp:new Date().toISOString() }
   if (!approval || approval.actionId !== actionId || approval.expires < Date.now()) return { ok:false,title:'Approval expired',message:'Select the action again to create a fresh authorization.',timestamp:new Date().toISOString() }
   if (approval.webContentsId !== _event.sender.id) return { ok:false,title:'Approval rejected',message:'The confirmation came from a different window.',timestamp:new Date().toISOString() }
-  if (approval.boardRoute !== settings.boardRoute) return { ok:false,title:'Board route changed',message:'Review the action again after selecting the Ashlr Layer route.',timestamp:new Date().toISOString() }
+  if (approval.boardRoute !== settings.boardRoute) return { ok:false,title:'Board route changed',message:'Review the action again after confirming the current active action route.',timestamp:new Date().toISOString() }
   if (approval.workspace !== settings.workspace) return { ok:false,title:'Workspace changed',message:'Review the action again for the newly selected working directory.',timestamp:new Date().toISOString() }
   if (approval.safety === 'hold' && !holdSatisfied(approval)) return { ok:false,title:'Hold incomplete',message:'Keep holding continuously until the authorization indicator completes.',timestamp:new Date().toISOString() }
   return executeSpec(actionId, approval.workspace, { clipboard, home: app.getPath('home') })

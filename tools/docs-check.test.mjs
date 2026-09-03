@@ -74,6 +74,24 @@ test('operator docs preserve the exact twenty-gesture cross-provider contract', 
   assert.doesNotMatch(publicDocs, /19-gesture|all 19 daily signals|wide microphone cap/i)
 })
 
+test('Hybrid Native docs preserve the two-layer 20-definition and 14-reference boundary', () => {
+  const root = join(import.meta.dirname, '..')
+  const hybrid = readFileSync(join(root, 'app', 'docs', 'hybrid-native-profile.md'), 'utf8')
+  const readme = readFileSync(join(root, 'README.md'), 'utf8')
+
+  assert.match(hybrid, /experimental source implementation; not physically accepted or\s+released/)
+  assert.match(hybrid, /one profile with two firmware layers/)
+  assert.match(hybrid, /twenty action definitions total/)
+  assert.match(hybrid, /Hybrid Native layer references only\s+IDs `6`–`19`/)
+  assert.match(hybrid, /`KV_OAI_AG00`–`KV_OAI_AG05`/)
+  assert.match(hybrid, /`ACT06`[\s\S]*`ACT12`[\s\S]*joystick up, right, down, left[\s\S]*dial counterclockwise, clockwise, press/)
+  assert.match(hybrid, /npm run profile:generate-hybrid -- ORDINARY-profile\.json ashlr-hybrid-native\.json/)
+  assert.match(hybrid, /npm run profile:check-hybrid -- ashlr-hybrid-native\.json/)
+  assert.match(hybrid, /Exact Claude workspace or pane selection is unavailable/)
+  assert.match(hybrid, /None establishes[\s\S]*public GitHub Pages deployment/)
+  assert.match(readme, /--route hybrid_native --json/)
+})
+
 test('README uses the canonical matrix without a stale renderer screenshot', () => {
   const root = join(import.meta.dirname, '..')
   const readme = readFileSync(join(root, 'README.md'), 'utf8')

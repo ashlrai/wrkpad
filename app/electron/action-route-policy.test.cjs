@@ -4,9 +4,10 @@ const { readFileSync } = require('node:fs')
 const path = require('node:path')
 const { passiveRouteActionResult, routeAllowsConfiguredActions } = require('./action-route-policy.cjs')
 
-test('configured actions are enabled only for the exact Ashlr Layer route', () => {
+test('configured actions are enabled only for explicit Ashlr shortcut routes', () => {
   assert.equal(routeAllowsConfiguredActions({ boardRoute: 'ashlr_layer' }), true)
-  for (const settings of [null, undefined, {}, { boardRoute: 'unknown' }, { boardRoute: 'codex_native' }, { boardRoute: 'ASHLR_LAYER' }]) {
+  assert.equal(routeAllowsConfiguredActions({ boardRoute: 'hybrid_native' }), true)
+  for (const settings of [null, undefined, {}, { boardRoute: 'unknown' }, { boardRoute: 'codex_native' }, { boardRoute: 'ASHLR_LAYER' }, { boardRoute: 'HYBRID_NATIVE' }]) {
     assert.equal(routeAllowsConfiguredActions(settings), false)
   }
 })
@@ -16,7 +17,7 @@ test('passive-route denial is bounded and deterministic', () => {
   assert.deepEqual(result, {
     ok: false,
     title: 'Ashlr actions unavailable',
-    message: 'Configured actions are disabled unless the Ashlr Layer route is active.',
+    message: 'Configured actions are disabled unless an explicit Ashlr shortcut route is active.',
     timestamp: '2026-09-02T21:00:00.000Z',
   })
   assert.throws(() => passiveRouteActionResult(() => new Date('invalid')), /valid Date/)
@@ -37,6 +38,7 @@ test('main action IPC handlers enforce route policy and revoke passive authoriza
   assert.match(cancel, /settings = readSettings\(\)[\s\S]*!routeAllowsConfiguredActions\(settings\)[\s\S]*approvals\.delete\(token\)[\s\S]*return false/)
   assert.match(confirm, /approval = approvals\.get\(token\); approvals\.delete\(token\)[\s\S]*settings = readSettings\(\)[\s\S]*!routeAllowsConfiguredActions\(settings\)[\s\S]*passiveRouteActionResult\(\)/)
   assert.match(confirm, /approval\.boardRoute !== settings\.boardRoute/)
+  assert.doesNotMatch(confirm, /selecting the Ashlr Layer route/)
 })
 
 test('software-only agent slot focus remains outside the configured action gate', () => {

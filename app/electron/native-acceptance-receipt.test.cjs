@@ -327,6 +327,7 @@ test('fails closed on extra privacy fields and malformed receipt shapes', () => 
 test('bounds route, generic device identity, Codex version, and Codex build', () => {
   for (const hostile of [
     { ...context, route: 'ashlr_layer' },
+    { ...context, route: 'hybrid_native' },
     { ...context, device: { ...context.device, vidPid: '303a:8298' } },
     { ...context, device: { ...context.device, descriptorSha256: 'a'.repeat(64) } },
     { ...context, device: { ...context.device, firmwareVersion: '0.6.2' } },

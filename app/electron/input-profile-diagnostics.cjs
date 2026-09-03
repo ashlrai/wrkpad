@@ -27,6 +27,10 @@ const EXPECTED_NATIVE_BASE_KEYS = Object.freeze([
   'KV_OAI_AG00', 'KV_OAI_AG01', 'KV_OAI_AG02', 'KV_OAI_AG03', 'KV_OAI_AG04', 'KV_OAI_AG05',
   'KV_OAI_ACT06', 'KV_OAI_ACT07', 'KV_OAI_ACT08', 'KV_OAI_ACT09', 'KV_OAI_ACT10', 'KV_OAI_ACT11', 'KV_OAI_ACT12',
 ])
+const EXPECTED_HYBRID_BASE_KEYS = Object.freeze([
+  'KV_OAI_AG00', 'KV_OAI_AG01', 'KV_OAI_AG02', 'KV_OAI_AG03', 'KV_OAI_AG04', 'KV_OAI_AG05',
+  'KC_A', 'KC_B', 'KC_C', 'KC_D', 'KC_E', 'KC_F', 'KC_G',
+])
 const EXPECTED_NATIVE_ENCODER_KEYS = Object.freeze(['KV_OAI_ENC_CC', 'KV_OAI_ENC_CW', 'KV_OAI_ENC_CLK'])
 const EXPECTED_DAILY_JOYSTICK = Object.freeze([
   Object.freeze({ key: 'KC_DOWN', a1: 0.1875, a2: 0.3125 }), Object.freeze({ key: 'KC_NONE', a1: 0.3125, a2: 0.4375 }),
@@ -66,6 +70,8 @@ function classifyLayer(layer, macros) {
     && JSON.stringify(encoderKeycodes) === JSON.stringify(EXPECTED_NATIVE_ENCODER_KEYS)
   const mapping = JSON.stringify(resolvedBase) === JSON.stringify(EXPECTED_DAILY_BASE_KEYS) && encoderDirection === 'correct' && exactDailyJoystick
     ? 'ashlr_daily'
+    : JSON.stringify(resolvedBase) === JSON.stringify(EXPECTED_HYBRID_BASE_KEYS) && encoderDirection === 'correct' && exactDailyJoystick
+      ? 'hybrid_native'
     : JSON.stringify(resolvedBase) === JSON.stringify(EXPECTED_NATIVE_BASE_KEYS) && exactNativeControls
       ? 'codex_native'
       : 'unknown'

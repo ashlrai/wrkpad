@@ -7,6 +7,9 @@
 
 [Project landing page source](site/index.html) · [Machine-readable capabilities](site/capabilities.json)
 
+The checked-in landing page is source for local review; this branch does not
+claim that GitHub Pages or another hosted site has been deployed from it.
+
 **A local-first control plane and on-screen mission control for Work Louder
 Creator Micro 2, Codex, Claude Code, and agentic engineering fleets.**
 
@@ -44,6 +47,13 @@ firmware layer 1, while layer 2 provides the stable mixed Codex + Claude Code
 workflow. Generation is offline; Input import, activation, and both physical
 acceptance checks remain explicit human operations.
 
+An opt-in [Hybrid Native experiment](app/docs/hybrid-native-profile.md) is also
+implemented in source. Its first layer leaves the six physical Agent keys
+Codex-only while routing the other fourteen signals to Agent Board; its second
+layer is the full 20-shortcut Ashlr Daily fallback. The generator and route are
+source-tested, but no import, board synchronization, 14+6 physical acceptance,
+signed build, or public release is claimed.
+
 ## Two cooperating components
 
 | Component | Purpose | Current authority |
@@ -80,8 +90,13 @@ marks missing observers and optional CLIs as unavailable.
 - On Ashlr Layer, Agent Board maps 20 shortcuts across five software lenses,
   guards consequential actions, and exports a hashed operator-guided Flight
   Check receipt. Codex Native and an unselected route keep mapped actions off.
-- Agent Board keeps Codex Native and the cross-provider Ashlr Layer as explicit,
-  local-only route declarations; neither is inferred or applied to the board.
+- The experimental `hybrid_native` policy registers only the fourteen
+  non-Agent shortcuts and evaluates a distinct 14-signal Flight Check. Its
+  offline profile still contains all twenty shared action definitions because
+  the unchanged layer-2 fallback references them.
+- Agent Board keeps Codex Native, cross-provider Ashlr Layer, and experimental
+  Hybrid Native as explicit local route declarations. None is inferred or
+  applied to the board.
 - A privacy-bounded native diagnostic distinguishes historical RPC failures
   from a fresh, inferred initialization sequence while keeping the manual
   Settings connection and physical acceptance separate from the shortcut route.
@@ -110,6 +125,8 @@ marks missing observers and optional CLIs as unavailable.
 - No automatic quitting or killing of ChatGPT Desktop, Work Louder Input,
   Logitech, Karabiner, or provider processes.
 - No exact Codex task or cmux pane focus.
+- Hybrid Native's six physical Agent keys remain Codex-only; the mixed screen
+  queue does not give those keys exact Claude Code or cmux pane selection.
 - No prompt submission from an Agent slot.
 - No claim that a planned color is visible through opaque black keycaps; the
   screen is the authoritative legend.
@@ -170,6 +187,12 @@ Follow the [desktop setup and Flight Check](app/docs/setup.md) before using the
 physical controls. `npm run package:mac` creates an unsigned, architecture-specific
 local directory build; it does not install, sign, notarize, or publish anything.
 
+The experimental Hybrid Native artifact is generated and checked offline with
+`npm run profile:generate-hybrid -- SOURCE.json OUTPUT.json` and
+`npm run profile:check-hybrid -- OUTPUT.json`. Read its
+[acceptance contract](app/docs/hybrid-native-profile.md) first; neither command
+imports a profile or writes the device.
+
 For a first native Codex test:
 
 1. Turn on the Creator Micro 2 Pro and connect a data-capable USB-C cable.
@@ -177,9 +200,12 @@ For a first native Codex test:
    underglow is white. The current
    [Codex Micro guide](https://learn.chatgpt.com/docs/features/codex-micro)
    warns that a cable can charge while Bluetooth remains selected.
-3. Use a short touch-control tap to select layer 1. ChatGPT owns layer 1;
-   [Work Louder documents](https://worklouder.cc/micro-setup) the touch control
-   as the layer selector.
+3. Establish layer 1 without guessing. A short touch-control tap advances the
+   layer; it does not mean "go to layer 1." If a verified Input copy is being
+   used for setup, select layer 1 there, let the write finish, and fully quit
+   Input before opening ChatGPT. Otherwise test a harmless assigned Codex Agent
+   Key, and treat only the expected visible Codex response as operator evidence
+   that the native layer is active.
 4. In ChatGPT's device settings, confirm **Connected** and **Input Monitoring:
    Granted**. If the permission or layer changed, fully quit and reopen ChatGPT.
    These indicators prove discovery and permission state, not that a physical
@@ -208,6 +234,7 @@ without applying changes:
 ```bash
 node tools/agent-preflight.mjs inspect --route ashlr_layer --json
 node tools/agent-preflight.mjs inspect --route codex_native --json
+node tools/agent-preflight.mjs inspect --route hybrid_native --json
 ```
 
 Agents should read `requested_route`, `declared_route`, and `route_readiness`.
@@ -215,6 +242,11 @@ On `ashlr_layer`, also inspect the `input_profile` and `input_runtime` check
 entries. Read each next step's actor, safety, and `does_not_prove`, then follow
 the [Input-only reconciliation](app/docs/troubleshooting.md#input-only-reconciliation)
 rather than inventing a device or permission claim.
+
+For experimental `hybrid_native` work, require its own preflight result, the
+app's strict profile verifier and route tests, and the
+[Hybrid Native evidence contract](app/docs/hybrid-native-profile.md). Do not
+relabel either established route's result as Hybrid Native readiness.
 
 See the [agent operations runbook](docs/agent-operations.md) for the daily
 Codex/Claude workflow and human handoff gates.
