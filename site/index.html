@@ -12,6 +12,7 @@
   <meta property="og:description" content="See the six agents that need you. Run bounded engineering actions. Keep consequential authority human.">
   <meta name="twitter:card" content="summary">
   <title>wrkpad — Tactile agent operations</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="styles.css"><script src="app.js" defer></script>
 </head>
 <body>
@@ -46,10 +47,10 @@
     <section class="section demo" id="demo">
       <div class="heading"><div><p>Screen legend for black keycaps</p><h2>The board explains itself.</h2></div><p>The six chat positions never move. Text, icon, color, and freshness stay visible on screen—even when the physical caps are opaque.</p></div>
       <div class="demo-toolbar">
-        <div class="mode-switch" role="radiogroup" aria-label="Demo surface"><span>Surface</span><button type="button" role="radio" data-view="hardware" aria-checked="true" aria-controls="demo-board">Hardware</button><button type="button" role="radio" data-view="deck" aria-checked="false" aria-controls="demo-board">Desktop Deck</button></div>
-        <div class="scene-switch" role="radiogroup" aria-label="Synthetic workload"><span>Workload</span><button type="button" role="radio" data-scene="build" aria-checked="true">Live build</button><button type="button" role="radio" data-scene="review" aria-checked="false">Review queue</button><button type="button" role="radio" data-scene="quiet" aria-checked="false">Quiet desk</button></div>
+        <div class="mode-switch" role="group" aria-label="Demo surface"><span>Surface</span><button type="button" data-view="hardware" aria-pressed="true" aria-controls="demo-board">Hardware</button><button type="button" data-view="deck" aria-pressed="false" aria-controls="demo-board">Desktop Deck</button></div>
+        <div class="scene-switch" role="group" aria-label="Synthetic workload"><span>Workload</span><button type="button" data-scene="build" aria-pressed="true">Live build</button><button type="button" data-scene="review" aria-pressed="false">Review queue</button><button type="button" data-scene="quiet" aria-pressed="false">Quiet desk</button></div>
       </div>
-      <div class="route" role="radiogroup" aria-label="Synthetic route preview"><button type="button" role="radio" data-route="ashlr" aria-checked="true">Ashlr Layer</button><button type="button" role="radio" data-route="native" aria-checked="false">Codex Native</button><span id="route-summary">Shared Codex + Claude/cmux shortcuts. Actions remain guarded.</span></div>
+      <div class="route" role="group" aria-label="Synthetic route preview"><button type="button" data-route="ashlr" aria-pressed="true">Ashlr Layer</button><button type="button" data-route="native" aria-pressed="false">Codex Native</button><span id="route-summary">Shared Codex + Claude/cmux shortcuts. Actions remain guarded.</span></div>
       <p class="keyboard-guide" id="keyboard-guide"><strong>Keyboard or numpad:</strong> 1–6 agents · 7–0 delivery · arrows planar toggle · [ / ] or numpad − / + for dial · V voice · S guarded send · Space attention.</p>
       <div class="demo-grid">
         <div class="board" id="demo-board" role="region" data-view="hardware" data-scene="build" aria-label="Synthetic Creator Micro 2 screen twin" aria-describedby="keyboard-guide">

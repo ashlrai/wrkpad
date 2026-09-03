@@ -43,8 +43,10 @@ test('software-only agent slot focus remains outside the configured action gate'
   const source = readFileSync(path.join(__dirname, 'main.cjs'), 'utf8')
   const focus = source.match(/ipcMain\.handle\('board:focusAgentSlot'[\s\S]*?\n\}\)\)/)?.[0] ?? ''
   const focusImplementation = source.match(/async function focusAgentSlotResult\(slot\) \{[\s\S]*?\n\}/)?.[0] ?? ''
+  const focusFromSnapshot = source.match(/async function focusAgentFromSnapshot\(slot, snapshot\) \{[\s\S]*?\n\}/)?.[0] ?? ''
   assert.doesNotMatch(focus, /routeAllowsConfiguredActions/)
   assert.match(focus, /focusAgentSlotResult/)
   assert.doesNotMatch(focusImplementation, /routeAllowsConfiguredActions/)
-  assert.match(focusImplementation, /appForProvider/)
+  assert.doesNotMatch(focusFromSnapshot, /routeAllowsConfiguredActions/)
+  assert.match(focusFromSnapshot, /appForProvider/)
 })

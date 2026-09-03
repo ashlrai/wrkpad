@@ -22,6 +22,7 @@ test('every Compact Deck IPC handler verifies the exact compact renderer', () =>
   for (const channel of [
     'compact:getSnapshot',
     'compact:focusAgentSlot',
+    'compact:focusAttention',
     'compact:runSkillAction',
     'compact:runWorkflowAction',
     'compact:getPreferences',
@@ -66,6 +67,19 @@ test('Compact Deck snapshot is privacy-projected before crossing IPC', () => {
   assert.match(snapshotHandler, /showTitles: preferences\.showTitles/)
   assert.ok(snapshotHandler.indexOf('await missionControl') < snapshotHandler.indexOf('readCompactSettings'), 'privacy preference must be sampled after asynchronous mission collection')
   assert.doesNotMatch(snapshotHandler, /workspace|prompt|transcript|sessionId/)
+})
+
+test('Compact Deck action receipts are projected and Attention resolves atomically in main', () => {
+  const handlers = main.match(/ipcMain\.handle\('compact:focusAgentSlot'[\s\S]*?ipcMain\.handle\('compact:getPreferences'/)?.[0] ?? ''
+  assert.match(handlers, /projectCompactActionResult\(await focusAgentSlotResult\(slot\)\)/)
+  assert.match(handlers, /ipcMain\.handle\('compact:focusAttention'/)
+  assert.match(handlers, /requireCompactWorkflowAction\('stage_attention', ACTION_SPECS\)/)
+  assert.match(handlers, /focusHighestPriorityAgentResult\(\)/)
+  assert.doesNotMatch(handlers, /agent\.title|attentionSlot\)/)
+  const attention = main.match(/async function focusHighestPriorityAgentResult\(\) \{[\s\S]*?\n\}/)?.[0] ?? ''
+  assert.match(attention, /missionControl\(true\)/)
+  assert.match(attention, /projectCompactSnapshot\(mission\)\.attentionSlot/)
+  assert.match(attention, /focusAgentFromSnapshot\(slot, mission\)/)
 })
 
 test('background snapshots sample privacy after asynchronous mission collection', () => {

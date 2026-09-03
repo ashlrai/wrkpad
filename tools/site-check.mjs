@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const site = path.join(root, 'site')
-const required = ['index.html','styles.css','app.js','capabilities.json','llms.txt','robots.txt']
+const required = ['index.html','styles.css','app.js','capabilities.json','llms.txt','robots.txt','favicon.svg']
 const failures = []
 for (const file of required) if (!existsSync(path.join(site,file))) failures.push(`missing ${file}`)
 if (!existsSync(path.join(root, 'THIRD_PARTY_MEDIA.md'))) failures.push('missing third-party media notice')
@@ -17,6 +17,7 @@ for(const[,target]of html.matchAll(/href="#([^"]+)"/g))if(!ids.includes(target))
 for(const tag of ['<header','<nav','<main','<footer'])if(!html.includes(tag))failures.push(`missing landmark ${tag}`)
 for(const phrase of ['Developer preview','Synthetic demo','no compliance certification','sets no client-side cookies'])if(!html.toLowerCase().includes(phrase.toLowerCase()))failures.push(`missing truth phrase ${phrase}`)
 if(!html.includes('href="https://worklouder.cc/creator-micro-2"'))failures.push('missing official hardware photography link')
+if(!html.includes('rel="icon" href="favicon.svg"'))failures.push('missing local favicon reference')
 if(/assets\/(?:creator-micro-2\.avif|og-hardware\.jpg)/i.test(html))failures.push('uncleared Work Louder product media reference')
 if(!html.includes('href="#main"'))failures.push('missing skip link')
 for(const mode of ['data-view="hardware"','data-view="deck"'])if(!html.includes(mode))failures.push(`missing demo mode ${mode}`)
@@ -28,6 +29,7 @@ let cursor=-1
 for(const marker of physicalOrder){const next=html.indexOf(marker,cursor+1);if(next<0)failures.push(`missing physical control ${marker}`);else if(next<cursor)failures.push(`physical control out of order ${marker}`);else cursor=next}
 if(!html.includes('transparent-key'))failures.push('missing transparent Attention key treatment')
 if(!html.includes('aria-keyshortcuts='))failures.push('missing declared keyboard shortcuts')
+if(/role="radio(?:group)?"/.test(html))failures.push('custom radio controls require complete keyboard semantics')
 if(/<(?!button\b)[a-z][^>]*\bdata-control=/i.test(html))failures.push('non-button synthetic control')
 if(!css.includes(':focus-visible'))failures.push('missing focus treatment')
 if(!css.includes('prefers-reduced-motion'))failures.push('missing reduced motion')

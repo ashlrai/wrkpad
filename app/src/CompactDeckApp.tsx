@@ -79,6 +79,7 @@ interface CompactActionResult {
 interface CompactDeckBridge {
   getSnapshot(): Promise<CompactSnapshot>
   focusAgentSlot(slot: number): Promise<CompactActionResult>
+  focusAttention(): Promise<CompactActionResult>
   runSkillAction(actionId: CompactSkillActionId): Promise<CompactActionResult>
   runWorkflowAction(actionId: CompactWorkflowActionId): Promise<CompactActionResult>
   getPreferences(): Promise<CompactPreferences>
@@ -226,7 +227,7 @@ export default function CompactDeckApp() {
     const nextSlot = candidates[(baseIndex + direction + candidates.length) % candidates.length]
     setSelectedSlot(nextSlot)
     setFailed(false)
-    setReceipt(`Agent ${nextSlot} selected. Press the dial or joystick to open.`)
+    setReceipt(`Agent ${nextSlot} selected. Press the dial or agent key to open.`)
   }, [agents, occupiedSlots, selectedSlot])
 
   const runSkill = useCallback(async (actionId: CompactSkillActionId) => {
@@ -252,9 +253,13 @@ export default function CompactDeckApp() {
   }, [bridge, run])
 
   const focusAttention = useCallback(async () => {
-    const staged = await runWorkflow('stage_attention')
-    if (staged && snapshot.attentionSlot !== null) await focusSlot(snapshot.attentionSlot)
-  }, [focusSlot, runWorkflow, snapshot.attentionSlot])
+    if (!bridge) {
+      setFailed(true)
+      setReceipt('Open Agent Board to find the highest-priority agent.')
+      return
+    }
+    await run(() => bridge.focusAttention(), 'Finding the highest-priority agent…')
+  }, [bridge, run])
 
   const savePreferences = useCallback(async (change: Partial<Pick<CompactPreferences, 'alwaysOnTop' | 'openAtLaunch' | 'showTitles'>>) => {
     const next = { ...preferences, ...change }
@@ -348,10 +353,10 @@ export default function CompactDeckApp() {
           <button type="button" aria-label="Dial right: select next agent" onClick={() => moveSelection(1)}>+</button>
         </div>
         {agents.slice(0, 2).map((agent) => <AgentKey key={agent.slot} agent={agent} selected={selectedSlot === agent.slot} showTitle={preferences.showTitles} onActivate={(slot) => { void focusSlot(slot) }} />)}
-        <div className="joystick-control" role="group" aria-label="Joystick: select and open agents">
+        <div className="joystick-control" role="group" aria-label="Planar joystick: four-direction agent selection">
           <button type="button" aria-label="Joystick up: select previous agent" onClick={() => moveSelection(-1)}><ChevronUp size={11} /></button>
           <button type="button" aria-label="Joystick left: select previous agent" onClick={() => moveSelection(-1)}><ChevronLeft size={11} /></button>
-          <button type="button" className="stick-cap" aria-label={`Joystick press: open selected agent ${selectedSlot}`} onClick={() => { void focusSlot(selectedSlot) }} />
+          <span className="stick-cap" role="img" aria-label="Planar joystick center; not a press control" />
           <button type="button" aria-label="Joystick right: select next agent" onClick={() => moveSelection(1)}><ChevronRight size={11} /></button>
           <button type="button" aria-label="Joystick down: select next agent" onClick={() => moveSelection(1)}><ChevronDown size={11} /></button>
         </div>

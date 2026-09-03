@@ -81,7 +81,7 @@ function chooseRoute(next) {
   if (!routes[next]) return
   route = next
   document.body.classList.toggle('native-demo', next === 'native')
-  routeButtons.forEach((button) => button.setAttribute('aria-checked', String(button.dataset.route === next)))
+  routeButtons.forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.route === next)))
   document.querySelector('#route-summary').textContent = routes[next].summary
   renderSelection()
   announce(`${routes[next].label} synthetic route selected. No provider or hardware action occurred.`)
@@ -92,7 +92,7 @@ function chooseView(next) {
   view = next
   board.dataset.view = next
   document.body.classList.toggle('deck-demo', next === 'deck')
-  viewButtons.forEach((button) => button.setAttribute('aria-checked', String(button.dataset.view === next)))
+  viewButtons.forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.view === next)))
   document.querySelector('#surface-name').textContent = views[next].heading
   renderSelection()
   announce(`${views[next].label} surface selected. The control map remains synthetic.`)
@@ -102,7 +102,7 @@ function chooseScene(next) {
   if (!scenes[next]) return
   scene = next
   board.dataset.scene = next
-  sceneButtons.forEach((button) => button.setAttribute('aria-checked', String(button.dataset.scene === next)))
+  sceneButtons.forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.scene === next)))
   agents.forEach((agent, index) => {
     const [state, label, provider, detail] = scenes[next][index]
     agent.classList.remove('error', 'working', 'complete', 'idle')

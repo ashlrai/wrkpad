@@ -3,9 +3,24 @@ const assert = require('node:assert/strict')
 const {
   COMPACT_SNAPSHOT_SCHEMA,
   STATE_PRIORITY,
+  projectCompactActionResult,
   projectCompactSnapshot,
   selectAttentionSlot,
 } = require('./compact-snapshot.cjs')
+
+test('projects action receipts to a bounded title-free bridge contract', () => {
+  const result = projectCompactActionResult({
+    ok: true,
+    title: 'Opened ChatGPT for private session title',
+    message: `Codex Desktop is foregrounded.${'x'.repeat(400)}`,
+    timestamp: '2026-09-02T20:01:00.000Z',
+    stagedIntent: { private: true },
+  })
+  assert.deepEqual(Object.keys(result).sort(), ['message', 'ok'])
+  assert.equal(result.ok, true)
+  assert.equal(result.message.length, 240)
+  assert.equal(JSON.stringify(result).includes('private session title'), false)
+})
 
 const rawAgents = [
   { slot: 1, provider: 'codex', state: 'unread', title: 'Release notes', updatedAt: '2026-09-02T20:00:00.000Z', sessionId: 'private-1' },

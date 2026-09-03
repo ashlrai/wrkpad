@@ -11,7 +11,7 @@ const STATE_PRIORITY = Object.freeze({
   off: 5,
 })
 
-function cleanTitle(value, fallback) {
+function cleanText(value, fallback, limit = 120) {
   if (typeof value !== 'string') return fallback
   const clean = [...value]
     .filter((character) => {
@@ -20,7 +20,7 @@ function cleanTitle(value, fallback) {
     })
     .join('')
     .trim()
-  return clean ? clean.slice(0, 120) : fallback
+  return clean ? clean.slice(0, limit) : fallback
 }
 
 function validTimestamp(value) {
@@ -33,7 +33,7 @@ function projectSlot(rawAgents, slot, showTitles) {
   const provider = state !== 'off' && PROVIDERS.has(candidate?.provider) ? candidate.provider : null
   const projected = { slot, provider, state }
   if (showTitles) {
-    projected.title = cleanTitle(candidate?.title, provider ? `${provider === 'claude' ? 'Claude Code' : provider === 'codex' ? 'Codex' : 'Agent'} session` : 'Available slot')
+    projected.title = cleanText(candidate?.title, provider ? `${provider === 'claude' ? 'Claude Code' : provider === 'codex' ? 'Codex' : 'Agent'} session` : 'Available slot')
   }
   return projected
 }
@@ -66,9 +66,18 @@ function projectCompactSnapshot(mission, options = {}) {
   }
 }
 
+function projectCompactActionResult(result) {
+  const ok = result?.ok === true
+  return {
+    ok,
+    message: cleanText(result?.message, ok ? 'Action completed.' : 'Action did not complete.', 240),
+  }
+}
+
 module.exports = {
   COMPACT_SNAPSHOT_SCHEMA,
   STATE_PRIORITY,
+  projectCompactActionResult,
   projectCompactSnapshot,
   selectAttentionSlot,
 }

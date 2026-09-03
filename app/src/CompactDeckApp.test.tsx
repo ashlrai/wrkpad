@@ -35,6 +35,7 @@ const preferences: CompactPreferences = {
 
 describe('Compact Deck', () => {
   const focusAgentSlot = vi.fn().mockResolvedValue({ ok: true, message: 'Agent opened.' })
+  const focusAttention = vi.fn().mockResolvedValue({ ok: true, message: 'Highest-priority agent opened.' })
   const runSkillAction = vi.fn().mockResolvedValue({ ok: true, message: 'Instruction copied.' })
   const runWorkflowAction = vi.fn().mockResolvedValue({ ok: true, message: 'Workflow staged.' })
   const savePreferences = vi.fn(async (next: CompactPreferences) => next)
@@ -48,6 +49,7 @@ describe('Compact Deck', () => {
       value: {
         getSnapshot: vi.fn().mockResolvedValue(snapshot),
         focusAgentSlot,
+        focusAttention,
         runSkillAction,
         runWorkflowAction,
         getPreferences: vi.fn().mockResolvedValue(preferences),
@@ -70,7 +72,9 @@ describe('Compact Deck', () => {
     const rows = Array.from(deck.children)
     expect(rows).toHaveLength(4)
     expect(within(rows[0] as HTMLElement).getByLabelText('Dial: select and open agents')).toBeTruthy()
-    expect(within(rows[0] as HTMLElement).getByLabelText('Joystick: select and open agents')).toBeTruthy()
+    expect(within(rows[0] as HTMLElement).getByLabelText('Planar joystick: four-direction agent selection')).toBeTruthy()
+    expect(within(rows[0] as HTMLElement).getByLabelText('Planar joystick center; not a press control')).toBeTruthy()
+    expect(within(rows[0] as HTMLElement).queryByRole('button', { name: /Joystick press/ })).toBeNull()
     expect(within(rows[0] as HTMLElement).getByRole('button', { name: /Agent 1, Codex, Working$/ })).toBeTruthy()
     expect(within(rows[1] as HTMLElement).getAllByRole('button')).toHaveLength(4)
     expect(within(rows[2] as HTMLElement).getAllByRole('button').map((button) => button.textContent)).toEqual(expect.arrayContaining(['7Amplify', '8Verify', '9Polish', '0Advance']))
@@ -94,18 +98,18 @@ describe('Compact Deck', () => {
     render(<CompactDeckApp />)
     await screen.findByText('Agent observer online.')
     fireEvent.click(screen.getByRole('button', { name: 'Dial right: select next agent' }))
-    expect(screen.getByText('Agent 3 selected. Press the dial or joystick to open.')).toBeTruthy()
+    expect(screen.getByText('Agent 3 selected. Press the dial or agent key to open.')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Dial press: open selected agent 3' }))
     await waitFor(() => expect(focusAgentSlot).toHaveBeenCalledWith(3))
   })
 
-  it('stages attention before focusing the highest-priority agent', async () => {
+  it('asks the main process to resolve and focus current attention atomically', async () => {
     render(<CompactDeckApp />)
     await screen.findByText('Agent observer online.')
     fireEvent.click(screen.getByRole('button', { name: 'Attention: open highest-priority agent 2' }))
-    await waitFor(() => expect(runWorkflowAction).toHaveBeenCalledWith('stage_attention'))
-    await waitFor(() => expect(focusAgentSlot).toHaveBeenCalledWith(2))
-    expect(runWorkflowAction.mock.invocationCallOrder[0]).toBeLessThan(focusAgentSlot.mock.invocationCallOrder[0])
+    await waitFor(() => expect(focusAttention).toHaveBeenCalledOnce())
+    expect(runWorkflowAction).not.toHaveBeenCalledWith('stage_attention')
+    expect(focusAgentSlot).not.toHaveBeenCalled()
   })
 
   it('makes title visibility explicit and persists it', async () => {

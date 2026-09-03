@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron')
 contextBridge.exposeInMainWorld('compactDeck', {
   getSnapshot: () => ipcRenderer.invoke('compact:getSnapshot'),
   focusAgentSlot: (slot) => ipcRenderer.invoke('compact:focusAgentSlot', slot),
+  focusAttention: () => ipcRenderer.invoke('compact:focusAttention'),
   runSkillAction: (actionId) => ipcRenderer.invoke('compact:runSkillAction', actionId),
   runWorkflowAction: (actionId) => ipcRenderer.invoke('compact:runWorkflowAction', actionId),
   getPreferences: () => ipcRenderer.invoke('compact:getPreferences'),

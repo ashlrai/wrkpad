@@ -6,7 +6,7 @@ const path = require('node:path')
 const { ACTION_SPECS, executeSpec } = require('./action-registry.cjs')
 const { requireCompactAction, requireCompactWorkflowAction } = require('./compact-action-policy.cjs')
 const { readCompactDeckBounds, readCompactDeckSettings, validateCompactDeckSettings, writeCompactDeckSettings } = require('./compact-deck-settings.cjs')
-const { projectCompactSnapshot } = require('./compact-snapshot.cjs')
+const { projectCompactActionResult, projectCompactSnapshot } = require('./compact-snapshot.cjs')
 const { detectCreatorMicro2 } = require('./creator-micro-identity.cjs')
 const { inspectCodexMicroLogs } = require('./codex-micro-diagnostics.cjs')
 const { inspectChatGptInstallationAsync } = require('./chatgpt-installation.cjs')
@@ -412,10 +412,9 @@ function openFixedApp(name) {
   })
 }
 
-async function focusAgentSlotResult(slot) {
+async function focusAgentFromSnapshot(slot, snapshot) {
   if (flightSession.isActive()) return { ok:false,title:'Flight Check interlock',message:'Agent focus is disabled until hardware acceptance ends.',timestamp:new Date().toISOString() }
   if (!Number.isInteger(slot) || slot < 1 || slot > 6) return { ok:false,title:'Slot unavailable',message:'Choose one of the six agent slots.',timestamp:new Date().toISOString() }
-  const snapshot = await missionControl(true)
   const agent = snapshot.agents.find((candidate) => candidate.slot === slot)
   if (!agent?.provider || agent.state === 'off') return { ok:false,title:`Agent ${slot} is empty`,message:'This slot has no live provider receipt yet. Start or resume a session, then try again.',timestamp:new Date().toISOString() }
   const appName = appForProvider(agent.provider)
@@ -426,6 +425,19 @@ async function focusAgentSlotResult(slot) {
     ? 'cmux is foregrounded. Exact pane correlation is not available in the installed cmux build, so no terminal input was sent.'
     : 'Codex Desktop is foregrounded. No prompt, approval, or task was submitted.'
   return { ok:true,title:`Opened ${appName} for ${agent.title}`,message,timestamp:new Date().toISOString() }
+}
+
+async function focusAgentSlotResult(slot) {
+  if (!Number.isInteger(slot) || slot < 1 || slot > 6) return focusAgentFromSnapshot(slot, { agents: [] })
+  return focusAgentFromSnapshot(slot, await missionControl(true))
+}
+
+async function focusHighestPriorityAgentResult() {
+  if (flightSession.isActive()) return focusAgentFromSnapshot(null, { agents: [] })
+  const mission = await missionControl(true)
+  const slot = projectCompactSnapshot(mission).attentionSlot
+  if (slot === null) return { ok:false,title:'No agent needs attention',message:'No occupied agent slot is available to focus.',timestamp:new Date().toISOString() }
+  return focusAgentFromSnapshot(slot, mission)
 }
 
 ipcMain.handle('board:getStatus', trustedIpc(async () => {
@@ -521,14 +533,19 @@ ipcMain.handle('compact:getSnapshot', trustedCompactIpc(async () => {
   const preferences = readCompactSettings(compactWindow?.getBounds())
   return projectCompactSnapshot(mission, { showTitles: preferences.showTitles })
 }))
-ipcMain.handle('compact:focusAgentSlot', trustedCompactIpc((_event, slot) => focusAgentSlotResult(slot)))
+ipcMain.handle('compact:focusAgentSlot', trustedCompactIpc(async (_event, slot) => projectCompactActionResult(await focusAgentSlotResult(slot))))
+ipcMain.handle('compact:focusAttention', trustedCompactIpc(async () => {
+  requireCompactWorkflowAction('stage_attention', ACTION_SPECS)
+  await executeSpec('stage_attention', readSettings().workspace, { clipboard, home: app.getPath('home') })
+  return projectCompactActionResult(await focusHighestPriorityAgentResult())
+}))
 ipcMain.handle('compact:runSkillAction', trustedCompactIpc(async (_event, actionId) => {
   requireCompactAction(actionId, ACTION_SPECS)
-  return executeSpec(actionId, readSettings().workspace, { clipboard, home: app.getPath('home') })
+  return projectCompactActionResult(await executeSpec(actionId, readSettings().workspace, { clipboard, home: app.getPath('home') }))
 }))
 ipcMain.handle('compact:runWorkflowAction', trustedCompactIpc(async (_event, actionId) => {
   requireCompactWorkflowAction(actionId, ACTION_SPECS)
-  return executeSpec(actionId, readSettings().workspace, { clipboard, home: app.getPath('home') })
+  return projectCompactActionResult(await executeSpec(actionId, readSettings().workspace, { clipboard, home: app.getPath('home') }))
 }))
 ipcMain.handle('compact:getPreferences', trustedCompactIpc(() => readCompactSettings(compactWindow?.getBounds())))
 ipcMain.handle('compact:savePreferences', trustedCompactIpc((_event, candidate) => {
