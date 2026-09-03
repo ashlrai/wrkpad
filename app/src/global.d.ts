@@ -1,4 +1,4 @@
-import type { BoardRoute, ExecutionResult, MissionControlSnapshot, PhysicalSignalEnvelope, ProfileId, ProfileRepairResult, SystemStatus } from './board'
+import type { BoardRoute, ExecutionResult, MissionControlSnapshot, NativeAcceptanceActionResult, NativeAcceptanceAttestations, NativeAcceptanceSnapshot, PhysicalSignalEnvelope, ProfileId, ProfileRepairResult, SystemStatus } from './board'
 
 declare global {
   interface AgentBoardRecoveryHandoff {
@@ -27,6 +27,10 @@ declare global {
       getStatus(): Promise<SystemStatus>
       getMissionControl(): Promise<MissionControlSnapshot>
       getRecoveryGuide?(): Promise<AgentBoardRecoveryGuide>
+      getNativeAcceptance?(): Promise<NativeAcceptanceSnapshot>
+      prepareNativeAcceptance?(): Promise<NativeAcceptanceActionResult>
+      acceptNativeAcceptance?(attestations: NativeAcceptanceAttestations): Promise<NativeAcceptanceActionResult>
+      clearNativeAcceptance?(): Promise<NativeAcceptanceActionResult>
       setBoardRoute(boardRoute: BoardRoute): Promise<BoardRoute>
       focusAgentSlot(slot: number): Promise<ExecutionResult>
       setProfile(profile: ProfileId): Promise<void>

@@ -6,12 +6,14 @@ const path = require('node:path')
 const { ACTION_SPECS, executeSpec } = require('./action-registry.cjs')
 const { detectCreatorMicro2 } = require('./creator-micro-identity.cjs')
 const { inspectCodexMicroLogs } = require('./codex-micro-diagnostics.cjs')
+const { inspectChatGptInstallation } = require('./chatgpt-installation.cjs')
 const { inspectInputProfile } = require('./input-profile-diagnostics.cjs')
 const { inspectInputRuntime } = require('./input-runtime-diagnostics.cjs')
 const { inspectInputInstallation } = require('./input-installation-diagnostics.cjs')
 const { createCachedAsarHasher, inspectPackagedReceiverPeers, inspectReceiverRuntime, shouldRegisterShortcuts } = require('./receiver-runtime-diagnostics.cjs')
 const { writeGeneratedProfile } = require('./input-profile-generator.cjs')
 const { buildRecoveryChecklist, observeRecoveryArtifact, readRecoveryReceipt, recoveryChecklistText, recoveryReceiptPath, removeRecoveryReceipt, writeRecoveryReceipt } = require('./recovery-receipt.cjs')
+const { acceptNativeAcceptance, evaluateNativeAcceptance, prepareNativeAcceptance, readNativeAcceptanceReceipt, removeNativeAcceptanceReceipt, writeNativeAcceptanceReceipt } = require('./native-acceptance-receipt.cjs')
 const { holdSatisfied } = require('./approval-guard.cjs')
 const { evaluateFlightSignals } = require('./flight-receipt.cjs')
 const { createFlightSession } = require('./flight-session.cjs')
@@ -44,6 +46,57 @@ function handoffPath() { return recoveryReceiptPath(settingsPath()) }
 function readSettings() { return readWorkspaceSettings(settingsPath(), app.getPath('home')) }
 function saveWorkspace(workspace) { saveWorkspaceSettings(settingsPath(), workspace, app.getPath('home')) }
 function saveBoardRoute(boardRoute) { saveBoardRouteSettings(settingsPath(), boardRoute, app.getPath('home')) }
+
+function publicChatGptDesktopStatus(inspection) {
+  if (inspection?.status === 'installed') return { status: 'verified', version: inspection.version, build: inspection.build }
+  if (inspection?.status === 'missing') return { status: 'missing', version: null, build: null }
+  return { status: 'unavailable', version: null, build: null }
+}
+
+function projectNativeInitialization(inspection) {
+  const parsed = inspection?.observedAt ? new Date(inspection.observedAt) : null
+  return {
+    status: inspection?.status ?? 'log_unavailable',
+    observedAt: parsed && Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null,
+    fresh: inspection?.fresh === true,
+  }
+}
+
+async function collectNativeAcceptanceEvidence() {
+  const settings = readSettings()
+  const home = app.getPath('home')
+  const [board, chatgpt] = await Promise.all([
+    boardConnected(),
+    Promise.resolve(inspectChatGptInstallation()),
+  ])
+  const nativeInitialization = projectNativeInitialization(inspectCodexMicroLogs(home))
+  const currentContext = settings.boardRoute === 'codex_native' && board && chatgpt.status === 'installed'
+    ? {
+        route: 'codex_native',
+        device: { vidPid: board.vidPid },
+        codex: { version: chatgpt.version, build: chatgpt.build },
+      }
+    : null
+  return { currentContext, nativeInitialization }
+}
+
+function nativeAcceptanceSnapshot(receipt, evidence) {
+  return {
+    receipt,
+    evaluation: evaluateNativeAcceptance(receipt, {
+      currentContext: evidence.currentContext,
+      nativeInitialization: evidence.nativeInitialization,
+    }),
+  }
+}
+
+async function inspectNativeAcceptanceSnapshot() {
+  const [receipt, evidence] = await Promise.all([
+    Promise.resolve(readNativeAcceptanceReceipt(settingsPath())),
+    collectNativeAcceptanceEvidence(),
+  ])
+  return nativeAcceptanceSnapshot(receipt, evidence)
+}
 
 function createWindow() {
   rendererUrl = configuredRendererUrl(app.isPackaged ? undefined : process.env.VITE_DEV_SERVER_URL, path.join(__dirname, '..', 'dist-renderer', 'index.html'))
@@ -203,6 +256,7 @@ ipcMain.handle('board:getStatus', trustedIpc(async () => {
   const claudeExecutable = resolveTool('claude', { home })
   const ashlrExecutable = resolveTool('ashlr', { home })
   const inputInstallation = inspectCurrentInputInstallation()
+  const chatgptInspection = inspectChatGptInstallation()
   const currentReceiverRuntime = synchronizeShortcutOwnership()
   const [board, codex, claude, ashlr, workspaceSnapshot] = await Promise.all([
     boardConnected(), codexExecutable ? commandExists(codexExecutable) : false,
@@ -218,6 +272,7 @@ ipcMain.handle('board:getStatus', trustedIpc(async () => {
     inputRuntime: inspectInputRuntime(home),
     inputMonitoring: 'unverified',
     codex,
+    chatgptDesktop: publicChatGptDesktopStatus(chatgptInspection),
     nativeCodexMicro: inspectCodexMicroLogs(home),
     claude,
     ashlr,
@@ -239,6 +294,74 @@ ipcMain.handle('board:getRecoveryGuide', trustedIpc(() => {
   const handoff = readRecoveryReceipt(handoffPath())
   const artifact = observeRecoveryArtifact(handoff)
   return { handoff, artifact, steps: buildRecoveryChecklist(handoff, artifact) }
+}))
+ipcMain.handle('board:getNativeAcceptance', trustedIpc(() => inspectNativeAcceptanceSnapshot()))
+ipcMain.handle('board:prepareNativeAcceptance', trustedIpc(async () => {
+  const evidence = await collectNativeAcceptanceEvidence()
+  if (!evidence.currentContext) {
+    const receipt = readNativeAcceptanceReceipt(settingsPath())
+    return {
+      ok: false,
+      message: 'Codex Native, the USB board, and a verified ChatGPT Desktop installation are required. No handoff was written.',
+      snapshot: nativeAcceptanceSnapshot(receipt, evidence),
+    }
+  }
+  try {
+    const receipt = prepareNativeAcceptance(evidence.currentContext)
+    writeNativeAcceptanceReceipt(settingsPath(), receipt)
+    return {
+      ok: true,
+      message: 'Private native handoff prepared. No device, Desktop setting, or firmware was changed.',
+      snapshot: nativeAcceptanceSnapshot(receipt, evidence),
+    }
+  } catch {
+    return {
+      ok: false,
+      message: 'The private native handoff could not be prepared. No acceptance was recorded.',
+      snapshot: nativeAcceptanceSnapshot(readNativeAcceptanceReceipt(settingsPath()), evidence),
+    }
+  }
+}))
+ipcMain.handle('board:acceptNativeAcceptance', trustedIpc(async (_event, attestations) => {
+  const evidence = await collectNativeAcceptanceEvidence()
+  const prepared = readNativeAcceptanceReceipt(settingsPath())
+  if (!evidence.currentContext || !prepared) {
+    return {
+      ok: false,
+      message: 'A matching prepared handoff and current native context are required. No acceptance was recorded.',
+      snapshot: nativeAcceptanceSnapshot(prepared, evidence),
+    }
+  }
+  try {
+    const receipt = acceptNativeAcceptance(prepared, {
+      attestations,
+      currentContext: evidence.currentContext,
+      nativeInitialization: evidence.nativeInitialization,
+    })
+    writeNativeAcceptanceReceipt(settingsPath(), receipt)
+    return {
+      ok: true,
+      message: 'Operator attestation saved for this device and ChatGPT Desktop build.',
+      snapshot: nativeAcceptanceSnapshot(receipt, evidence),
+    }
+  } catch {
+    return {
+      ok: false,
+      message: 'Fresh ordered initialization and all seven observations are required. No acceptance was recorded.',
+      snapshot: nativeAcceptanceSnapshot(prepared, evidence),
+    }
+  }
+}))
+ipcMain.handle('board:clearNativeAcceptance', trustedIpc(async () => {
+  const removed = removeNativeAcceptanceReceipt(settingsPath())
+  const snapshot = await inspectNativeAcceptanceSnapshot()
+  return {
+    ok: removed,
+    message: removed
+      ? 'The local native handoff was cleared. No device, Desktop setting, or firmware was changed.'
+      : 'The local native handoff could not be cleared safely. No device, Desktop setting, or firmware was changed.',
+    snapshot,
+  }
 }))
 ipcMain.handle('board:setBoardRoute', trustedIpc((_event, boardRoute) => {
   if (!validBoardRoute(boardRoute)) throw new TypeError('Unsupported board route declaration')

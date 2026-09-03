@@ -185,6 +185,30 @@ If those calls succeed but Codex still fails, verify Input Monitoring and test
 Codex as the only open board controller. Codex and Input can hold nonexclusive
 HID handles, but they do not share a cross-process RPC or lighting lease.
 
+After a firmware update, fully quit and reopen ChatGPT Desktop before drawing a
+new conclusion. An app process that started before the update may have only the
+historical failed attempt in its current log session. In Agent Board, select
+**Codex Native**, choose **Prepare handoff**, quit Input and Agent Board, and
+restart ChatGPT Desktop alone. Then reopen Agent Board and choose **Refresh
+after restart**. The evidence ladder intentionally stops at **Initialization
+inferred** until you separately observe Codex Settings and every physical
+control group.
+
+If preparation is unavailable, resolve the exact prerequisite shown in Setup:
+
+- **USB not observed:** select the board's wired channel and retry a data cable
+  or port.
+- **ChatGPT Desktop not found/unavailable:** install or repair the official app
+  at `/Applications/ChatGPT.app`; the probe does not scan alternate paths.
+- **Codex Native not declared:** select that route. The declaration is local
+  expectation only.
+- **Initialization not observed:** restart ChatGPT Desktop after preparation
+  with Input and Agent Board quit, then refresh. Do not check physical outcomes
+  that you did not see.
+
+Clearing the handoff is safe recovery for a stale or mismatched receipt. It
+does not clear Codex settings, disconnect USB, revert firmware, or change Input.
+
 ## The wide Mic cap fires twice
 
 The cap spans ACT10 and ACT11. Map Mic to ACT10 and set ACT11 to `None` for daily use. Use the [diagnostic Mic test](setup.md#diagnostic-mic-test) only on a disposable layer.

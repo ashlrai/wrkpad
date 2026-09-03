@@ -57,6 +57,40 @@ This is labeled **Declared here — not detected**. Changing it writes only the
 private Agent Board settings file. It does not change firmware, Input, Codex,
 shortcuts, processes, hooks, or `wrkpad` occupancy.
 
+### Codex Native restart-safe handoff
+
+The Codex Native route has its own Setup flight plan. It does not require Work
+Louder Input, an Input profile, Input Monitoring for Agent Board, or Agent
+Board shortcut ownership. Those belong to the separate Ashlr Layer route.
+
+Use **Prepare handoff** before the controller-isolation restart:
+
+1. Require USB presence, a declared **Codex Native** route, and a verified
+   fixed `/Applications/ChatGPT.app` installation.
+2. Select **Prepare handoff**. Agent Board saves a private mode-`0600` receipt
+   containing only the route, board VID:PID, ChatGPT Desktop version/build,
+   preparation time, and seven false observation flags.
+3. Quit Work Louder Input and Agent Board with Command-Q. Open ChatGPT Desktop
+   alone and wait for native initialization. In Codex Settings, open
+   **Creator Micro** and inspect the connection state.
+4. Reopen Agent Board, return to Setup, and select **Refresh after restart**.
+   A fresh ordered `v.oai.rgbcfg` → `v.oai.thstatus` → HID notification →
+   radial notification sequence may advance the ladder to **Initialization
+   inferred**. It does not complete the Settings or physical checks.
+5. Exercise the dial, joystick, all six Agent keys, all seven action switches,
+   the wide microphone cap, and the black-cap lighting. Check an observation
+   only after personally seeing that result on the physical board and in Codex.
+6. **Accept operator attestation** becomes available only when all seven groups
+   are checked and the initialization is fresh, ordered, newer than the
+   preparation, and bound to the same VID:PID and ChatGPT build.
+
+The saved result is an operator attestation, not a cryptographic device proof.
+It contains no prompt, task title, session identifier, raw log, diagnostic
+detail, or local path. Any route, device identity, Desktop build, or live
+initialization mismatch invalidates the projected acceptance. **Clear handoff**
+removes only this local receipt; it never changes the board, Codex, Input, or
+firmware.
+
 ## 3. Verify Work Louder Input
 
 Install Work Louder Input only from the official
@@ -247,7 +281,7 @@ or activate the result, send HID packets, or write firmware.
 | Mode | Apps that may remain open | What owns the board route | Evidence boundary |
 | --- | --- | --- | --- |
 | Ashlr Layer daily | Input, Agent Board, ChatGPT/Codex, Claude Code, Claude Desktop, and cmux | Input emits shortcuts; Agent Board receives them | Cross-provider shortcuts and hook state; no native Codex RGB claim |
-| Codex Native qualification | Codex alone; Input and Agent Board device routing fully quit | Codex vendor protocol | Native RPC and lighting qualification only |
+| Codex Native qualification | Initialization: Codex alone with Input and Agent Board quit. Verification: reopen Agent Board while Input remains quit. | Codex vendor protocol; Agent Board only reads bounded evidence after restart | Inferred initialization plus explicit operator attestation; not cryptographic device proof |
 | Firmware qualification | Signed Input app only after all other board/HID controllers quit | Input updater | Download, install, restored profile, and post-update acceptance remain separate |
 
 Declaring `ashlr_layer` does not disable Codex's native device client. Daily

@@ -36,6 +36,9 @@ Every slot combines provider, task title, icon, text state, and color. The exper
 - Provides Attention, Pair, Fleet, Proof, and Recovery software lenses while keeping Agent keys fixed.
 - Separates immediate, confirm, and press-and-hold actions in the Electron main process.
 - Runs an interlocked Flight Check for all physical routes and exports a hashed local receipt.
+- Presents separate Codex Native and Ashlr Layer setup flight plans, with a
+  private restart-safe native handoff that rejects stale device/Desktop context
+  and records only explicit operator observations.
 - Keeps session IDs, provider working directories, prompts, transcripts, tool arguments, and raw Fleet payloads out of mission snapshots. Workspace Pulse separately shows the working directory the user selected.
 
 See [controls and state](docs/controls.md) for the complete map and [architecture and trust](docs/architecture.md) for the security model.
@@ -66,7 +69,14 @@ npm run dev
 route-specific evidence using the shared repository contract. Append
 `-- --route codex_native` only for the separate native qualification route.
 
-Before pressing physical controls, follow [setup and Flight Check](docs/setup.md). Work Louder Input must emit the exact shortcuts expected by the app, and macOS Input Monitoring must be granted by the user. Input's header is the edit target, not proof of the current keyboard profile; use **Set as current profile**, then require the read-only receipt and physical Flight Check.
+Before pressing physical controls, follow [setup and Flight Check](docs/setup.md).
+For **Ashlr Layer**, Work Louder Input must emit the exact shortcuts expected by
+the app and macOS Input Monitoring must be granted by the user. Input's header
+is the edit target, not proof of the current keyboard profile; use **Set as
+current profile**, then require the read-only receipt and physical Flight Check.
+For **Codex Native**, prepare the restart-safe handoff, restart ChatGPT Desktop
+alone, refresh the inferred initialization evidence, and record each physical
+observation manually. Neither path proves the other.
 
 To populate the six slots with live Codex and Claude Code state, also complete
 the guarded [`wrkpad` service and hook setup](../docs/hook-setup.md). A configured

@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
-import type { PhysicalSignalEnvelope } from './board'
+import type { NativeAcceptanceSnapshot, PhysicalSignalEnvelope } from './board'
 import { dailyFlightSteps } from './flight-check'
 
 const correctedInputProfile = {
@@ -33,6 +33,29 @@ const initialUnavailableMission = () => ({
   fleet: null,
   unassignedActiveSessions: 0,
   operatorNotices: [],
+})
+
+const nativeAcceptanceSnapshot = (status: NativeAcceptanceSnapshot['evaluation']['status'] = 'not_prepared'): NativeAcceptanceSnapshot => ({
+  receipt: status === 'not_prepared' ? null : {
+    schema: 'ai.ashlr.agent-board.native-acceptance/v1',
+    state: status === 'accepted' ? 'accepted' : 'prepared',
+    preparedAt: '2026-09-02T20:00:00.000Z',
+    initializationObservedAt: status === 'initialization_observed' || status === 'accepted' ? '2026-09-02T20:01:00.000Z' : null,
+    acceptedAt: status === 'accepted' ? '2026-09-02T20:02:00.000Z' : null,
+    context: { route: 'codex_native', device: { vidPid: '303A:8298' }, codex: { version: '1.0.0', build: '100' } },
+    attestations: {
+      settingsConnected: status === 'accepted', dial: status === 'accepted', joystick: status === 'accepted',
+      agentKeys: status === 'accepted', actionKeys: status === 'accepted', microphone: status === 'accepted', lighting: status === 'accepted',
+    },
+  },
+  evaluation: {
+    status,
+    reason: 'bounded fixture reason',
+    attestations: status === 'not_prepared' ? undefined : {
+      settingsConnected: status === 'accepted', dial: status === 'accepted', joystick: status === 'accepted',
+      agentKeys: status === 'accepted', actionKeys: status === 'accepted', microphone: status === 'accepted', lighting: status === 'accepted',
+    },
+  },
 })
 
 afterEach(() => {
@@ -95,17 +118,151 @@ describe('operator interface', () => {
 
     render(<App />)
     expect(await screen.findByText('Codex Native observer only.')).toBeTruthy()
+    const nativeRibbon = document.querySelector('.readiness-ribbon')
+    expect(nativeRibbon?.textContent).toContain('ChatGPT Desktop verification unavailable')
+    expect(nativeRibbon?.textContent).toContain('Native initialization unverified')
+    expect(nativeRibbon?.textContent).toContain('Open native acceptance handoff')
+    expect(nativeRibbon?.textContent).not.toContain('Input Monitoring')
+    expect(nativeRibbon?.textContent).not.toContain('shortcut receiver')
+    expect(nativeRibbon?.textContent).not.toContain('desktop endpoints')
     expect(screen.getByRole('button', { name: 'Disabled in Codex Native' }).hasAttribute('disabled')).toBe(true)
     fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
     expect(screen.queryByRole('button', { name: /Run Ashlr Flight Check/i })).toBeNull()
-    const nativeGate = screen.getByText(/Manual native gate/i).closest('.native-manual-gate')
-    expect(nativeGate?.textContent).toContain('Quit Work Louder Input and quit this Agent Board app')
-    expect(nativeGate?.textContent).toContain('Open Codex alone')
+    const nativeGate = screen.getByText(/Operator acceptance handoff/i).closest('.native-manual-gate')
+    expect(nativeGate?.textContent).toContain('quit Work Louder Input and Agent Board')
+    expect(nativeGate?.textContent).toContain('open ChatGPT Desktop alone')
     fireEvent.click(screen.getByRole('tab', { name: 'Flight Check' }))
     expect(screen.getByRole('heading', { name: 'Flight Check belongs to Ashlr Layer.' })).toBeTruthy()
     expect(screen.getByText(/Quit Work Louder Input and quit this Agent Board app/i)).toBeTruthy()
     expect(setFlightCheck).not.toHaveBeenCalled()
     expect(requestAction).not.toHaveBeenCalled()
+  })
+
+  it('shows only native-route prerequisites and labels inferred initialization as observation', async () => {
+    window.agentBoard = {
+      getStatus: vi.fn().mockResolvedValue({
+        boardConnected: true, inputInstalled: false, inputMonitoring: 'unverified',
+        inputInstallation: { status: 'invalid_signature', version: '0.18.4' },
+        receiverRuntime: { status: 'contended_distinct_builds', instanceCount: 3, distinctBuildCount: 2, currentAsarSha256: null, candidateAsarSha256: null, candidateMatchesCurrent: null },
+        receiverIdentity: { appVersion: 'private-receiver-version', packaged: false, appAsarSha256: 'd'.repeat(64) },
+        inputProfile: { cacheStatus: 'unsafe', activeProfile: 'private-profile', activeLayer: 'private-layer', encoderDirection: 'reversed' },
+        codex: true, claude: true, ashlr: true, boardRoute: 'codex_native',
+        chatgptDesktop: { status: 'verified', version: '1.2026.238', build: '1822' },
+        nativeCodexMicro: { status: 'connected', observedAt: '2026-09-02T20:01:00.000Z', detail: 'bounded', fresh: true },
+        workspace: '/Users/private/company', shortcutCount: 0, shortcutRegistrations: [], workspaceSnapshot: null,
+      }),
+      getNativeAcceptance: vi.fn().mockResolvedValue(nativeAcceptanceSnapshot()),
+      getMissionControl: vi.fn().mockResolvedValue(initialUnavailableMission()),
+      setBoardRoute: vi.fn(), focusAgentSlot: vi.fn(), setProfile: vi.fn(), setFlightCheck: vi.fn(),
+      requestAction: vi.fn(), confirmAction: vi.fn(), beginHold: vi.fn(), cancelHold: vi.fn(),
+      chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(), onControl: vi.fn(() => () => {}),
+    } as unknown as NonNullable<typeof window.agentBoard>
+
+    render(<App />)
+    expect(await screen.findByText('Native initialization observed')).toBeTruthy()
+    fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
+
+    expect(screen.getByRole('heading', { name: 'Verify ChatGPT Desktop' })).toBeTruthy()
+    expect(screen.getByText('ChatGPT Desktop 1.2026.238 · build 1822 verified')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Infer native initialization' })).toBeTruthy()
+    expect(screen.getByText('Ordered native initialization inferred')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Observe Creator Micro in Codex Settings' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Exercise the dial' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Exercise the joystick' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Exercise all six agent keys' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Exercise all seven action keys' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Exercise the microphone key' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Observe lighting' })).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'Verify Work Louder Input' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Prove one shortcut receiver' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Verify Input Monitoring' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: "Inspect Input's cached profile" })).toBeNull()
+    expect(screen.queryByText('private-profile')).toBeNull()
+    expect(screen.queryByText('private-receiver-version')).toBeNull()
+    expect(screen.queryByText('Native connection evidence')).toBeNull()
+  })
+
+  it('resumes a native handoff and enables acceptance only after every operator observation', async () => {
+    const pending = nativeAcceptanceSnapshot('pending')
+    const initialized = nativeAcceptanceSnapshot('initialization_observed')
+    const accepted = nativeAcceptanceSnapshot('accepted')
+    const prepareNativeAcceptance = vi.fn().mockResolvedValue({ ok: true, message: '/Users/private should not render', snapshot: pending })
+    const getNativeAcceptance = vi.fn()
+      .mockResolvedValueOnce(nativeAcceptanceSnapshot())
+      .mockResolvedValueOnce(initialized)
+    const acceptNativeAcceptance = vi.fn().mockResolvedValue({ ok: true, message: 'private backend text', snapshot: accepted })
+    window.agentBoard = {
+      getStatus: vi.fn().mockResolvedValue({
+        boardConnected: true, inputInstalled: false, inputMonitoring: 'unverified',
+        codex: true, claude: true, ashlr: true, boardRoute: 'codex_native',
+        chatgptDesktop: { status: 'verified', version: '1.2026.238', build: '1822' },
+        nativeCodexMicro: { status: 'connected', observedAt: '2026-09-02T20:01:00.000Z', detail: 'bounded', fresh: true },
+        workspace: '/Users/private/company', shortcutCount: 0, shortcutRegistrations: [], workspaceSnapshot: null,
+      }),
+      getNativeAcceptance, prepareNativeAcceptance, acceptNativeAcceptance,
+      clearNativeAcceptance: vi.fn(), getMissionControl: vi.fn().mockResolvedValue(initialUnavailableMission()),
+      setBoardRoute: vi.fn(), focusAgentSlot: vi.fn(), setProfile: vi.fn(), setFlightCheck: vi.fn(),
+      requestAction: vi.fn(), confirmAction: vi.fn(), beginHold: vi.fn(), cancelHold: vi.fn(),
+      chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(), onControl: vi.fn(() => () => {}),
+    } as unknown as NonNullable<typeof window.agentBoard>
+
+    render(<App />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
+    await waitFor(() => expect(getNativeAcceptance).toHaveBeenCalledTimes(1))
+    expect(screen.getByRole('list', { name: 'Native evidence ladder' })).toBeTruthy()
+    expect(screen.getByText('Awaiting post-prepare observation')).toBeTruthy()
+    expect(screen.queryByRole('checkbox')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Prepare handoff' }))
+    await screen.findByText(/Handoff prepared locally/i)
+    expect(prepareNativeAcceptance).toHaveBeenCalledTimes(1)
+    const observationLabels = [
+      'Creator Micro shown in Codex Settings', 'Dial left, right, and press observed',
+      'Joystick up, right, down, and left observed', 'All six agent keys observed',
+      'All seven action keys observed', 'Microphone key observed', 'Black-cap lighting observed',
+    ]
+    const acceptButton = screen.getByRole('button', { name: 'Accept operator attestation' }) as HTMLButtonElement
+    expect(acceptButton.disabled).toBe(true)
+    observationLabels.slice(0, -1).forEach((label) => fireEvent.click(screen.getByRole('checkbox', { name: label })))
+    expect(acceptButton.disabled).toBe(true)
+    fireEvent.click(screen.getByRole('checkbox', { name: observationLabels.at(-1)! }))
+    expect(acceptButton.disabled).toBe(false)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh after restart' }))
+    await screen.findByText(/Native initialization observation refreshed/i)
+    expect(getNativeAcceptance).toHaveBeenCalledTimes(2)
+    expect(screen.getByText('Inferred after prepare')).toBeTruthy()
+    observationLabels.forEach((label) => fireEvent.click(screen.getByRole('checkbox', { name: label })))
+    fireEvent.click(screen.getByRole('button', { name: 'Accept operator attestation' }))
+    await screen.findByText('Operator attestation saved for this prepared context.')
+    expect(acceptNativeAcceptance).toHaveBeenCalledWith({
+      settingsConnected: true, dial: true, joystick: true, agentKeys: true,
+      actionKeys: true, microphone: true, lighting: true,
+    })
+    expect(screen.getByText(/Operator attestation—not device proof/i)).toBeTruthy()
+    expect(screen.queryByText(/Users\/private should not render/i)).toBeNull()
+    expect(screen.queryByText('private backend text')).toBeNull()
+  })
+
+  it('keeps the Ashlr Setup checklist and excludes the native handoff', async () => {
+    window.agentBoard = {
+      getStatus: vi.fn().mockResolvedValue({
+        boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified', ...trustedHardwareDiagnostics,
+        inputProfile: correctedInputProfile, codex: true, claude: true, ashlr: true, boardRoute: 'ashlr_layer',
+        workspace: '/tmp', shortcutCount: 20, shortcutRegistrations: [], workspaceSnapshot: null,
+      }),
+      getMissionControl: vi.fn().mockResolvedValue(initialUnavailableMission()),
+      setBoardRoute: vi.fn(), focusAgentSlot: vi.fn(), setProfile: vi.fn(), setFlightCheck: vi.fn(),
+      requestAction: vi.fn(), confirmAction: vi.fn(), beginHold: vi.fn(), cancelHold: vi.fn(),
+      chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(), onControl: vi.fn(() => () => {}),
+    } as unknown as NonNullable<typeof window.agentBoard>
+
+    render(<App />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
+    expect(await screen.findByRole('heading', { name: 'Verify Work Louder Input' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Prove one shortcut receiver' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: "Inspect Input's cached profile" })).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: /Carry the physical check/i })).toBeNull()
   })
 
   it('gives digital twin agent keys the live provider, title, and state', async () => {
@@ -673,7 +830,8 @@ describe('operator interface', () => {
     window.agentBoard = {
       getStatus: vi.fn().mockResolvedValue({
         boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
-        codex: true, claude: true, ashlr: false, workspace: '/tmp', shortcutCount: 20,
+        ...trustedHardwareDiagnostics,
+        codex: true, claude: true, ashlr: false, boardRoute: 'ashlr_layer', workspace: '/tmp', shortcutCount: 20,
         shortcutRegistrations: [], workspaceSnapshot: null,
       }),
       getMissionControl: vi.fn().mockResolvedValue({

@@ -11,6 +11,16 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 
 ### Added
 
+- Route-specific Setup flight plans that keep Codex Native prerequisites and
+  evidence separate from Work Louder Input, Input Monitoring, and the Ashlr
+  shortcut receiver path.
+- A private restart-safe Codex Native handoff with an evidence ladder, strict
+  device/Desktop context binding, fresh ordered initialization checks, and
+  seven explicit operator observations. The receipt contains no prompts,
+  titles, session IDs, raw logs, diagnostic details, or local paths.
+- A fixed-path, mutation-aware ChatGPT Desktop metadata probe that exposes only
+  sanitized version/build readiness.
+
 - Route-aware doctor metadata for agents, including a stable schema, timestamp,
   declared route, read-only marker, and separate prerequisite, native, and
   Ashlr Layer readiness.
@@ -109,5 +119,7 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 - Exact provider task or terminal pane focus.
 - Signed, notarized, or published macOS artifacts.
 - Provider activation or physical user acceptance.
+- Cryptographic proof of native device ownership; the new native receipt is
+  explicitly an operator attestation and still requires real hardware testing.
 
 [Unreleased]: https://github.com/ashlrai/wrkpad/commits/main/app

@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import {
   actions, controls, correctedInputProfileObserved, correctedInputProfileObservedForVariant, effortLevels, hardware, profileOrder, profiles,
-  type ActionDefinition, type AgentSlotSummary, type BoardRoute, type ControlId, type ExecutionResult, type InputInstallationStatus, type MissionControlSnapshot, type PhysicalSignalEnvelope, type ProfileId, type ProfileRepairResult, type ReceiverRuntimeStatus, type SystemStatus, type WorkspaceSnapshot,
+  type ActionDefinition, type AgentSlotSummary, type BoardRoute, type ControlId, type ExecutionResult, type InputInstallationStatus, type MissionControlSnapshot, type NativeAcceptanceAttestations, type NativeAcceptanceSnapshot, type PhysicalSignalEnvelope, type ProfileId, type ProfileRepairResult, type ReceiverRuntimeStatus, type SystemStatus, type WorkspaceSnapshot,
 } from './board'
 import { agentProviderLabel, agentStateClassName, agentStateLabels, agentStateLegendOrder, agentVisibleStateLabel } from './agent-accessibility'
 import AttentionDeck from './components/AttentionDeck'
@@ -20,6 +20,7 @@ const initialStatus: SystemStatus = {
   inputProfile: { cacheStatus: 'missing', activeProfile: null, activeLayer: null, encoderDirection: 'unavailable' },
   inputRuntime: { status: 'not_observed', profileIndex: null, layerIndex: null, observedAt: null, fresh: false },
   codex: false, claude: false, ashlr: false,
+  chatgptDesktop: { status: 'unavailable', version: null, build: null },
   nativeCodexMicro: { status: 'not_observed', observedAt: null, detail: 'No recent native Codex Creator Micro connection evidence was found.' },
   boardRoute: 'unknown',
   workspace: '/Choose a working directory', shortcutCount: 0, shortcutRegistrations: [], workspaceSnapshot: null, receiverIdentity: null,
@@ -93,6 +94,15 @@ const exclusiveReceiverRuntime = (receiver: ReceiverRuntimeStatus) => receiver.s
   && receiver.instanceCount === 1
   && receiver.distinctBuildCount === 1
 const initialRecoveryGuide: AgentBoardRecoveryGuide = { handoff: null, artifact: { status: 'invalid', available: false }, steps: [] }
+const emptyNativeAttestations: NativeAcceptanceAttestations = {
+  settingsConnected: false,
+  dial: false,
+  joystick: false,
+  agentKeys: false,
+  actionKeys: false,
+  microphone: false,
+  lighting: false,
+}
 const formatClock = (date: Date) => date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 const normalizeControl = (control: ControlId): ControlId => control === 'cmd6' ? 'cmd5' : control
 
@@ -154,6 +164,7 @@ function App() {
   const activeAction = actions[profile.mapping[activeControl]]
   const effort = effortLevels[effortIndex]
   const nativeCodexMicro = status.nativeCodexMicro ?? initialStatus.nativeCodexMicro
+  const chatgptDesktop = status.chatgptDesktop ?? initialStatus.chatgptDesktop
   const inputInstallation = status.inputInstallation ?? initialStatus.inputInstallation
   const receiverRuntime = status.receiverRuntime ?? initialStatus.receiverRuntime
   const inputInstallationDescription = describeInputInstallation(inputInstallation)
@@ -610,7 +621,7 @@ function App() {
   const nativePill = status.boardRoute !== 'codex_native'
     ? { label: status.boardRoute === 'ashlr_layer' ? 'Native not in use' : 'Native route not selected', tone: 'off' as const }
     : nativeCodexMicro.status === 'connected' && nativeEvidenceFresh
-      ? { label: 'Native connection evidence', tone: 'ready' as const }
+      ? { label: 'Native initialization observed', tone: 'warn' as const }
       : nativeCodexMicro.status === 'firmware_rpc_missing'
         ? { label: nativeEvidenceFresh ? 'Native RPC unavailable' : 'Historical native RPC 404', tone: 'warn' as const }
         : nativeCodexMicro.status === 'connection_failed'
@@ -668,12 +679,17 @@ function App() {
 
         <div className="readiness-ribbon">
           <span className={status.boardConnected ? 'check ready' : 'check'}><Check size={12} /> USB presence</span>
-          <span className={status.shortcutCount === hardware.bindableSignals ? 'check ready' : 'check'}><Check size={12} /> {status.shortcutCount}/{hardware.bindableSignals} desktop endpoints registered</span>
-          <span className={inputInstallationReady ? 'check ready' : 'check warn'}><Check size={12} /> {inputInstallationReady ? `Input ${inputInstallation.version ?? ''} verified`.replace('  ', ' ') : inputInstallationDescription.state}</span>
-          <span className={receiverExclusive ? 'check ready' : 'check warn'}><ShieldCheck size={12} /> {receiverExclusive ? 'One shortcut receiver' : receiverRuntime.status === 'unavailable' ? 'Receiver ownership unavailable' : `${receiverRuntime.instanceCount} receivers · ownership disabled`}</span>
+          {status.boardRoute === 'codex_native' ? <>
+            <span className={chatgptDesktop.status === 'verified' ? 'check ready' : 'check warn'}><Sparkles size={12} /> {chatgptDesktop.status === 'verified' ? `ChatGPT Desktop ${chatgptDesktop.version ?? ''} verified`.replace('  ', ' ') : chatgptDesktop.status === 'missing' ? 'ChatGPT Desktop not found' : 'ChatGPT Desktop verification unavailable'}</span>
+            <span className={nativeCodexMicro.status === 'connected' && nativeEvidenceFresh ? 'check ready' : 'check warn'}><Activity size={12} /> {nativeCodexMicro.status === 'connected' && nativeEvidenceFresh ? 'Native initialization inferred' : 'Native initialization unverified'}</span>
+          </> : status.boardRoute === 'ashlr_layer' ? <>
+            <span className={status.shortcutCount === hardware.bindableSignals ? 'check ready' : 'check'}><Check size={12} /> {status.shortcutCount}/{hardware.bindableSignals} desktop endpoints registered</span>
+            <span className={inputInstallationReady ? 'check ready' : 'check warn'}><Check size={12} /> {inputInstallationReady ? `Input ${inputInstallation.version ?? ''} verified`.replace('  ', ' ') : inputInstallationDescription.state}</span>
+            <span className={receiverExclusive ? 'check ready' : 'check warn'}><ShieldCheck size={12} /> {receiverExclusive ? 'One shortcut receiver' : receiverRuntime.status === 'unavailable' ? 'Receiver ownership unavailable' : `${receiverRuntime.instanceCount} receivers · ownership disabled`}</span>
+          </> : <span className="check warn"><ShieldCheck size={12} /> Select a board route before commissioning</span>}
           {status.workspaceSnapshot?.isGit && <span className={!status.workspaceSnapshot.statusKnown || status.workspaceSnapshot.dirtyFiles ? 'check warn' : 'check ready'}><GitBranch size={12} /> {status.workspaceSnapshot.branch} · {!status.workspaceSnapshot.statusKnown ? 'status unknown' : status.workspaceSnapshot.dirtyFiles ? `${status.workspaceSnapshot.dirtyFiles} changed` : 'clean'}</span>}
           <span className="check"><Keyboard size={12} /> {status.boardRoute === 'codex_native' ? 'Native profile: operator verification required' : status.boardRoute === 'ashlr_layer' ? 'Ashlr layer: physical check required' : 'Physical route: not selected'}</span>
-          <button type="button" onClick={() => changeView('setup')}><span className="attention-dot" /> Input Monitoring needs human verification <ChevronRight size={13} /></button>
+          <button type="button" onClick={() => changeView('setup')}><span className="attention-dot" /> {status.boardRoute === 'codex_native' ? 'Open native acceptance handoff' : status.boardRoute === 'ashlr_layer' ? 'Input Monitoring needs human verification' : 'Choose a route in Setup'} <ChevronRight size={13} /></button>
         </div>
 
         <div className="mission-control-grid">
@@ -736,7 +752,7 @@ function App() {
         liveGateInvalidated={flightInvalidatedRun === flightRequest.current} onStart={startFlightCheck}
         onStop={() => void stopFlightCheck()} onRestart={() => void restartFlightCheck()} onExport={exportFlightReceipt}
         onSetup={() => void changeView('setup')} onOperate={() => void changeView('operate')}
-      /> : <SetupView status={status} recoveryGuide={recoveryGuide} onRefreshRecoveryGuide={refreshRecoveryGuide} routeSaving={routeSaving} routeError={routeError} onRouteChange={(route) => void declareBoardRoute(route)} onOperate={() => changeView('operate')} onFlightCheck={() => void changeView('flight')} />}
+      /> : <SetupView status={status} recoveryGuide={recoveryGuide} onRefreshRecoveryGuide={refreshRecoveryGuide} onRefreshStatus={refreshStatus} routeSaving={routeSaving} routeError={routeError} onRouteChange={(route) => void declareBoardRoute(route)} onOperate={() => changeView('operate')} onFlightCheck={() => void changeView('flight')} />}
 
       <footer className="footer-bar">
         <div><span className={status.boardConnected ? 'footer-led ready' : 'footer-led'} /> {hardware.mechanicalSwitches} SWITCHES · 1 TOUCH · 1 DIAL · 1 PLANAR STICK</div>
@@ -1024,13 +1040,18 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
   </section>
 }
 
-function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, routeSaving, routeError, onRouteChange, onOperate, onFlightCheck }: { status: SystemStatus; recoveryGuide: AgentBoardRecoveryGuide; onRefreshRecoveryGuide: () => Promise<AgentBoardRecoveryGuide | null>; routeSaving: boolean; routeError: string | null; onRouteChange: (route: BoardRoute) => void; onOperate: () => void; onFlightCheck: () => void }) {
+function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshStatus, routeSaving, routeError, onRouteChange, onOperate, onFlightCheck }: { status: SystemStatus; recoveryGuide: AgentBoardRecoveryGuide; onRefreshRecoveryGuide: () => Promise<AgentBoardRecoveryGuide | null>; onRefreshStatus: () => Promise<SystemStatus | null>; routeSaving: boolean; routeError: string | null; onRouteChange: (route: BoardRoute) => void; onOperate: () => void; onFlightCheck: () => void }) {
   const [repairBusy, setRepairBusy] = useState(false)
   const [repairResult, setRepairResult] = useState<ProfileRepairResult | null>(null)
   const [recoveryAction, setRecoveryAction] = useState<AgentBoardRecoveryActionResult | null>(null)
   const [dismissConfirm, setDismissConfirm] = useState(false)
+  const [nativeAcceptance, setNativeAcceptance] = useState<NativeAcceptanceSnapshot | null>(null)
+  const [nativeAttestations, setNativeAttestations] = useState<NativeAcceptanceAttestations>(emptyNativeAttestations)
+  const [nativeBusy, setNativeBusy] = useState(false)
+  const [nativeActionResult, setNativeActionResult] = useState<{ ok: boolean; message: string } | null>(null)
   const recoveryFocus = useRef<HTMLElement | null>(null)
   const nativeCodexMicro = status.nativeCodexMicro ?? initialStatus.nativeCodexMicro
+  const chatgptDesktop = status.chatgptDesktop ?? initialStatus.chatgptDesktop
   const inputProfile = status.inputProfile ?? initialStatus.inputProfile
   const inputRuntime = status.inputRuntime ?? initialStatus.inputRuntime
   const inputInstallation = status.inputInstallation ?? initialStatus.inputInstallation
@@ -1057,24 +1078,135 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, routeSaving,
     : correctedProfileObserved
       ? recentRuntimeEvidence ? 'runtime_log_advisory' : 'cache_observed'
       : 'profile_repair'
-  const steps: Array<{ number: string; title: string; detail: string; state: string; ready: boolean; observed?: boolean }> = [
+  const ashlrSteps: Array<{ number: string; title: string; detail: string; state: string; ready: boolean; observed?: boolean }> = [
     { number: '01', title: 'Connect the board', detail: 'USB-C is the best commissioning path. Bluetooth keyboard and trackpad can remain connected.', state: status.boardConnected ? 'Detected as Creator Micro 2' : 'Waiting for USB device', ready: status.boardConnected },
-    { number: '02', title: 'Declare the expected board route', detail: 'Codex Native and the Ashlr shortcut layer are separate operating contracts. The declaration never changes the device.', state: status.boardRoute === 'codex_native' ? 'Codex Native declared · connection unverified' : status.boardRoute === 'ashlr_layer' ? 'Ashlr Layer declared · physical acceptance pending' : 'No route selected', ready: status.boardRoute !== 'unknown' },
+    { number: '02', title: 'Declare the expected board route', detail: 'Codex Native and the Ashlr shortcut layer are separate operating contracts. The declaration never changes the device.', state: status.boardRoute === 'ashlr_layer' ? 'Ashlr Layer declared · physical acceptance pending' : 'No Ashlr route selected', ready: status.boardRoute === 'ashlr_layer' },
     { number: '03', title: 'Verify Work Louder Input', detail: inputInstallationDescription.guidance, state: inputInstallationDescription.state, ready: inputInstallationReady },
     { number: '04', title: 'Prove one shortcut receiver', detail: 'Only one exact Agent Board build may own the 20 global shortcuts. The app detects conflicts but never kills another process.', state: receiverExclusive ? 'One receiver · shortcut ownership available' : receiverRuntime?.status === 'unavailable' ? 'Receiver ownership unavailable · shortcuts disabled' : `${receiverRuntime?.instanceCount ?? 0} receivers / ${receiverRuntime?.distinctBuildCount ?? 0} builds · shortcuts disabled`, ready: receiverExclusive },
     { number: '05', title: 'Verify Input Monitoring', detail: 'In System Settings → Privacy & Security → Input Monitoring, allow the app that should receive board events. Only you can grant this.', state: 'Human verification required', ready: false },
-    { number: '06', title: "Inspect Input's cached profile", detail: status.boardRoute === 'codex_native' ? 'Codex Native requires its own connection and operator verification; Agent Board does not infer native RGB or thread ownership.' : !inputInstallationReady ? 'Profile repair, import, activation, and synchronization stay paused until the installed Input copy passes publisher, signature, and Gatekeeper verification.' : inputProfile.encoderDirection === 'reversed' ? 'The read-only Input cache shows the known clockwise/counterclockwise inversion. Import and activate the uniquely named corrected profile through Input before restarting Flight Check.' : correctedProfileObserved ? 'Input’s header is only the profile being edited. The cache-current profile and the profile physically emitting are separate states; a fresh physical Flight Check may supersede older log evidence.' : 'In Input, choose Ashlr Agent Board Corrected, use Set as current profile, and verify Ashlr Daily. A correct encoder-only receipt under another profile name is not enough; cache observation does not prove the board write or physical route.', state: status.boardRoute === 'codex_native' ? (nativeCodexMicro.status === 'firmware_rpc_missing' ? `Qualification required: v.oai.rgbcfg returned RPC 404${nativeCodexMicro.fresh ? ' recently' : ' in historical evidence'}` : nativeCodexMicro.status === 'connected' && nativeCodexMicro.fresh ? 'Recent native connection evidence found' : 'Native board state unverified') : !inputInstallationReady ? 'Blocked by Input integrity' : correctedProfileObserved ? 'Cache observed · Ashlr Agent Board Corrected · Ashlr Daily · device sync unproven' : profileState, ready: false, observed: status.boardRoute === 'ashlr_layer' && inputInstallationReady && correctedProfileObserved },
-    { number: '07', title: 'Verify the declared physical route', detail: status.boardRoute === 'codex_native' ? 'Quit Work Louder Input and quit this Agent Board app. Open Codex alone, then verify Settings → Creator Micro.' : 'Run all 19 daily gestures. The first gesture uses the top-right rotary dial; the bottom-left circle selects layers and the wired/Bluetooth connection.', state: status.boardRoute === 'codex_native' ? 'Manual Codex verification required' : `${status.shortcutCount}/${hardware.bindableSignals} desktop endpoints registered · physical layer unverified`, ready: false },
+    { number: '06', title: "Inspect Input's cached profile", detail: !inputInstallationReady ? 'Profile repair, import, activation, and synchronization stay paused until the installed Input copy passes publisher, signature, and Gatekeeper verification.' : inputProfile.encoderDirection === 'reversed' ? 'The read-only Input cache shows the known clockwise/counterclockwise inversion. Import and activate the uniquely named corrected profile through Input before restarting Flight Check.' : correctedProfileObserved ? 'Input’s header is only the profile being edited. The cache-current profile and the profile physically emitting are separate states; a fresh physical Flight Check may supersede older log evidence.' : 'In Input, choose Ashlr Agent Board Corrected, use Set as current profile, and verify Ashlr Daily. A correct encoder-only receipt under another profile name is not enough; cache observation does not prove the board write or physical route.', state: !inputInstallationReady ? 'Blocked by Input integrity' : correctedProfileObserved ? 'Cache observed · Ashlr Agent Board Corrected · Ashlr Daily · device sync unproven' : profileState, ready: false, observed: inputInstallationReady && correctedProfileObserved },
+    { number: '07', title: 'Verify the declared physical route', detail: 'Run all 19 daily gestures. The first gesture uses the top-right rotary dial; the bottom-left circle selects layers and the wired/Bluetooth connection.', state: `${status.shortcutCount}/${hardware.bindableSignals} desktop endpoints registered · physical layer unverified`, ready: false },
   ]
+  const nativeInitializationObserved = nativeCodexMicro.status === 'connected' && nativeCodexMicro.fresh === true
+  const handoffInitializationObserved = nativeAcceptance?.evaluation.status === 'initialization_observed'
+    || nativeAcceptance?.evaluation.status === 'accepted'
+  const nativeAccepted = nativeAcceptance?.evaluation.status === 'accepted'
+  const attestationState = (key: keyof NativeAcceptanceAttestations) => nativeAttestations[key]
+    ? 'Operator attestation recorded'
+    : 'Operator observation pending'
+  const nativeSteps: Array<{ number: string; title: string; detail: string; state: string; ready: boolean; observed?: boolean }> = [
+    { number: '01', title: 'Observe USB presence', detail: 'Use a direct USB-C data connection for commissioning. Bluetooth keyboard and trackpad can remain connected.', state: status.boardConnected ? 'Creator Micro 2 present on USB' : 'USB device not observed', ready: false, observed: status.boardConnected },
+    { number: '02', title: 'Verify ChatGPT Desktop', detail: 'The native route belongs to ChatGPT Desktop. Work Louder Input, its profile, Input Monitoring, and Agent Board shortcut ownership are not native-route prerequisites.', state: chatgptDesktop.status === 'verified' ? `ChatGPT Desktop${chatgptDesktop.version ? ` ${chatgptDesktop.version}` : ''}${chatgptDesktop.build ? ` · build ${chatgptDesktop.build}` : ''} verified` : chatgptDesktop.status === 'missing' ? 'ChatGPT Desktop not found' : 'ChatGPT Desktop verification unavailable', ready: false, observed: chatgptDesktop.status === 'verified' },
+    { number: '03', title: 'Declare Codex Native', detail: 'This local declaration changes only the expected verification route; it does not configure or claim the board.', state: status.boardRoute === 'codex_native' ? 'Codex Native declared' : 'Codex Native not declared', ready: false, observed: status.boardRoute === 'codex_native' },
+    { number: '04', title: 'Infer native initialization', detail: 'Agent Board may infer an ordered native initialization from fresh, bounded ChatGPT Desktop diagnostics. This observation is not a Settings result, physical-control result, or readiness decision.', state: nativeInitializationObserved ? 'Ordered native initialization inferred' : nativeCodexMicro.status === 'firmware_rpc_missing' ? `Native RPC qualification required${nativeCodexMicro.fresh ? '' : ' · historical evidence only'}` : 'Fresh native initialization not observed', ready: false, observed: nativeInitializationObserved },
+    { number: '05', title: 'Observe Creator Micro in Codex Settings', detail: 'After the restart boundary, open Settings → Creator Micro and personally observe the status. Record only what you see.', state: attestationState('settingsConnected'), ready: false, observed: nativeAttestations.settingsConnected },
+    { number: '06', title: 'Exercise the dial', detail: 'Turn the top-right dial left and right, then press it. Confirm each configured Codex response yourself.', state: attestationState('dial'), ready: false, observed: nativeAttestations.dial },
+    { number: '07', title: 'Exercise the joystick', detail: 'Move the planar stick up, right, down, and left. The bottom-left circle is not the joystick.', state: attestationState('joystick'), ready: false, observed: nativeAttestations.joystick },
+    { number: '08', title: 'Exercise all six agent keys', detail: 'Press each top-row agent key once and observe its configured Codex behavior.', state: attestationState('agentKeys'), ready: false, observed: nativeAttestations.agentKeys },
+    { number: '09', title: 'Exercise all seven action keys', detail: 'Press each action switch once. Do not treat a mouse click or ordinary keyboard shortcut as board evidence.', state: attestationState('actionKeys'), ready: false, observed: nativeAttestations.actionKeys },
+    { number: '10', title: 'Exercise the microphone key', detail: 'Press the wide Mic cap and observe the configured push-to-talk response. The cap spans two physical switches.', state: attestationState('microphone'), ready: false, observed: nativeAttestations.microphone },
+    { number: '11', title: 'Observe lighting', detail: 'Inspect the black-opaque caps and edge glow in the room lighting you normally use. The on-screen legend remains authoritative.', state: attestationState('lighting'), ready: false, observed: nativeAttestations.lighting },
+  ]
+  const steps = status.boardRoute === 'codex_native' ? nativeSteps : ashlrSteps
   const repairNeeded = inputInstallationReady && inputRecoveryState === 'profile_repair'
   const handoffPersistenceFailed = repairResult?.status === 'saved' && repairResult.handoffPersisted === false
   const recoveryHandoff = handoffPersistenceFailed ? null : recoveryGuide.handoff
   const recoverySteps = handoffPersistenceFailed ? repairResult.recoverySteps ?? [] : recoveryGuide.steps
   const artifactAvailable = !handoffPersistenceFailed && recoveryGuide.artifact?.available === true
   const showRecoveryGuide = inputInstallationReady && (status.boardRoute === 'ashlr_layer' || Boolean(recoveryHandoff))
+  const nativeHandoffPrepared = Boolean(nativeAcceptance?.receipt)
+    && !['not_prepared', 'invalid'].includes(nativeAcceptance?.evaluation.status ?? 'not_prepared')
+  const allNativeAttested = Object.values(nativeAttestations).every(Boolean)
+  const applyNativeSnapshot = (snapshot: NativeAcceptanceSnapshot) => {
+    setNativeAcceptance(snapshot)
+    const attestations = snapshot.evaluation.attestations ?? snapshot.receipt?.attestations
+    setNativeAttestations(attestations ? { ...emptyNativeAttestations, ...attestations } : emptyNativeAttestations)
+  }
   useEffect(() => {
     if (recoveryHandoff) recoveryFocus.current?.focus()
   }, [recoveryHandoff])
+  useEffect(() => {
+    let current = true
+    if (status.boardRoute !== 'codex_native') return () => { current = false }
+    const load = async () => {
+      try {
+        const snapshot = await window.agentBoard?.getNativeAcceptance?.()
+        if (current && snapshot) applyNativeSnapshot(snapshot)
+      } catch {
+        if (current) setNativeActionResult({ ok: false, message: 'The local native handoff could not be read. No acceptance was recorded.' })
+      }
+    }
+    void load()
+    return () => { current = false }
+  }, [status.boardRoute])
+  const prepareNativeHandoff = async () => {
+    const prepare = window.agentBoard?.prepareNativeAcceptance
+    if (!prepare) return setNativeActionResult({ ok: false, message: 'This build does not include the native handoff bridge. No acceptance was recorded.' })
+    setNativeBusy(true)
+    setNativeActionResult(null)
+    try {
+      const result = await prepare()
+      applyNativeSnapshot(result.snapshot)
+      setNativeActionResult(result.ok
+        ? { ok: true, message: 'Handoff prepared locally. Quit Work Louder Input and Agent Board, then open ChatGPT Desktop alone.' }
+        : { ok: false, message: 'The native handoff could not be prepared. No acceptance was recorded.' })
+    } catch {
+      setNativeActionResult({ ok: false, message: 'The native handoff could not be prepared. No acceptance was recorded.' })
+    } finally {
+      setNativeBusy(false)
+    }
+  }
+  const refreshNativeHandoff = async () => {
+    const read = window.agentBoard?.getNativeAcceptance
+    if (!read) return setNativeActionResult({ ok: false, message: 'This build does not include the native handoff bridge. No acceptance was recorded.' })
+    setNativeBusy(true)
+    setNativeActionResult(null)
+    try {
+      await onRefreshStatus()
+      const snapshot = await read()
+      applyNativeSnapshot(snapshot)
+      setNativeActionResult({ ok: true, message: snapshot.evaluation.status === 'initialization_observed' || snapshot.evaluation.status === 'accepted' ? 'Native initialization observation refreshed. Record only the checks you performed.' : 'Handoff refreshed. Fresh native initialization has not been observed.' })
+    } catch {
+      setNativeActionResult({ ok: false, message: 'The native handoff could not be refreshed. Existing local state was left unchanged.' })
+    } finally {
+      setNativeBusy(false)
+    }
+  }
+  const acceptNativeHandoff = async () => {
+    if (!allNativeAttested || nativeBusy) return
+    const accept = window.agentBoard?.acceptNativeAcceptance
+    if (!accept) return setNativeActionResult({ ok: false, message: 'This build does not include the native handoff bridge. No acceptance was recorded.' })
+    setNativeBusy(true)
+    setNativeActionResult(null)
+    try {
+      const result = await accept({ ...nativeAttestations })
+      applyNativeSnapshot(result.snapshot)
+      setNativeActionResult(result.ok
+        ? { ok: true, message: 'Operator attestation saved for this prepared context.' }
+        : { ok: false, message: 'The operator attestation was not accepted. Refresh the handoff and repeat the physical observations.' })
+    } catch {
+      setNativeActionResult({ ok: false, message: 'The operator attestation was not accepted. Existing local state was left unchanged.' })
+    } finally {
+      setNativeBusy(false)
+    }
+  }
+  const clearNativeHandoff = async () => {
+    const clear = window.agentBoard?.clearNativeAcceptance
+    if (!clear) return setNativeActionResult({ ok: false, message: 'This build does not include the native handoff bridge. Existing local state was left unchanged.' })
+    setNativeBusy(true)
+    setNativeActionResult(null)
+    try {
+      const result = await clear()
+      applyNativeSnapshot(result.snapshot)
+      setNativeActionResult(result.ok
+        ? { ok: true, message: 'Local native handoff cleared. No device, Desktop setting, or firmware was changed.' }
+        : { ok: false, message: 'The local native handoff could not be cleared. Existing local state was left unchanged.' })
+    } catch {
+      setNativeActionResult({ ok: false, message: 'The local native handoff could not be cleared. Existing local state was left unchanged.' })
+    } finally {
+      setNativeBusy(false)
+    }
+  }
   const createRepairProfile = async () => {
     if (repairBusy) return
     if (!window.agentBoard?.createCorrectedInputProfile) {
@@ -1136,6 +1268,46 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, routeSaving,
         {steps.map((step) => <article key={step.number} className={step.ready ? 'setup-step ready' : step.observed ? 'setup-step observed' : 'setup-step'}>
           <span className="step-number">{step.number}</span><div><h3>{step.title}</h3><p>{step.detail}</p><strong><i />{step.state}</strong></div>
         </article>)}
+        {status.boardRoute === 'codex_native' && <section className="native-acceptance" aria-labelledby="native-acceptance-title">
+          <div className="native-acceptance-heading">
+            <span className="eyebrow">RESTART-SAFE NATIVE HANDOFF</span>
+            <h3 id="native-acceptance-title">Carry the physical check across the restart.</h3>
+            <p>Prepare a private local handoff, close Agent Board and Work Louder Input, open ChatGPT Desktop alone, then return here to refresh and record your observations.</p>
+          </div>
+          <div className="native-evidence-ladder" role="list" aria-label="Native evidence ladder">
+            <div role="listitem" className={status.boardConnected ? 'native-evidence-node observed' : 'native-evidence-node'}><span>1</span><strong>USB</strong><small>{status.boardConnected ? 'Observed' : 'Not observed'}</small></div>
+            <div role="listitem" className={chatgptDesktop.status === 'verified' ? 'native-evidence-node observed' : 'native-evidence-node'}><span>2</span><strong>Desktop</strong><small>{chatgptDesktop.status === 'verified' ? 'Verified' : chatgptDesktop.status === 'missing' ? 'Not found' : 'Unavailable'}</small></div>
+            <div role="listitem" className={handoffInitializationObserved ? 'native-evidence-node observed' : 'native-evidence-node'}><span>3</span><strong>Initialization</strong><small>{handoffInitializationObserved ? 'Inferred after prepare' : 'Awaiting post-prepare observation'}</small></div>
+            <div role="listitem" className={nativeAccepted ? 'native-evidence-node accepted' : 'native-evidence-node'}><span>4</span><strong>Operator</strong><small>{nativeAccepted ? 'Accepted' : 'Pending'}</small></div>
+          </div>
+          <div className="native-handoff-status" role="status" aria-live="polite">
+            <ShieldCheck size={16} />
+            <span><strong>{nativeAccepted ? 'Operator attestation saved' : nativeHandoffPrepared ? nativeAcceptance?.evaluation.status === 'initialization_observed' ? 'Initialization observed after preparation' : 'Handoff prepared' : nativeAcceptance?.evaluation.status === 'invalid' ? 'Fresh handoff required' : 'Handoff not prepared'}</strong>{nativeAccepted ? ' This receipt belongs only to the recorded device and Desktop context.' : nativeHandoffPrepared ? ' Resume here after the app restart; the prepared receipt preserves no prompt, task title, or workspace path.' : ' Preparation records the bounded hardware and Desktop context needed to reject stale acceptance.'}</span>
+          </div>
+          <div className="native-handoff-actions">
+            <button type="button" onClick={() => void prepareNativeHandoff()} disabled={nativeBusy}>{nativeBusy ? 'Working…' : 'Prepare handoff'}</button>
+            <button type="button" onClick={() => void refreshNativeHandoff()} disabled={nativeBusy || !nativeHandoffPrepared}>Refresh after restart</button>
+            {nativeHandoffPrepared && <button type="button" className="quiet" onClick={() => void clearNativeHandoff()} disabled={nativeBusy}>Clear handoff</button>}
+          </div>
+          {nativeHandoffPrepared && <fieldset className="native-attestations" disabled={nativeBusy || nativeAccepted}>
+            <legend>Operator observations</legend>
+            {([
+              ['settingsConnected', 'Creator Micro shown in Codex Settings'],
+              ['dial', 'Dial left, right, and press observed'],
+              ['joystick', 'Joystick up, right, down, and left observed'],
+              ['agentKeys', 'All six agent keys observed'],
+              ['actionKeys', 'All seven action keys observed'],
+              ['microphone', 'Microphone key observed'],
+              ['lighting', 'Black-cap lighting observed'],
+            ] as Array<[keyof NativeAcceptanceAttestations, string]>).map(([key, label]) => <label key={key}>
+              <input type="checkbox" checked={nativeAttestations[key]} onChange={(event) => setNativeAttestations((current) => ({ ...current, [key]: event.target.checked }))} />
+              <span><Check size={12} />{label}</span>
+            </label>)}
+          </fieldset>}
+          {nativeHandoffPrepared && !nativeAccepted && <button type="button" className="native-accept-button" onClick={() => void acceptNativeHandoff()} disabled={nativeBusy || !allNativeAttested}>Accept operator attestation</button>}
+          {nativeActionResult && <p className={nativeActionResult.ok ? 'native-action-result' : 'native-action-result failed'} role={nativeActionResult.ok ? 'status' : 'alert'}>{nativeActionResult.message}</p>}
+          <p className="native-proof-boundary"><ShieldCheck size={14} /><span><strong>Operator attestation—not device proof.</strong> Checked items mean the operator reports seeing those outcomes. They do not prove native thread ownership, RGB transport, firmware safety, or authorization for consequential actions.</span></p>
+        </section>}
         {repairNeeded && <section className="profile-repair" aria-labelledby="profile-repair-title">
           <div><span className="eyebrow">OFFLINE REPAIR / NO DEVICE WRITE</span><h3 id="profile-repair-title">Create the corrected profile here.</h3></div>
           <p>Select an ordinary US Creator Micro 2 profile exported from Work Louder Input. Agent Board will validate it and save a new <b>Ashlr Daily</b> import with the clockwise/counterclockwise order corrected. It never opens Input, edits Input's cache, or writes to the board.</p>
@@ -1179,9 +1351,9 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, routeSaving,
         <div className="hardware-note"><ShieldCheck size={18} /><p>{status.boardRoute === 'codex_native' ? <><strong>Native firmware changes require a guarded qualification.</strong> Back up Input, quit Codex, use only the exact reviewed vendor-published candidate, then re-prove both native RPCs and every control.</> : <><strong>Freeze firmware during acceptance for Ashlr Layer.</strong> Defer it until the active profile is backed up and a separate qualification is planned.</>}</p></div>
         <div className="hardware-note"><RotateCcw size={18} /><p><strong>The bottom-left circle is not a bindable key.</strong> A short tap changes layer; a three-second hold opens the selector for three Bluetooth channels and wired mode.</p></div>
         <div className="rgb-legend" aria-label="Black-opaque state language"><span className="eyebrow">BLACK-OPAQUE STATE LANGUAGE</span><div>{agentStateLegendOrder.map((state) => <span key={state}><i className={agentStateClassName(state)} />{agentStateLabels[state]}{' '}</span>)}</div><small>The screen is the complete legend. Black caps use edge and underglow only after lighting transport is qualified; a frosted hero cap is optional.</small></div>
-        {status.receiverIdentity && <div className="receiver-identity"><span className="eyebrow">CURRENT RECEIVER BUILD</span><strong>{status.receiverIdentity.packaged ? 'Packaged' : 'Development'} · v{status.receiverIdentity.appVersion}</strong>{status.receiverIdentity.appAsarSha256 && <code title={status.receiverIdentity.appAsarSha256}>app.asar {status.receiverIdentity.appAsarSha256.slice(0, 12)}</code>}<p>{receiverExclusive ? 'This is the only observed Agent Board receiver.' : `${receiverRuntime?.instanceCount ?? 0} receivers across ${receiverRuntime?.distinctBuildCount ?? 0} builds are contending. Fully quit every copy manually, then reopen one exact build. No process was quit automatically.`} Build identity does not prove macOS permission, shortcut receipt, signing, or physical acceptance.</p></div>}
+        {status.boardRoute !== 'codex_native' && status.receiverIdentity && <div className="receiver-identity"><span className="eyebrow">CURRENT RECEIVER BUILD</span><strong>{status.receiverIdentity.packaged ? 'Packaged' : 'Development'} · v{status.receiverIdentity.appVersion}</strong>{status.receiverIdentity.appAsarSha256 && <code title={status.receiverIdentity.appAsarSha256}>app.asar {status.receiverIdentity.appAsarSha256.slice(0, 12)}</code>}<p>{receiverExclusive ? 'This is the only observed Agent Board receiver.' : `${receiverRuntime?.instanceCount ?? 0} receivers across ${receiverRuntime?.distinctBuildCount ?? 0} builds are contending. Fully quit every copy manually, then reopen one exact build. No process was quit automatically.`} Build identity does not prove macOS permission, shortcut receipt, signing, or physical acceptance.</p></div>}
         {status.boardRoute === 'codex_native'
-          ? <div className="native-manual-gate"><ShieldCheck size={16} /><span><strong>Manual native gate</strong> Quit Work Louder Input and quit this Agent Board app. Open Codex alone, then verify Settings → Creator Micro. Agent Board cannot perform or accept that check.</span></div>
+          ? <div className="native-manual-gate"><ShieldCheck size={16} /><span><strong>Operator acceptance handoff</strong> Prepare the handoff at left, quit Work Louder Input and Agent Board, then open ChatGPT Desktop alone. Reopen Agent Board, refresh, and record the checks you personally perform. The local receipt is an operator attestation, not proof.</span></div>
           : <button type="button" className="operate-button" onClick={onFlightCheck}>Run Ashlr Flight Check <ChevronRight size={16} /></button>}
         <button type="button" className="operate-button secondary" onClick={onOperate}>Return to board</button>
       </aside>

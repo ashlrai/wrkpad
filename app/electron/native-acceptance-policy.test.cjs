@@ -1,0 +1,38 @@
+const test = require('node:test')
+const assert = require('node:assert/strict')
+const { readFileSync } = require('node:fs')
+const path = require('node:path')
+
+const mainSource = readFileSync(path.join(__dirname, 'main.cjs'), 'utf8')
+const preloadSource = readFileSync(path.join(__dirname, 'preload.cjs'), 'utf8')
+
+test('native acceptance handlers stay behind trusted renderer IPC', () => {
+  for (const channel of [
+    'board:getNativeAcceptance',
+    'board:prepareNativeAcceptance',
+    'board:acceptNativeAcceptance',
+    'board:clearNativeAcceptance',
+  ]) {
+    assert.match(mainSource, new RegExp(`ipcMain\\.handle\\('${channel}', trustedIpc\\(`))
+    assert.match(preloadSource, new RegExp(`ipcRenderer\\.invoke\\('${channel}'`))
+  }
+})
+
+test('native preparation requires declared route, USB identity, and verified Desktop metadata', () => {
+  assert.match(mainSource, /settings\.boardRoute === 'codex_native' && board && chatgpt\.status === 'installed'/)
+  assert.match(mainSource, /device: \{ vidPid: board\.vidPid \}/)
+  assert.match(mainSource, /codex: \{ version: chatgpt\.version, build: chatgpt\.build \}/)
+})
+
+test('native acceptance is re-evaluated from current evidence before persistence', () => {
+  assert.match(mainSource, /const evidence = await collectNativeAcceptanceEvidence\(\)/)
+  assert.match(mainSource, /acceptNativeAcceptance\(prepared, \{[\s\S]*currentContext: evidence\.currentContext,[\s\S]*nativeInitialization: evidence\.nativeInitialization/)
+  assert.match(mainSource, /writeNativeAcceptanceReceipt\(settingsPath\(\), receipt\)/)
+})
+
+test('native evidence projection excludes diagnostic detail and local paths', () => {
+  const projection = mainSource.match(/function projectNativeInitialization\(inspection\) \{([\s\S]*?)\n\}/)?.[1] ?? ''
+  const context = mainSource.match(/const currentContext = settings\.boardRoute[\s\S]*?\n\s*: null/)?.[0] ?? ''
+  assert.doesNotMatch(projection, /detail|path|session|prompt|title/)
+  assert.doesNotMatch(context, /detail|path|session|prompt|title/)
+})
