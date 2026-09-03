@@ -67,7 +67,8 @@ describe('Compact Deck', () => {
 
   it('mirrors the four-row physical geometry and hides private titles by default', async () => {
     render(<CompactDeckApp />)
-    await screen.findByText('Agent observer online.')
+    await screen.findByText('Session feed live; hardware control unproven.')
+    expect(screen.getByRole('status').textContent).toContain('session feed live')
     const deck = screen.getByLabelText('Creator Micro 2 control layout')
     const rows = Array.from(deck.children)
     expect(rows).toHaveLength(4)
@@ -84,7 +85,7 @@ describe('Compact Deck', () => {
 
   it('uses only window-scoped configured shortcuts', async () => {
     render(<CompactDeckApp />)
-    await screen.findByText('Agent observer online.')
+    await screen.findByText('Session feed live; hardware control unproven.')
 
     fireEvent.keyDown(window, { code: 'Numpad2' })
     await waitFor(() => expect(focusAgentSlot).toHaveBeenCalledWith(2))
@@ -96,7 +97,7 @@ describe('Compact Deck', () => {
 
   it('turns the virtual dial to select and presses it to open', async () => {
     render(<CompactDeckApp />)
-    await screen.findByText('Agent observer online.')
+    await screen.findByText('Session feed live; hardware control unproven.')
     fireEvent.click(screen.getByRole('button', { name: 'Dial right: select next agent' }))
     expect(screen.getByText('Agent 3 selected. Press the dial or agent key to open.')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Dial press: open selected agent 3' }))
@@ -105,7 +106,7 @@ describe('Compact Deck', () => {
 
   it('asks the main process to resolve and focus current attention atomically', async () => {
     render(<CompactDeckApp />)
-    await screen.findByText('Agent observer online.')
+    await screen.findByText('Session feed live; hardware control unproven.')
     fireEvent.click(screen.getByRole('button', { name: 'Attention: open highest-priority agent 2' }))
     await waitFor(() => expect(focusAttention).toHaveBeenCalledOnce())
     expect(runWorkflowAction).not.toHaveBeenCalledWith('stage_attention')
@@ -114,7 +115,7 @@ describe('Compact Deck', () => {
 
   it('makes title visibility explicit and persists it', async () => {
     render(<CompactDeckApp />)
-    await screen.findByText('Agent observer online.')
+    await screen.findByText('Session feed live; hardware control unproven.')
     fireEvent.click(screen.getByRole('button', { name: 'Privacy: session titles are hidden' }))
     await waitFor(() => expect(savePreferences).toHaveBeenCalledWith(expect.objectContaining({ showTitles: true })))
     expect(await screen.findByText('Control deck')).toBeTruthy()
@@ -122,7 +123,7 @@ describe('Compact Deck', () => {
 
   it('exposes workflow consequences without sending prompt or terminal input', async () => {
     render(<CompactDeckApp />)
-    await screen.findByText('Agent observer online.')
+    await screen.findByText('Session feed live; hardware control unproven.')
     fireEvent.click(screen.getByRole('button', { name: 'Voice: prepare voice capture' }))
     fireEvent.click(screen.getByRole('button', { name: 'Continue: copy a guarded continuation without submitting it' }))
     await waitFor(() => expect(runWorkflowAction).toHaveBeenCalledWith('stage_voice'))

@@ -297,7 +297,7 @@ export default function CompactDeckApp() {
         setPreferences(nextPreferences)
         setSelectedSlot(nextSnapshot.attentionSlot ?? nextSnapshot.agents.find((agent) => agent.state !== 'off')?.slot ?? 1)
         setFailed(false)
-        setReceipt(nextSnapshot.agentSource === 'observer_online' ? 'Agent observer online.' : 'Agent state is not available yet.')
+        setReceipt(nextSnapshot.agentSource === 'observer_online' ? 'Session feed live; hardware control unproven.' : 'Agent session feed is not available yet.')
       })
       .catch(() => {
         if (!active) return
@@ -331,9 +331,11 @@ export default function CompactDeckApp() {
 
   return <main className="compact-deck-shell" aria-busy={loading}>
     <header className="compact-titlebar">
-      <span className={`bridge-light ${snapshot.agentSource}`} aria-hidden="true" />
       <strong>Agent Board</strong>
-      <span className="route-label">compact deck</span>
+      <span className={`route-label session-feed-label ${snapshot.agentSource}`} role="status">
+        <i className={`bridge-light ${snapshot.agentSource}`} aria-hidden="true" />
+        {snapshot.agentSource === 'observer_online' ? 'session feed live' : snapshot.agentSource === 'invalid' ? 'session feed invalid' : 'session feed unavailable'}
+      </span>
       <button type="button" className="chrome-button" aria-label="Compact Deck settings" aria-expanded={settingsOpen} onClick={() => setSettingsOpen((open) => !open)}><Settings2 size={13} /></button>
       <button type="button" className="chrome-button" aria-label="Hide Compact Deck" onClick={() => { void hideDeck() }}><Minus size={15} /></button>
     </header>

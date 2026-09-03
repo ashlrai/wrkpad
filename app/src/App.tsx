@@ -168,6 +168,7 @@ function App() {
   const chatgptDesktop = status.chatgptDesktop ?? initialStatus.chatgptDesktop
   const inputInstallation = status.inputInstallation ?? initialStatus.inputInstallation
   const receiverRuntime = status.receiverRuntime ?? initialStatus.receiverRuntime
+  const receiverIdentity = status.receiverIdentity
   const inputInstallationDescription = describeInputInstallation(inputInstallation)
   const inputInstallationReady = verifiedInputInstallation(inputInstallation)
   const receiverExclusive = exclusiveReceiverRuntime(receiverRuntime)
@@ -656,7 +657,7 @@ function App() {
         </div>
         <div className="system-strip" aria-label="System status">
           <button type="button" className="status-pill compact-launch" onClick={() => void bridge?.showCompactDeck?.()}><Command size={14} /> Compact Deck</button>
-          <StatusPill label={status.boardConnected ? 'USB present' : 'USB absent'} tone={status.boardConnected ? 'ready' : 'off'} icon={<Keyboard size={14} />} />
+          <StatusPill label={status.boardConnected ? 'USB identity observed' : 'USB identity not observed'} tone={status.boardConnected ? 'observed' : 'off'} icon={<Keyboard size={14} />} />
           <StatusPill
             label={nativePill.label}
             tone={nativePill.tone}
@@ -665,7 +666,7 @@ function App() {
           <StatusPill label={status.codex ? 'Codex CLI found' : 'Codex CLI absent'} tone={status.codex ? 'ready' : 'off'} icon={<Sparkles size={14} />} />
           <StatusPill label={status.claude ? 'Claude CLI found' : 'Claude CLI absent'} tone={status.claude ? 'ready' : 'off'} icon={<Bot size={14} />} />
           <StatusPill
-            label={mission.agentSource === 'observer_online' ? 'Agent observer online' : mission.agentSource === 'invalid' ? 'Agent observer invalid' : 'Agent observer unavailable'}
+            label={mission.agentSource === 'observer_online' ? 'Agent session feed live' : mission.agentSource === 'invalid' ? 'Agent session feed invalid' : 'Agent session feed unavailable'}
             tone={mission.agentSource === 'observer_online' ? 'ready' : mission.agentSource === 'invalid' ? 'warn' : 'off'}
             icon={<Activity size={14} />}
           />
@@ -693,7 +694,7 @@ function App() {
         <BoardRouteRail route={status.boardRoute} saving={routeSaving} error={routeError} onChange={(route) => void declareBoardRoute(route)} />
 
         <div className="readiness-ribbon">
-          <span className={status.boardConnected ? 'check ready' : 'check'}><Check size={12} /> USB presence</span>
+          <span className={status.boardConnected ? 'check observed' : 'check'}><Keyboard size={12} /> {status.boardConnected ? 'USB identity only · controls unproven' : 'USB identity not observed'}</span>
           {status.boardRoute === 'codex_native' ? <>
             <span className={chatgptDesktop.status === 'metadata_observed' ? 'check observed' : 'check warn'}><Sparkles size={12} /> {chatgptDesktop.status === 'metadata_observed' ? `ChatGPT Desktop ${chatgptDesktop.version ?? ''} metadata observed`.replace('  ', ' ') : chatgptDesktop.status === 'missing' ? 'ChatGPT Desktop not found' : 'ChatGPT Desktop metadata unavailable'}</span>
             <span className={nativeCodexMicro.status === 'connected' && nativeEvidenceFresh ? 'check observed' : 'check warn'}><Activity size={12} /> {nativeCodexMicro.status === 'connected' && nativeEvidenceFresh ? 'Native initialization inferred' : 'Native initialization unverified'}</span>
@@ -771,15 +772,18 @@ function App() {
       /> : <SetupView status={status} recoveryGuide={recoveryGuide} onRefreshRecoveryGuide={refreshRecoveryGuide} onRefreshStatus={refreshStatus} routeSaving={routeSaving} routeError={routeError} onRouteChange={(route) => void declareBoardRoute(route)} onOperate={() => changeView('operate')} onFlightCheck={() => void changeView('flight')} />}
 
       <footer className="footer-bar">
-        <div><span className={status.boardConnected ? 'footer-led ready' : 'footer-led'} /> {hardware.mechanicalSwitches} SWITCHES · 1 TOUCH · 1 DIAL · 1 PLANAR STICK</div>
+        <div><span className={status.boardConnected ? 'footer-led observed' : 'footer-led'} /> {status.boardConnected ? 'USB IDENTITY OBSERVED · CONTROLS UNPROVEN' : 'USB IDENTITY NOT OBSERVED'} · {hardware.mechanicalSwitches} SWITCHES · 1 TOUCH · 1 DIAL · 1 PLANAR STICK</div>
         <div><ShieldCheck size={14} /> Consequential actions require confirmation or hold.</div>
-        <div>ASHLR BOARD OS · LOCAL FIRST</div>
+        <div className="build-identity" aria-label="Agent Board build identity">
+          <span>AGENT BOARD {receiverIdentity ? `v${receiverIdentity.appVersion}` : 'VERSION LOADING'}</span>
+          <code>{receiverIdentity?.appAsarSha256 ? `BUILD ${receiverIdentity.appAsarSha256.slice(0, 12)}` : receiverIdentity?.packaged ? 'BUILD UNAVAILABLE' : 'DEVELOPMENT BUILD'}</code>
+        </div>
       </footer>
     </main>
   )
 }
 
-function StatusPill({ label, tone, icon }: { label: string; tone: 'ready' | 'off' | 'warn'; icon: ReactNode }) {
+function StatusPill({ label, tone, icon }: { label: string; tone: 'ready' | 'observed' | 'off' | 'warn'; icon: ReactNode }) {
   return <span className={`status-pill ${tone}`}>{icon}<i />{label}</span>
 }
 
@@ -1028,9 +1032,9 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
       </div>
 
       <aside className="flight-evidence">
-        <span className="eyebrow">LIVE RECEIPT</span><h3>{status.boardConnected ? 'Creator Micro 2 detected' : 'USB device not detected'}</h3>
+        <span className="eyebrow">LIVE RECEIPT</span><h3>{status.boardConnected ? 'USB identity observed — controls unproven' : 'USB identity not observed'}</h3>
         <dl>
-          <div><dt>USB</dt><dd className={status.boardConnected ? 'ready' : ''}>{status.boardConnected ? 'Present' : 'Absent'}</dd></div>
+          <div><dt>USB</dt><dd className={status.boardConnected ? 'observed' : ''}>{status.boardConnected ? 'Identity observed' : 'Not observed'}</dd></div>
           <div><dt>Shortcuts</dt><dd className={status.shortcutCount === hardware.bindableSignals ? 'ready' : ''}>{status.shortcutCount}/20</dd></div>
           <div><dt>Receiver</dt><dd className={receiverExclusive ? 'ready' : 'problem'}>{receiverExclusive ? 'Exclusive' : receiverRuntime.status === 'unavailable' ? 'Unavailable' : 'Contended'}</dd></div>
           <div><dt>Started</dt><dd>{startedAt ? formatClock(new Date(startedAt)) : 'Not started'}</dd></div>
@@ -1121,7 +1125,7 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
       ? recentRuntimeEvidence ? 'runtime_log_advisory' : 'cache_observed'
       : 'profile_repair'
   const ashlrSteps: Array<{ number: string; title: string; detail: string; state: string; ready: boolean; observed?: boolean }> = [
-    { number: '01', title: 'Connect the board', detail: 'USB-C is the best commissioning path. Bluetooth keyboard and trackpad can remain connected.', state: status.boardConnected ? 'Detected as Creator Micro 2' : 'Waiting for USB device', ready: status.boardConnected },
+    { number: '01', title: 'Observe the USB identity', detail: 'USB-C is the best commissioning path. Bluetooth keyboard and trackpad can remain connected. USB identity alone does not prove HID access or working controls.', state: status.boardConnected ? 'Creator Micro 2 identity observed · no control receipt' : 'USB identity not observed', ready: false, observed: status.boardConnected },
     { number: '02', title: 'Declare the expected board route', detail: 'Codex Native and the Ashlr shortcut layer are separate operating contracts. The declaration never changes the device.', state: status.boardRoute === 'ashlr_layer' ? 'Ashlr Layer declared · physical acceptance pending' : 'No Ashlr route selected', ready: status.boardRoute === 'ashlr_layer' },
     { number: '03', title: 'Verify Work Louder Input', detail: inputInstallationDescription.guidance, state: inputInstallationDescription.state, ready: inputInstallationReady },
     { number: '04', title: 'Prove one shortcut receiver', detail: 'Only one exact Agent Board build may own the 20 global shortcuts. The app detects conflicts but never kills another process.', state: receiverExclusive ? 'One receiver · shortcut ownership available' : receiverRuntime?.status === 'unavailable' ? 'Receiver ownership unavailable · shortcuts disabled' : `${receiverRuntime?.instanceCount ?? 0} receivers / ${receiverRuntime?.distinctBuildCount ?? 0} builds · shortcuts disabled`, ready: receiverExclusive },
@@ -1139,7 +1143,7 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
     ? 'Operator attestation recorded'
     : 'Operator observation pending'
   const nativeSteps: Array<{ number: string; title: string; detail: string; state: string; ready: boolean; observed?: boolean }> = [
-    { number: '01', title: 'Observe USB presence', detail: 'Use a direct USB-C data connection for commissioning. Bluetooth keyboard and trackpad can remain connected.', state: status.boardConnected ? 'Creator Micro 2 present on USB' : 'USB device not observed', ready: false, observed: status.boardConnected },
+    { number: '01', title: 'Observe the USB identity', detail: 'Use a direct USB-C data connection for commissioning. Bluetooth keyboard and trackpad can remain connected. This does not prove native HID access or working controls.', state: status.boardConnected ? 'Creator Micro 2 identity observed · controls unproven' : 'USB identity not observed', ready: false, observed: status.boardConnected },
     { number: '02', title: 'Observe ChatGPT Desktop metadata', detail: 'The native route belongs to ChatGPT Desktop. Agent Board reads only fixed-path version/build metadata; it does not prove bundle identity, signature, Gatekeeper status, or the running process. Work Louder Input, its profile, Input Monitoring for Agent Board, and Agent Board shortcut ownership are not native-route prerequisites. ChatGPT Desktop’s displayed Input Monitoring state remains part of the Codex Settings observation.', state: chatgptDesktop.status === 'metadata_observed' ? `ChatGPT Desktop${chatgptDesktop.version ? ` ${chatgptDesktop.version}` : ''}${chatgptDesktop.build ? ` · build ${chatgptDesktop.build}` : ''} metadata observed` : chatgptDesktop.status === 'missing' ? 'ChatGPT Desktop not found' : 'ChatGPT Desktop metadata unavailable', ready: false, observed: chatgptDesktop.status === 'metadata_observed' },
     { number: '03', title: 'Declare Codex Native', detail: 'This local declaration changes only the expected verification route; it does not configure or claim the board.', state: status.boardRoute === 'codex_native' ? 'Codex Native declared' : 'Codex Native not declared', ready: false, observed: status.boardRoute === 'codex_native' },
     { number: '04', title: 'Infer native initialization', detail: 'Agent Board may infer an ordered native initialization from fresh, bounded ChatGPT Desktop diagnostics. This observation is not a Settings result, physical-control result, or readiness decision.', state: nativeInitializationObserved ? 'Ordered native initialization inferred' : nativeCodexMicro.status === 'firmware_rpc_missing' ? `Native RPC qualification required${nativeCodexMicro.fresh ? '' : ' · historical evidence only'}` : 'Fresh native initialization not observed', ready: false, observed: nativeInitializationObserved },
@@ -1410,7 +1414,7 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
     }
   }
   return <section className="setup-view">
-    <div className="setup-intro"><span className="eyebrow">COMMISSIONING / TRUTHFUL READINESS</span><h2>Make every layer observable.</h2><p>USB presence, macOS authority, Input configuration, and native Codex integration are separate states. This checklist keeps them separate so “connected” never means more than we proved.</p></div>
+    <div className="setup-intro"><span className="eyebrow">COMMISSIONING / TRUTHFUL READINESS</span><h2>Make every layer observable.</h2><p>USB identity observation, macOS authority, Input configuration, and native Codex integration are separate states. This checklist keeps them separate so “connected” never means more than we proved.</p></div>
     <BoardRouteRail route={status.boardRoute} saving={routeSaving} error={routeError} onChange={changeBoardRoute} />
     <div className="setup-grid">
       <div className="setup-steps">
@@ -1507,7 +1511,7 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
         <div className="hardware-note"><ShieldCheck size={18} /><p>{status.boardRoute === 'codex_native' ? <><strong>Native firmware changes require a guarded qualification.</strong> Back up Input, quit Codex, use only the exact reviewed vendor-published candidate, then re-prove both native RPCs and every control.</> : <><strong>Freeze firmware during acceptance for Ashlr Layer.</strong> Defer it until the active profile is backed up and a separate qualification is planned.</>}</p></div>
         <div className="hardware-note"><RotateCcw size={18} /><p><strong>The bottom-left circle is not a bindable key.</strong> A short tap changes layer; a three-second hold opens the selector for three Bluetooth channels and wired mode.</p></div>
         <div className="rgb-legend" aria-label="Black-opaque state language"><span className="eyebrow">BLACK-OPAQUE STATE LANGUAGE</span><div>{agentStateLegendOrder.map((state) => <span key={state}><i className={agentStateClassName(state)} />{agentStateLabels[state]}{' '}</span>)}</div><small>The screen is the complete legend. Black caps use edge and underglow only after lighting transport is qualified; a frosted hero cap is optional.</small></div>
-        {status.boardRoute !== 'codex_native' && status.receiverIdentity && <div className="receiver-identity"><span className="eyebrow">CURRENT RECEIVER BUILD</span><strong>{status.receiverIdentity.packaged ? 'Packaged' : 'Development'} · v{status.receiverIdentity.appVersion}</strong>{status.receiverIdentity.appAsarSha256 && <code title={status.receiverIdentity.appAsarSha256}>app.asar {status.receiverIdentity.appAsarSha256.slice(0, 12)}</code>}<p>{receiverExclusive ? 'This is the only observed Agent Board receiver.' : `${receiverRuntime?.instanceCount ?? 0} receivers across ${receiverRuntime?.distinctBuildCount ?? 0} builds are contending. Fully quit every copy manually, then reopen one exact build. No process was quit automatically.`} Build identity does not prove macOS permission, shortcut receipt, signing, or physical acceptance.</p></div>}
+        {status.receiverIdentity && <div className="receiver-identity"><span className="eyebrow">CURRENT RECEIVER BUILD</span><strong>{status.receiverIdentity.packaged ? 'Packaged' : 'Development'} · v{status.receiverIdentity.appVersion}</strong>{status.receiverIdentity.appAsarSha256 && <code title={status.receiverIdentity.appAsarSha256}>app.asar {status.receiverIdentity.appAsarSha256.slice(0, 12)}</code>}<p>{status.boardRoute === 'codex_native' ? 'Agent Board is observing this build in passive native mode; it is not claiming the native HID route.' : receiverExclusive ? 'This is the only observed Agent Board receiver.' : `${receiverRuntime?.instanceCount ?? 0} receivers across ${receiverRuntime?.distinctBuildCount ?? 0} builds are contending. Fully quit every copy manually, then reopen one exact build. No process was quit automatically.`} Build identity does not prove macOS permission, shortcut receipt, signing, or physical acceptance.</p></div>}
         {status.boardRoute === 'codex_native'
           ? <div className="native-manual-gate"><ShieldCheck size={16} /><span><strong>Operator acceptance handoff</strong> Prepare the handoff at left. Agent Board unregisters its shortcuts and may remain open in passive Codex Native mode; quit Work Louder Input, Command-Q and reopen ChatGPT Desktop, then record the checks you personally perform. Automatic evidence watching never checks a box or accepts for you.</span></div>
           : <button type="button" className="operate-button" onClick={onFlightCheck}>Run Ashlr Flight Check <ChevronRight size={16} /></button>}

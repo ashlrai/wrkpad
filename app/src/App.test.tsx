@@ -662,7 +662,7 @@ describe('operator interface', () => {
         ...trustedHardwareDiagnostics,
         inputProfile: correctedInputProfile,
         inputRuntime: { status: 'not_observed', profileIndex: null, layerIndex: null, observedAt: null, fresh: false },
-        receiverIdentity: { appVersion: '0.1.0', packaged: true, appAsarSha256: 'a'.repeat(64) },
+        receiverIdentity: { appVersion: '0.2.0', packaged: true, appAsarSha256: 'a'.repeat(64) },
         receiverRuntime: { status: 'exclusive', instanceCount: 1, distinctBuildCount: 1, currentAsarSha256: 'a'.repeat(64), candidateAsarSha256: null, candidateMatchesCurrent: null },
         codex: true, claude: true, ashlr: true, boardRoute: 'ashlr_layer', workspace: '/tmp', shortcutCount: 20,
         shortcutRegistrations: [], workspaceSnapshot: null,
@@ -673,10 +673,19 @@ describe('operator interface', () => {
     } as unknown as NonNullable<typeof window.agentBoard>
 
     render(<App />)
+    const usbIdentity = await screen.findByText('USB identity observed')
+    expect(usbIdentity.classList.contains('observed')).toBe(true)
+    expect(usbIdentity.classList.contains('ready')).toBe(false)
+    const buildIdentity = screen.getByLabelText('Agent Board build identity')
+    expect(buildIdentity.textContent).toContain('v0.2.0')
+    expect(buildIdentity.textContent).toContain('BUILD aaaaaaaaaaaa')
     fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
     const cacheState = await screen.findByText(/Cache observed · Ashlr Agent Board Corrected/i)
     expect(cacheState.closest('article')?.classList.contains('observed')).toBe(true)
     expect(cacheState.closest('article')?.classList.contains('ready')).toBe(false)
+    const usbStep = screen.getByText(/Creator Micro 2 identity observed · no control receipt/i)
+    expect(usbStep.closest('article')?.classList.contains('observed')).toBe(true)
+    expect(usbStep.closest('article')?.classList.contains('ready')).toBe(false)
     expect(cacheState.textContent).toContain('device sync unproven')
     expect(screen.queryByText('Set the live keyboard profile')).toBeNull()
     expect(screen.getByText(/app\.asar aaaaaaaaaaaa/i)).toBeTruthy()
@@ -738,7 +747,7 @@ describe('operator interface', () => {
 
     cleanup()
     render(<App />)
-    await screen.findByText('USB present')
+    await screen.findByText('USB identity observed')
     await waitFor(() => expect(getRecoveryGuide).toHaveBeenCalledTimes(3))
     expect(screen.queryByRole('heading', { name: 'Resume the saved recovery handoff.' })).toBeNull()
   })
@@ -909,7 +918,7 @@ describe('operator interface', () => {
     } as unknown as NonNullable<typeof window.agentBoard>
 
     render(<App />)
-    expect(await screen.findByText('USB present')).toBeTruthy()
+    expect(await screen.findByText('USB identity observed')).toBeTruthy()
     fireEvent.click(screen.getByRole('tab', { name: 'Flight Check' }))
     vi.useFakeTimers()
     vi.setSystemTime(new Date(startedAt))
@@ -1154,7 +1163,7 @@ describe('operator interface', () => {
     render(<App />)
     expect(await screen.findByText('Codex CLI found')).toBeTruthy()
     expect(screen.getByText('Claude CLI found')).toBeTruthy()
-    expect(await screen.findByText('Agent observer online')).toBeTruthy()
+    expect(await screen.findByText('Agent session feed live')).toBeTruthy()
     expect(screen.getByText('20/20 desktop endpoints registered')).toBeTruthy()
     expect(screen.queryByText('Codex local')).toBeNull()
   })

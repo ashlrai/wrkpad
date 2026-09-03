@@ -75,7 +75,14 @@ button { color: inherit; }
   text-overflow: ellipsis;
 }
 
+.session-feed-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
 .bridge-light {
+  display: inline-block;
   width: 7px;
   height: 7px;
   flex: 0 0 auto;
