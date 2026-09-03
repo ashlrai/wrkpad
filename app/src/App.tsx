@@ -151,6 +151,7 @@ function App() {
   const [routeSaving, setRouteSaving] = useState(false)
   const [routeError, setRouteError] = useState<string | null>(null)
   const [recoveryGuide, setRecoveryGuide] = useState<AgentBoardRecoveryGuide>(initialRecoveryGuide)
+  const [nativeControlReceipt, setNativeControlReceipt] = useState<NativeControlCheckReceipt | null>(null)
   const holdTimer = useRef<number | null>(null)
   const holdAttempt = useRef(0)
   const holdPending = useRef(false)
@@ -634,6 +635,22 @@ function App() {
 
   const nativeRoute = status.boardRoute === 'codex_native'
   const nativeEvidenceFresh = nativeCodexMicro.fresh === true
+  const nativeControlContextKey = JSON.stringify([
+    status.boardRoute,
+    status.boardVidPid,
+    chatgptDesktop.version,
+    chatgptDesktop.build,
+    nativeCodexMicro.observedAt,
+  ])
+  useEffect(() => {
+    let current = true
+    setNativeControlReceipt(null)
+    if (!nativeRoute || !bridge?.getNativeControlCheck) return () => { current = false }
+    void bridge.getNativeControlCheck()
+      .then((receipt) => { if (current) setNativeControlReceipt(receipt) })
+      .catch(() => { if (current) setNativeControlReceipt(null) })
+    return () => { current = false }
+  }, [bridge, nativeControlContextKey, nativeRoute])
   const nativePill = status.boardRoute !== 'codex_native'
     ? { label: status.boardRoute === 'ashlr_layer' ? 'Native not in use' : 'Native route not selected', tone: 'off' as const }
     : nativeCodexMicro.status === 'connected' && nativeEvidenceFresh
@@ -759,6 +776,8 @@ function App() {
           <button type="button" onClick={() => changeView('setup')}><span className="attention-dot" /> {status.boardRoute === 'codex_native' ? 'Open native acceptance handoff' : status.boardRoute === 'ashlr_layer' ? 'Input Monitoring needs human verification' : 'Choose a route in Setup'} <ChevronRight size={13} /></button>
         </div>
 
+        {nativeRoute && <NativeRouteTruth status={status} receipt={nativeControlReceipt} onOpenSetup={() => changeView('setup')} />}
+
         <div className="mission-control-grid">
           <AttentionDeck agents={mission.agents} selectedSlot={selectedAgentSlot} source={mission.agentSource} onSelect={setSelectedAgentSlot} onFocus={(slot) => void focusAgentSlot(slot)} />
           <FleetBrief fleet={mission.fleet} source={mission.fleetSource} notices={mission.operatorNotices} />
@@ -836,6 +855,57 @@ function App() {
 
 function StatusPill({ label, tone, icon }: { label: string; tone: 'ready' | 'observed' | 'off' | 'warn'; icon: ReactNode }) {
   return <span className={`status-pill ${tone}`}>{icon}<i />{label}</span>
+}
+
+function NativeRouteTruth({ status, receipt, onOpenSetup }: { status: SystemStatus; receipt: NativeControlCheckReceipt | null; onOpenSetup: () => void }) {
+  const nativeCodexMicro = status.nativeCodexMicro ?? initialStatus.nativeCodexMicro
+  const initializationObserved = nativeCodexMicro.status === 'connected' && nativeCodexMicro.fresh === true
+  const possibleLayerMismatch = correctedInputProfileObserved(status.inputProfile ?? initialStatus.inputProfile)
+  const physicalState = receipt?.overall === 'operator_accepted'
+    ? { label: 'Operator accepted · report, not HID proof', tone: 'accepted' }
+    : receipt?.overall === 'reported_failure'
+      ? { label: 'No response reported · recovery needed', tone: 'problem' }
+      : receipt
+        ? { label: 'Partial operator report · acceptance incomplete', tone: 'pending' }
+        : { label: 'No current physical-control report', tone: 'pending' }
+  const hasProblem = possibleLayerMismatch || receipt?.overall === 'reported_failure'
+
+  return <section
+    className={`native-route-truth${hasProblem ? ' problem' : ''}`}
+    role={hasProblem ? 'alert' : 'region'}
+    aria-labelledby="native-route-truth-title"
+  >
+    <div className="native-truth-heading">
+      <div>
+        <span className="eyebrow">CODEX NATIVE / EVIDENCE CHAIN</span>
+        <h2 id="native-route-truth-title">Connected is not the same as input-ready.</h2>
+        <p>Codex Settings can say Connected while no board event reaches a task. Treat these four checks separately.</p>
+      </div>
+      <button type="button" onClick={onOpenSetup}>{hasProblem ? 'Open control recovery' : 'Open physical check'} <ChevronRight size={14} /></button>
+    </div>
+    <ol className="native-truth-grid">
+      <li className={status.boardConnected ? 'observed' : 'problem'}>
+        <span>01 · Transport</span>
+        <strong>{status.boardConnected ? 'USB identity observed' : 'USB identity not observed'}</strong>
+        <small>{status.boardConnected ? 'Detection only; no key event has been proven.' : 'Reconnect with a direct USB-C data cable before testing.'}</small>
+      </li>
+      <li className={initializationObserved ? 'observed' : 'problem'}>
+        <span>02 · Native event readiness</span>
+        <strong>{initializationObserved ? 'Initialization inferred' : 'Initialization unverified'}</strong>
+        <small>{initializationObserved ? 'Bounded Desktop diagnostics observed; no fresh Codex control-consumption receipt is available.' : 'No fresh ordered Desktop initialization or Codex control-consumption receipt is available.'}</small>
+      </li>
+      <li className={possibleLayerMismatch ? 'problem' : 'pending'}>
+        <span>03 · Active layer</span>
+        <strong>{possibleLayerMismatch ? 'Possible native-layer mismatch' : 'Native layer still needs verification'}</strong>
+        <small>{possibleLayerMismatch ? 'Input cache names Ashlr Agent Board Corrected · Ashlr Daily; device state is unproven.' : 'Verify the board is on native firmware Layer 1; Agent Board cannot read the active device layer.'}</small>
+      </li>
+      <li className={physicalState.tone}>
+        <span>04 · Physical acceptance</span>
+        <strong>{physicalState.label}</strong>
+        <small>{receipt?.overall === 'operator_accepted' ? 'Saved for this exact device and Codex version/build context.' : 'Test two assigned keys while watching Codex, then record what actually happened.'}</small>
+      </li>
+    </ol>
+  </section>
 }
 
 const boardRouteOptions: Array<{ id: BoardRoute; label: string; detail: string }> = [

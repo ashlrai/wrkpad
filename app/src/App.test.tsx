@@ -127,6 +127,19 @@ describe('operator interface', () => {
         agents: Array.from({ length: 6 }, (_, index) => ({ slot: index + 1, provider: null, state: 'off', title: 'Available slot', updatedAt: null })),
         fleet: null, unassignedActiveSessions: 0, operatorNotices: [],
       }),
+      getNativeControlCheck: vi.fn().mockResolvedValue({
+        schema: 'ai.ashlr.agent-board.native-control-check/v1',
+        overall: 'reported_failure',
+        reportedAt: '2026-09-02T20:04:00.000Z',
+        context: { route: 'codex_native', device: { vidPid: '303A:8298' }, codex: { version: '1.2026.238', build: '1822' } },
+        settings: 'connected_granted',
+        outcomes: {
+          dial: 'no_response', joystick: 'no_response',
+          agentKeys: { AG00: 'no_response', AG01: 'skipped', AG02: 'skipped', AG03: 'skipped', AG04: 'skipped', AG05: 'skipped' },
+          actionKeys: { ACT06: 'skipped', ACT07: 'skipped', ACT08: 'skipped', ACT09: 'skipped', ACT10: 'skipped', ACT11: 'skipped', ACT12: 'skipped' },
+          lighting: 'skipped',
+        },
+      }),
       setBoardRoute: vi.fn(), focusAgentSlot: vi.fn(), setProfile: vi.fn(), setFlightCheck,
       requestAction, confirmAction: vi.fn(), beginHold: vi.fn(), cancelHold: vi.fn(),
       chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(), onControl: vi.fn(() => () => {}),
@@ -141,6 +154,13 @@ describe('operator interface', () => {
     expect(nativeRibbon?.textContent).not.toContain('Input Monitoring')
     expect(nativeRibbon?.textContent).not.toContain('shortcut receiver')
     expect(nativeRibbon?.textContent).not.toContain('desktop endpoints')
+    const nativeTruth = await screen.findByRole('alert', { name: 'Connected is not the same as input-ready.' })
+    expect(nativeTruth.textContent).toContain('01 · TransportUSB identity observedDetection only; no key event has been proven.')
+    expect(nativeTruth.textContent).toContain('02 · Native event readinessInitialization unverified')
+    expect(nativeTruth.textContent).toContain('Codex control-consumption receipt')
+    expect(nativeTruth.textContent).toContain('03 · Active layerPossible native-layer mismatch')
+    expect(nativeTruth.textContent).toContain('device state is unproven')
+    expect(nativeTruth.textContent).toContain('04 · Physical acceptanceNo response reported · recovery needed')
     expect(screen.getByRole('button', { name: 'Disabled in Codex Native' }).hasAttribute('disabled')).toBe(true)
     expect(screen.getByText('JOYSTICK OWNED BY CODEX · SCREEN TWIN DISABLED')).toBeTruthy()
     const disabledTwin = screen.getByLabelText(/Creator Micro 2 screen twin.*disabled while Codex Native owns the controls/i)
