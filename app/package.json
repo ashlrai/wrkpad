@@ -35,6 +35,8 @@
     "doctor": "node scripts/doctor.mjs",
     "agent:preflight": "node ../tools/agent-preflight.mjs inspect --json",
     "profile:generate": "node scripts/generate-input-profile.mjs",
+    "profile:generate-native": "node scripts/generate-codex-native-recovery-layer.mjs",
+    "profile:check-native": "node scripts/generate-codex-native-recovery-layer.mjs --verify",
     "build": "tsc -b && vite build",
     "capture:public-demo": "npm run build && electron scripts/capture-public-demo.cjs",
     "lint": "oxlint src electron scripts vite.config.ts vitest.config.ts",

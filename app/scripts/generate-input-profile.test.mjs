@@ -2,8 +2,14 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 import { generateInputProfile, writeGeneratedProfile } from './generate-input-profile.mjs'
+import {
+  generateCodexNativeRecoveryLayer,
+  inspectCodexNativeRecovery,
+  writeGeneratedCodexNativeRecoveryLayer,
+} from './generate-codex-native-recovery-layer.mjs'
 
 const source = () => ({
   keyboard: 'creator_micro_v2',
@@ -77,6 +83,81 @@ test('bounds the selected source export before parsing or writing', () => {
     writeFileSync(sourcePath, 'x'.repeat(512 * 1024 + 1))
     assert.throws(() => writeGeneratedProfile(sourcePath, outputPath), /no larger than 512 KiB/)
     assert.throws(() => readFileSync(outputPath), /ENOENT/)
+  } finally {
+    rmSync(directory, { recursive: true })
+  }
+})
+
+test('generates the exact unofficial macOS Codex Native layer envelope', () => {
+  const artifact = generateCodexNativeRecoveryLayer()
+  assert.deepEqual(Object.keys(artifact), [
+    'keyboard', 'language', 'layer', 'actions', 'multiactions', 'actionGroups', 'multiactionGroups',
+  ])
+  assert.equal(artifact.keyboard, 'creator_micro_v2')
+  assert.equal(artifact.language, 'us')
+  assert.equal(artifact.layer.os, 0)
+  assert.match(artifact.layer.name, /UNOFFICIAL/)
+  assert.deepEqual(
+    artifact.layer.layout.base.map((row) => row.map((cell) => cell.keycode)),
+    [
+      ['KV_OAI_AG00', 'KV_OAI_AG01'],
+      ['KV_OAI_AG02', 'KV_OAI_AG03', 'KV_OAI_AG04', 'KV_OAI_AG05'],
+      ['KV_OAI_ACT06', 'KV_OAI_ACT07', 'KV_OAI_ACT08', 'KV_OAI_ACT09'],
+      ['KV_OAI_ACT10', 'KV_OAI_ACT11', 'KV_OAI_ACT12'],
+    ],
+  )
+  assert.deepEqual(
+    artifact.layer.layout.encoders[0].map((cell) => cell.keycode),
+    ['KV_OAI_ENC_CC', 'KV_OAI_ENC_CW', 'KV_OAI_ENC_CLK'],
+  )
+  assert.deepEqual(artifact.layer.layout.joystick, { type: 'VENDOR', sectors: [] })
+  const switchKeycodes = artifact.layer.layout.base.flat().map((cell) => cell.keycode)
+  assert.equal(switchKeycodes.length, 13)
+  assert.equal(new Set(switchKeycodes).size, 13)
+  const canonicalLayoutPath = fileURLToPath(new URL('../../layouts/creator-micro-2.json', import.meta.url))
+  const canonicalLayout = JSON.parse(readFileSync(canonicalLayoutPath, 'utf8'))
+  assert.deepEqual(switchKeycodes, canonicalLayout.controls
+    .filter((control) => control.kind === 'switch')
+    .map((control) => control.private_keycode))
+  assert.deepEqual(inspectCodexNativeRecovery(artifact), {
+    status: 'match', reason: 'exact_native_layout', matchingLayers: 1,
+  })
+})
+
+test('checked-in native recovery layer is generator-identical and rejects stripped exports', () => {
+  const artifactPath = fileURLToPath(new URL('../profiles/UNOFFICIAL-creator-micro-2-codex-native-recovery-layer.json', import.meta.url))
+  const checkedIn = JSON.parse(readFileSync(artifactPath, 'utf8'))
+  assert.deepEqual(checkedIn, generateCodexNativeRecoveryLayer())
+
+  const stripped = structuredClone(checkedIn)
+  stripped.layer.layout.base[0][0].keycode = 'KC_A'
+  assert.deepEqual(inspectCodexNativeRecovery(stripped), {
+    status: 'mismatch', reason: 'native_layout_missing_or_changed', matchingLayers: 0,
+  })
+  assert.equal(inspectCodexNativeRecovery({ ...checkedIn, keyboard: 'other' }).reason, 'expected_us_creator_micro_v2')
+
+  const postImportExport = {
+    keyboard: 'creator_micro_v2',
+    language: 'us',
+    profile: { id: 3, name: 'Recovery candidate', layers: [checkedIn.layer] },
+  }
+  assert.equal(inspectCodexNativeRecovery(postImportExport).status, 'match')
+  postImportExport.profile.layers.push(structuredClone(checkedIn.layer))
+  assert.deepEqual(inspectCodexNativeRecovery(postImportExport), {
+    status: 'mismatch', reason: 'native_layout_ambiguous', matchingLayers: 2,
+  })
+})
+
+test('writes an offline native layer as a private new file only', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'codex-native-layer-'))
+  const outputPath = join(directory, 'native-layer.json')
+  try {
+    const result = writeGeneratedCodexNativeRecoveryLayer(outputPath)
+    assert.equal(result.schema, 'work_louder_input_layer_import_unofficial')
+    assert.equal(result.mutatesInputOrDevice, false)
+    assert.equal(statSync(outputPath).mode & 0o777, 0o600)
+    assert.deepEqual(JSON.parse(readFileSync(outputPath, 'utf8')), generateCodexNativeRecoveryLayer())
+    assert.throws(() => writeGeneratedCodexNativeRecoveryLayer(outputPath), /EEXIST/)
   } finally {
     rmSync(directory, { recursive: true })
   }

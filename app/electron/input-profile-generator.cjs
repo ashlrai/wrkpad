@@ -14,6 +14,88 @@ const DEFAULT_LIGHTS = Object.freeze({
   underglow: { effect: 'rainbow', brightness: 1, speed: 0.55, magic: 1, color: '#FFFFFF' },
 })
 
+const CODEX_NATIVE_RECOVERY_LAYER_NAME = 'Codex Native Recovery (UNOFFICIAL)'
+const CODEX_NATIVE_KEYMAP = Object.freeze([
+  Object.freeze(['KV_OAI_AG00', 'KV_OAI_AG01']),
+  Object.freeze(['KV_OAI_AG02', 'KV_OAI_AG03', 'KV_OAI_AG04', 'KV_OAI_AG05']),
+  Object.freeze(['KV_OAI_ACT06', 'KV_OAI_ACT07', 'KV_OAI_ACT08', 'KV_OAI_ACT09']),
+  Object.freeze(['KV_OAI_ACT10', 'KV_OAI_ACT11', 'KV_OAI_ACT12']),
+])
+const CODEX_NATIVE_ENCODER = Object.freeze(['KV_OAI_ENC_CC', 'KV_OAI_ENC_CW', 'KV_OAI_ENC_CLK'])
+
+function keycodeCell(keycode) {
+  return { keycode }
+}
+
+/**
+ * Build Work Louder Input's layer-import envelope, not the on-device
+ * keymap.json format. This is an unofficial interoperability artifact derived
+ * from independently published, hardware-observed profiles; generating it is
+ * offline and confers no authority to import or activate it.
+ */
+function generateCodexNativeRecoveryLayer() {
+  return {
+    keyboard: 'creator_micro_v2',
+    language: 'us',
+    layer: {
+      id: 0,
+      name: CODEX_NATIVE_RECOVERY_LAYER_NAME,
+      color: '#FF0000',
+      layout: {
+        base: CODEX_NATIVE_KEYMAP.map((row) => row.map(keycodeCell)),
+        encoders: [[...CODEX_NATIVE_ENCODER].map(keycodeCell)],
+        joystick: { type: 'VENDOR', sectors: [] },
+      },
+      os: 0,
+      lights: structuredClone(DEFAULT_LIGHTS),
+    },
+    actions: [],
+    multiactions: [],
+    actionGroups: [{ id: 0, name: CODEX_NATIVE_RECOVERY_LAYER_NAME, actionIds: [] }],
+    multiactionGroups: [{ id: 0, name: CODEX_NATIVE_RECOVERY_LAYER_NAME, actionIds: [] }],
+  }
+}
+
+function layerHasExactCodexNativeLayout(layer) {
+  if (!layer || layer.os !== 0 || layer.layout?.joystick?.type !== 'VENDOR') return false
+  if (!Array.isArray(layer.layout.joystick.sectors) || layer.layout.joystick.sectors.length !== 0) return false
+  const rows = layer.layout.base
+  const encoder = layer.layout.encoders?.[0]
+  if (!Array.isArray(rows) || rows.length !== CODEX_NATIVE_KEYMAP.length || !Array.isArray(encoder)) return false
+  const rowKeycodes = rows.map((row) => Array.isArray(row) ? row.map((cell) => cell?.keycode) : null)
+  const encoderKeycodes = encoder.map((cell) => cell?.keycode)
+  return JSON.stringify(rowKeycodes) === JSON.stringify(CODEX_NATIVE_KEYMAP)
+    && JSON.stringify(encoderKeycodes) === JSON.stringify(CODEX_NATIVE_ENCODER)
+}
+
+function inspectCodexNativeRecovery(value) {
+  if (!value || value.keyboard !== 'creator_micro_v2' || value.language !== 'us') {
+    return { status: 'mismatch', reason: 'expected_us_creator_micro_v2', matchingLayers: 0 }
+  }
+  const layers = value.layer ? [value.layer] : value.profile?.layers
+  if (!Array.isArray(layers) || layers.length < 1 || layers.length > 6) {
+    return { status: 'mismatch', reason: 'missing_bounded_layers', matchingLayers: 0 }
+  }
+  const matchingLayers = layers.filter(layerHasExactCodexNativeLayout)
+  return matchingLayers.length === 1
+    ? { status: 'match', reason: 'exact_native_layout', matchingLayers: 1 }
+    : { status: 'mismatch', reason: matchingLayers.length === 0 ? 'native_layout_missing_or_changed' : 'native_layout_ambiguous', matchingLayers: matchingLayers.length }
+}
+
+function writeGeneratedCodexNativeRecoveryLayer(outputPath) {
+  const output = `${JSON.stringify(generateCodexNativeRecoveryLayer(), null, 2)}\n`
+  writeFileSync(outputPath, output, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+  return {
+    outputPath,
+    schema: 'work_louder_input_layer_import_unofficial',
+    sha256: createHash('sha256').update(output).digest('hex'),
+    physicalSwitches: 13,
+    agentKeys: 6,
+    actionKeys: 7,
+    mutatesInputOrDevice: false,
+  }
+}
+
 function safeLights(value) {
   if (value === undefined) return structuredClone(DEFAULT_LIGHTS)
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Profile export has unsupported lighting data')
@@ -140,10 +222,17 @@ function writeGeneratedProfile(sourcePath, outputPath, variant = 'daily') {
 }
 
 module.exports = {
+  CODEX_NATIVE_ENCODER,
+  CODEX_NATIVE_KEYMAP,
+  CODEX_NATIVE_RECOVERY_LAYER_NAME,
   DEFAULT_LIGHTS,
   MAX_SOURCE_BYTES,
+  generateCodexNativeRecoveryLayer,
   generateInputProfile,
+  inspectCodexNativeRecovery,
+  layerHasExactCodexNativeLayout,
   readSourceProfile,
   safeLights,
+  writeGeneratedCodexNativeRecoveryLayer,
   writeGeneratedProfile,
 }

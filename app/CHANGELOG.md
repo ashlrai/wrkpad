@@ -17,6 +17,9 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 
 ### Added
 
+- A fixed, clearly unofficial Creator Micro 2 Codex Native recovery layer,
+  deterministic offline generator, post-import validator, and rollback-first
+  manual runbook. No step imports, activates, resets, or writes the device.
 - Route-specific Setup flight plans that keep Codex Native prerequisites and
   evidence separate from Work Louder Input, Input Monitoring, and the Ashlr
   shortcut receiver path.

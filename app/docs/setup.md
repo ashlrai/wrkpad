@@ -44,6 +44,11 @@ Expected USB result: `Creator Micro 2 USB: Work Louder 303A:8298` on the desk-ve
 
 The doctor is read-only and cannot grant permissions or change board configuration. `npm run doctor -- --json` includes `manualChecks`, route-specific `modeGuidance`, and a prioritized `nextAction`. It inspects only a bounded tail of recent Codex Desktop logs and projects a reason code; raw log lines and paths never reach the renderer. Passing required checks does not prove native Codex connection, Input Monitoring, the active Input layer, or the physical Flight Check. If USB is absent, use [troubleshooting](troubleshooting.md#usb-device-is-not-detected).
 
+If ChatGPT later shows **Connected** and **Granted** while every native control
+remains silent, do not reset or reflash from that symptom. Use the separate,
+manual [unofficial Codex Native layer recovery](codex-native-layer-recovery.md)
+only after exporting rollback profiles and verifying the Input installation.
+
 ## 2. Declare the board route
 
 Agent Board stores one local expectation:

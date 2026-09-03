@@ -129,6 +129,7 @@ one runner, so screenshot refreshes remain under human visual review.
 - [Architecture and trust boundaries](docs/architecture.md)
 - [Provider compatibility contracts](docs/provider-contracts.md)
 - [Troubleshooting](docs/troubleshooting.md)
+- [Unofficial Codex Native layer recovery](docs/codex-native-layer-recovery.md)
 - [Release and readiness](docs/release-readiness.md)
 - [Roadmap](docs/roadmap.md)
 - [Contributing](CONTRIBUTING.md)

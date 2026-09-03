@@ -59,7 +59,7 @@ proof of source identity, review, provenance, signing, or release.
 | Operation | Agent may run | Human required | Canonical procedure |
 | --- | --- | --- | --- |
 | Git/source inspection, doctors, status, tests, lint, build | Yes | No | `AGENTS.md` and preflight |
-| Generate a new offline profile artifact | Yes, in requested scope | Human reviews/imports/activates | [Agent Board setup](../app/docs/setup.md) |
+| Generate a new offline profile or fixed unofficial native-layer artifact | Yes, in requested scope | Human reviews/imports/activates | [Agent Board setup](../app/docs/setup.md), [native-layer recovery](../app/docs/codex-native-layer-recovery.md) |
 | Hook or LaunchAgent status and plan | Yes | Human authorizes exact apply plan | [Hook setup](hook-setup.md), [macOS service](macos-service.md) |
 | Codex hook trust and disposable provider receipt | No | Yes | [Hook runtime verification](hook-setup.md#runtime-verification) |
 | Input Monitoring or Input profile activation | No | Yes | [Agent Board setup](../app/docs/setup.md) |
@@ -154,6 +154,15 @@ bootloader, or flashing. The human handoff must name:
 - recovery or rollback evidence, including an explicit warning when absent;
 - `rgbcfg` then `thstatus` acceptance;
 - profile reconciliation, all physical controls, reconnect, and sleep/wake.
+
+When the firmware RPCs succeed but every native control is silent, a missing
+`KV_OAI_*` layer is a separate configuration hypothesis. On explicit request,
+an agent may generate and validate the repository's fixed
+[unofficial layer artifact](../app/docs/codex-native-layer-recovery.md) offline.
+The agent must not import or activate it, edit Input's cache, write the device
+filesystem or HID channel, reset settings, or delete/transform a protected
+layer. A human-owned Input import and fresh physical Codex observations remain
+the acceptance gates.
 
 ## Agent handoff format
 

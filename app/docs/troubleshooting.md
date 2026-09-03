@@ -190,6 +190,17 @@ read-only operating-system and log observation.
 Detected-only or Connection failed does not count. Codex and Input can hold nonexclusive HID handles, but
 they do not share a cross-process RPC or lighting lease.
 
+If both labels pass but **every** key, dial, and joystick action is silent,
+inspect an exported profile for the native bindings before reconnecting or
+flashing again. A Creator Micro 2 can remain visible to ChatGPT while its
+active layer contains ordinary `KC_*` or Ashlr `KA_*` actions instead of the
+firmware-owned `KV_OAI_*` notifications. Follow the bounded
+[unofficial Codex Native layer recovery](codex-native-layer-recovery.md). It
+requires a verified Input installation, complete profile backups, manual
+**Import layer**, offline post-import validation, and fresh physical
+acceptance. It never authorizes Reset Settings, a cache edit, or a raw device
+write.
+
 After a firmware update, fully quit and reopen ChatGPT Desktop before drawing a
 new conclusion. An app process that started before the update may have only the
 historical failed attempt in its current log session. In Agent Board, select

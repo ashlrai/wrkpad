@@ -18,8 +18,11 @@ agents. Keep it concise and keep provider-specific files pointed here.
 6. For hardware/setup work, inspect `requested_route` and `declared_route`. On
    `ashlr_layer`, also inspect `input_profile` and `input_runtime`. Never infer
    the current profile from Input's editor/header, board synchronization from
-   cache state, or physical acceptance from either. Protected `KV_OAI_*`
-   recovery is a human Input-only operation, never an agent rewrite or deletion.
+   cache state, or physical acceptance from either. On explicit request, an
+   agent may generate a new, fixed, reviewed, clearly unofficial `KV_OAI_*`
+   layer-import artifact offline. Import, activation, cache/device/HID writes,
+   reset, deletion, and transformation of a live protected layer remain human
+   Input-only operations.
 
 ## Repository map
 
