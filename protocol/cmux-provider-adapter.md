@@ -1,8 +1,9 @@
 # cmux provider adapter contract
 
-Status: proposed, not implemented. This contract narrows a future exact-focus
-adapter; it does not claim that Agent Board can currently select a cmux workspace,
-pane, or surface.
+Status: the fixed-path, capability-negotiated adapter substrate is implemented
+and source-tested. Locator capture and socket-password enrollment are not
+implemented, so installed Agent Board builds do not currently claim exact cmux
+workspace, pane, or surface focus.
 
 ## Evidence baseline
 
@@ -70,19 +71,28 @@ fresh sequence, not a cached “cmux connected” flag:
 2. Run socket-free `--help` probes to confirm the required command surface for
    that version.
 3. With the optional human-provisioned credential, run `--json capabilities` and
-   require a valid JSON response advertising the needed identity and focus
-   operations.
-4. Run `--json --id-format uuids identify --workspace <workspace>
-   --surface <surface>` and require the returned server identity and both locators
-   to match the stored association.
-5. Only within that same bounded operation, run `select-workspace --workspace
-   <workspace>` followed by `focus-panel --workspace <workspace> --panel
-   <surface>`.
+   require a valid `cmux-socket` JSON response advertising the needed identity
+   and focus operations plus one bounded absolute socket path.
+4. Pin that admitted socket path for the remainder of the attempt. Run `--socket
+   <admitted-path> --json --id-format uuids identify --workspace <workspace>
+   --surface <surface>` and require the echoed socket path and both locators to
+   match the stored association.
+5. Only within that same bounded operation, and still pinned to the admitted
+   socket path, run `select-workspace --workspace <workspace>` followed by
+   `focus-panel --workspace <workspace> --panel <surface>`.
 
-A locator is fresh only when it is the latest association for that live Claude
-session and step 4 succeeds immediately before focus. A CLI success proves only
+A locator is fresh only when its token-keyed HMAC equals the independently
+expected binding for the selected live Claude session, it is the latest
+association for that session, its capture time is no more than five minutes old,
+and step 4 succeeds immediately before focus. A CLI success proves only
 that cmux accepted the request. It does not prove that a human saw the expected
 pane or that Claude Code accepted any input.
+
+The current production call supplies no locator. It therefore takes the
+`locator_unavailable` fallback without making a socket request and foregrounds
+cmux through the fixed application target. The complete negotiation and focus
+sequence is covered with synthetic injected runner results; that source test is
+not live cmux acceptance and does not bypass the observed external-process denial.
 
 Any missing locator, unsupported version, absent capability, authentication
 denial, timeout, malformed or oversized JSON, server-identity change, locator

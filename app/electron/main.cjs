@@ -14,6 +14,7 @@ const { createInputInstallationInspector } = require('./input-installation-async
 const { inspectInputProfile } = require('./input-profile-diagnostics.cjs')
 const { inspectInputRuntime } = require('./input-runtime-diagnostics.cjs')
 const { createCachedAsarHasher, inspectPackagedReceiverPeers, inspectReceiverRuntime, shouldRegisterShortcuts } = require('./receiver-runtime-diagnostics.cjs')
+const { createCmuxFocusAdapter } = require('./cmux-focus-adapter.cjs')
 const { writeGeneratedProfile } = require('./input-profile-generator.cjs')
 const { buildRecoveryChecklist, observeRecoveryArtifact, readRecoveryReceipt, recoveryChecklistText, recoveryReceiptPath, removeRecoveryReceipt, writeRecoveryReceipt } = require('./recovery-receipt.cjs')
 const { acceptNativeAcceptance, evaluateNativeAcceptance, prepareNativeAcceptance, readNativeAcceptanceReceipt, removeNativeAcceptanceReceipt, stageNativeAcceptance, writeNativeAcceptanceReceipt } = require('./native-acceptance-receipt.cjs')
@@ -47,6 +48,7 @@ const flightOperations = createFlightOperationCoordinator(flightSession)
 const cachedReceiverAsarHash = createCachedAsarHasher({ ttlMs: 30_000, maxEntries: 32 })
 const inspectInputInstallationAsync = createInputInstallationInspector()
 const shortcutCallbackGuard = createShortcutCallbackGuard()
+const cmuxFocusAdapter = createCmuxFocusAdapter({ foreground: () => openFixedApp('cmux') })
 
 function settingsPath() { return appSettingsPath(app.getPath('appData')) }
 function compactSettingsPath() { return path.join(path.dirname(settingsPath()), 'compact-deck.json') }
@@ -431,13 +433,22 @@ async function focusAgentFromSnapshot(slot, snapshot) {
   if (!Number.isInteger(slot) || slot < 1 || slot > 6) return { ok:false,title:'Slot unavailable',message:'Choose one of the six agent slots.',timestamp:new Date().toISOString() }
   const agent = snapshot.agents.find((candidate) => candidate.slot === slot)
   if (!agent?.provider || agent.state === 'off') return { ok:false,title:`Agent ${slot} is empty`,message:'This slot has no live provider receipt yet. Start or resume a session, then try again.',timestamp:new Date().toISOString() }
+  if (agent.provider === 'claude') {
+    // HASP v1 intentionally exposes no raw session or cmux locator. The adapter
+    // therefore preserves app foregrounding until a privacy-safe locator source
+    // and separately human-enabled socket capability are available.
+    const focused = await cmuxFocusAdapter.focus(null)
+    if (!focused.opened) return { ok:false,title:'Could not open cmux',message:'The provider app was not available. No fallback terminal or command was launched.',timestamp:new Date().toISOString() }
+    const message = focused.exact
+      ? 'cmux accepted the validated workspace and surface focus request. Visible pane selection remains an operator check, and no terminal input was sent.'
+      : 'cmux is foregrounded. Agent Board cannot select or verify an exact pane without a fresh privacy-safe locator and human-enabled socket capability, so no terminal input was sent.'
+    return { ok:true,title:'Opened cmux',message,timestamp:new Date().toISOString() }
+  }
   const appName = appForProvider(agent.provider)
   if (!appName) return { ok:false,title:'Focus unavailable',message:'This session does not advertise a safe local focus target.',timestamp:new Date().toISOString() }
   const opened = await openFixedApp(appName)
   if (!opened) return { ok:false,title:`Could not open ${appName}`,message:'The provider app was not available. No fallback terminal or command was launched.',timestamp:new Date().toISOString() }
-  const message = agent.provider === 'claude'
-    ? 'cmux is foregrounded. Agent Board cannot select or verify an exact pane, so no terminal input was sent.'
-    : 'Codex Desktop is foregrounded. Agent Board cannot select or verify an exact task, so no prompt or approval was submitted.'
+  const message = 'Codex Desktop is foregrounded. Agent Board cannot select or verify an exact task, so no prompt or approval was submitted.'
   return { ok:true,title:`Opened ${appName}`,message,timestamp:new Date().toISOString() }
 }
 

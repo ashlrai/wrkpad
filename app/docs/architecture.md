@@ -110,6 +110,16 @@ connection does not prove provider hook trust or receipt delivery.
 
 `wrkpad` converts supported Claude Code hook events into the same state grammar. Selecting a Claude slot runs `open -a cmux`. The app does not correlate a slot with an exact cmux pane and sends no terminal input. Claude Desktop can be opened separately.
 
+The main process also contains a source-tested, fixed-bundle-path cmux focus
+adapter. It accepts only a versioned privacy-safe locator, validates a fresh
+cross-session HMAC match and `identify` echo, pins the bounded socket identity
+admitted by `capabilities`, negotiates `system.identify`, `workspace.select`,
+and `surface.focus`, and allowlists only workspace/surface focus commands. Current
+HASP snapshots expose no locator and Agent Board has no socket-password
+enrollment, so production calls take the ordinary `open -a cmux` fallback
+without attempting socket access. The adapter contains no terminal read, write,
+send-key, paste, screen-capture, or prompt-submission command.
+
 ### Ashlr Hub
 
 Agent Board reduces the local Fleet receipt to daemon state, queue counts, proposal count, active goals, operating mode, blocker, next action, and guard state.

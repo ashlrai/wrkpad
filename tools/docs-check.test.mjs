@@ -160,7 +160,7 @@ test('cmux adapter contract permits focus without terminal read or write authori
   const root = join(import.meta.dirname, '..')
   const contract = readFileSync(join(root, 'protocol', 'cmux-provider-adapter.md'), 'utf8')
 
-  assert.match(contract, /Status: proposed, not implemented/)
+  assert.match(contract, /adapter substrate is implemented[\s\S]*Locator capture and socket-password enrollment are not/)
   assert.match(contract, /CMUX_WORKSPACE_ID[\s\S]*CMUX_SURFACE_ID/)
   assert.match(contract, /token-keyed HMAC binding/)
   assert.match(contract, /Access denied.*only processes started inside cmux can connect/)

@@ -99,10 +99,11 @@ screen but cannot promise the same mixed-provider physical key semantics. Daily
 cross-provider control requires the Ashlr Layer route; native firmware
 qualification remains a separate passive route and evidence chain.
 
-The proposed [cmux provider adapter](../protocol/cmux-provider-adapter.md)
-specifies how a future Claude Code hook may bind a session to its cmux workspace
-and surface without adding terminal read/write authority. Until that contract is
-implemented and accepted, Claude slot focus remains application foregrounding.
+The [cmux provider adapter](../protocol/cmux-provider-adapter.md) implements a
+fixed-path, capability-negotiated exact-focus substrate without terminal
+read/write authority. Locator capture and socket-password enrollment remain
+absent, so current Claude slot focus deliberately takes the cmux application
+foreground fallback.
 
 ## Extension policy
 
