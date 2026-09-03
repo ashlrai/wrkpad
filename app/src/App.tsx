@@ -276,8 +276,13 @@ function App() {
     const signalTime = Date.now()
     if (signalTime - (lastSignal.current[control] ?? 0) < 140) return
     lastSignal.current[control] = signalTime
-    if (status.boardRoute === 'codex_native') {
-      internalResult('Codex Native observer only', 'Agent Board does not execute its Ashlr shortcut map while Codex owns the board keys and lighting.')
+    if (status.boardRoute !== 'ashlr_layer') {
+      internalResult(
+        status.boardRoute === 'codex_native' ? 'Codex Native observer only' : 'Ashlr action route not selected',
+        status.boardRoute === 'codex_native'
+          ? 'Agent Board does not execute its Ashlr shortcut map while Codex owns the board keys and lighting.'
+          : 'Select Ashlr Layer before using mapped Agent Board actions. Software-only Agent-slot focus remains available.',
+      )
       return
     }
     if (isRunning) {
@@ -743,7 +748,7 @@ function App() {
             isRunning={isRunning} holdProgress={holdProgress} workspace={status.workspace}
             workspaceSnapshot={status.workspaceSnapshot}
             lastPhysicalSignal={lastPhysicalSignal}
-            observerOnly={nativeRoute}
+            boardRoute={status.boardRoute}
             onRun={() => executeControl(activeControl)} onConfirm={(token) => executeAction(activeAction, token)}
             onBeginHold={beginHold} onCancelHold={cancelHold} onCancelApproval={() => setApproval(null)} onChooseWorkspace={chooseWorkspace}
           />
@@ -854,15 +859,17 @@ function TouchSensor({ showIds }: { showIds: boolean }) {
   </div>
 }
 
-function ActionConsole({ activeControl, action, result, approval, isRunning, holdProgress, workspace, workspaceSnapshot, lastPhysicalSignal, observerOnly, onRun, onConfirm, onBeginHold, onCancelHold, onCancelApproval, onChooseWorkspace }: {
+function ActionConsole({ activeControl, action, result, approval, isRunning, holdProgress, workspace, workspaceSnapshot, lastPhysicalSignal, boardRoute, onRun, onConfirm, onBeginHold, onCancelHold, onCancelApproval, onChooseWorkspace }: {
   activeControl: ControlId; action: ActionDefinition; result: ExecutionResult | null
   approval: { action: ActionDefinition; token: string } | null; isRunning: boolean; holdProgress: number; workspace: string
   workspaceSnapshot: WorkspaceSnapshot | null
   lastPhysicalSignal: Date | null
-  observerOnly: boolean
+  boardRoute: BoardRoute
   onRun: () => void; onConfirm: (token: string) => void; onBeginHold: () => void; onCancelHold: () => void; onCancelApproval: () => void; onChooseWorkspace: () => void
 }) {
   const snapshot = workspaceSnapshot
+  const mappedActionsDisabled = boardRoute !== 'ashlr_layer'
+  const mappedActionsLabel = boardRoute === 'codex_native' ? 'Disabled in Codex Native' : 'Select Ashlr Layer for mapped actions'
   return <aside className="action-console">
     <div className="console-head">
       <div><span className="eyebrow">SELECTED PHYSICAL SIGNAL</span><span className="binding">{hardwareIds[activeControl]} <i /> {controls.hotkeys[activeControl]}</span><span className="last-signal">Last hardware receipt: {lastPhysicalSignal ? formatClock(lastPhysicalSignal) : 'never'}</span></div>
@@ -906,9 +913,9 @@ function ActionConsole({ activeControl, action, result, approval, isRunning, hol
           >Hold 1.6 seconds</button>
         : <button type="button" className="confirm-button" onClick={() => onConfirm(approval.token)}>Confirm</button>}
       <button type="button" className="cancel-button" onClick={onCancelApproval}><X size={14} /> Cancel</button>
-    </div> : <button type="button" className="run-button" onClick={onRun} disabled={observerOnly || isRunning || action.nativeOwned}>
-      {isRunning ? <Activity className="spin" size={18} /> : observerOnly || action.nativeOwned ? <Keyboard size={18} /> : <TerminalSquare size={18} />}
-      {observerOnly ? 'Disabled in Codex Native' : action.nativeOwned ? (action.id === 'mic_setup' ? 'Configure in Work Louder Input' : 'Owned by Codex') : isRunning ? 'Running…' : action.cta}
+    </div> : <button type="button" className="run-button" onClick={onRun} disabled={mappedActionsDisabled || isRunning || action.nativeOwned}>
+      {isRunning ? <Activity className="spin" size={18} /> : mappedActionsDisabled || action.nativeOwned ? <Keyboard size={18} /> : <TerminalSquare size={18} />}
+      {mappedActionsDisabled ? mappedActionsLabel : action.nativeOwned ? (action.id === 'mic_setup' ? 'Configure in Work Louder Input' : 'Owned by Codex') : isRunning ? 'Running…' : action.cta}
     </button>}
 
     <div className={result ? (result.ok ? 'result-panel success' : 'result-panel error') : 'result-panel empty'} aria-live="polite">

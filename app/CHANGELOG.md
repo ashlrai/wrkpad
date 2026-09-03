@@ -6,6 +6,8 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 
 ### Fixed
 
+- Keep both Codex Native and an unselected board route fail-closed for mapped
+  actions while preserving software-only Agent-slot focus.
 - Read Codex Desktop's current and previous UTC log folders so native evidence
   is not lost during the local/UTC date rollover.
 - Keep ChatGPT metadata inspection off Electron's main thread and bound both
@@ -25,6 +27,8 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
   titles, session IDs, raw logs, diagnostic details, or local paths.
 - A fixed-path, mutation-aware ChatGPT Desktop metadata probe that exposes only
   sanitized version/build observation without claiming signing or process identity.
+- A package-smoke require-closure check for the main, preload, worker, and every
+  transitive local runtime module.
 
 - Route-aware doctor metadata for agents, including a stable schema, timestamp,
   declared route, read-only marker, and separate prerequisite, native, and
@@ -77,6 +81,9 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 
 ### Changed
 
+- After a successful native handoff preparation, Agent Board may remain open as
+  a passive watcher with no registered shortcuts; its bounded refresh updates
+  inferred initialization evidence only and never records operator observations.
 - Replace stale pre-flash setup, troubleshooting, ownership, and readiness
   claims with a canonical September 2 evidence record that keeps firmware RPC
   success separate from native Codex and physical acceptance.

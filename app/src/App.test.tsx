@@ -75,6 +75,7 @@ describe('operator interface', () => {
     const setBoardRoute = vi.fn().mockResolvedValue('codex_native')
     const requestAction = vi.fn()
     const setFlightCheck = vi.fn()
+    const focusAgentSlot = vi.fn().mockResolvedValue({ ok: true, title: 'Agent focused', message: 'Opened ChatGPT.', timestamp: new Date().toISOString() })
     window.agentBoard = {
       getStatus: vi.fn().mockResolvedValue({
         boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
@@ -84,16 +85,22 @@ describe('operator interface', () => {
       }),
       getMissionControl: vi.fn().mockResolvedValue({
         schemaVersion: 1, observedAt: new Date().toISOString(), agentSource: 'unavailable', fleetSource: 'unavailable',
-        agents: Array.from({ length: 6 }, (_, index) => ({ slot: index + 1, provider: null, state: 'off', title: 'Available slot', updatedAt: null })),
+        agents: Array.from({ length: 6 }, (_, index) => index === 0
+          ? { slot: 1, provider: 'codex' as const, state: 'idle' as const, title: 'Native review', updatedAt: new Date().toISOString() }
+          : { slot: index + 1, provider: null, state: 'off' as const, title: 'Available slot', updatedAt: null }),
         fleet: null, unassignedActiveSessions: 0, operatorNotices: [],
       }),
-      setBoardRoute, focusAgentSlot: vi.fn(), setProfile: vi.fn(), setFlightCheck,
+      setBoardRoute, focusAgentSlot, setProfile: vi.fn(), setFlightCheck,
       requestAction, confirmAction: vi.fn(), beginHold: vi.fn(), cancelHold: vi.fn(),
       chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(), onControl: vi.fn(() => () => {}),
     } as unknown as NonNullable<typeof window.agentBoard>
 
     render(<App />)
     expect(await screen.findByText('Native route not selected')).toBeTruthy()
+    const unknownRouteAction = screen.getByRole('button', { name: 'Select Ashlr Layer for mapped actions' })
+    expect(unknownRouteAction.hasAttribute('disabled')).toBe(true)
+    fireEvent.click(unknownRouteAction)
+    expect(requestAction).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('radio', { name: /Codex Native/i }))
     expect(setBoardRoute).toHaveBeenCalledWith('codex_native')
     expect(requestAction).not.toHaveBeenCalled()
@@ -101,6 +108,8 @@ describe('operator interface', () => {
     expect(await screen.findByText('Expected board route saved')).toBeTruthy()
     expect(screen.getByText(/changed Agent Board’s local preference and runtime global-shortcut ownership/i)).toBeTruthy()
     expect(screen.getByText('Native RPC unavailable')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Agent 1, AG00, Codex, Native review.*open its provider app/i }))
+    expect(focusAgentSlot).toHaveBeenCalledWith(1)
   })
 
   it('keeps Codex Native observer-only and out of the Ashlr Flight Check', async () => {
@@ -957,6 +966,7 @@ describe('operator interface', () => {
     } as unknown as NonNullable<typeof window.agentBoard>
 
     render(<App />)
+    await act(async () => { await Promise.resolve() })
     fireEvent.click(screen.getByRole('button', { name: /Recovery.*GUARDED STOPS/i }))
     fireEvent.click(screen.getByRole('button', { name: /ACT06: Pause autonomous fleet/i }))
     await act(async () => {
@@ -1006,7 +1016,7 @@ describe('operator interface', () => {
     window.agentBoard = {
       getStatus: vi.fn().mockResolvedValue({
         boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
-        codex: true, claude: true, ashlr: true, workspace: '/tmp', shortcutCount: 20,
+        codex: true, claude: true, ashlr: true, boardRoute: 'ashlr_layer', workspace: '/tmp', shortcutCount: 20,
         shortcutRegistrations: [], workspaceSnapshot: null,
       }),
       getMissionControl: vi.fn().mockResolvedValue({
@@ -1024,6 +1034,7 @@ describe('operator interface', () => {
     } as unknown as NonNullable<typeof window.agentBoard>
 
     render(<App />)
+    await act(async () => { await Promise.resolve() })
     fireEvent.click(screen.getByRole('button', { name: /Recovery.*GUARDED STOPS/i }))
     fireEvent.click(screen.getByRole('button', { name: /ACT06: Pause autonomous fleet/i }))
     await act(async () => {

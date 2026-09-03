@@ -35,7 +35,7 @@ Every slot combines provider, task title, icon, text state, and color. The exper
 - Maps 20 desktop shortcuts to the board's dial, joystick, Agent keys, and action switches only while the Ashlr Layer route is declared. Codex Native and unknown routes unregister every shortcut.
 - Provides Attention, Pair, Fleet, Proof, and Recovery software lenses while keeping Agent keys fixed.
 - Separates immediate, confirm, and press-and-hold actions in the Electron main process.
-- Runs an interlocked Flight Check for all physical routes and exports a hashed local receipt.
+- Runs an interlocked Ashlr Layer Flight Check and exports a hashed local receipt.
 - Presents separate Codex Native and Ashlr Layer setup flight plans, with a
   private restart-safe native handoff that rejects stale VID:PID/Desktop-metadata
   context and records only explicit operator observations. In Codex Native mode,
@@ -79,9 +79,11 @@ For **Ashlr Layer**, Work Louder Input must emit the exact shortcuts expected by
 the app and macOS Input Monitoring must be granted by the user. Input's header
 is the edit target, not proof of the current keyboard profile; use **Set as
 current profile**, then require the read-only receipt and physical Flight Check.
-For **Codex Native**, prepare the restart-safe handoff, restart ChatGPT Desktop
-alone, refresh the inferred initialization evidence, and record each physical
-observation manually. Neither path proves the other.
+For **Codex Native**, prepare the restart-safe handoff, keep Agent Board open in
+passive mode or quit it, leave Work Louder Input quit, restart ChatGPT Desktop,
+then use the bounded watcher or **Refresh now** to update inferred initialization
+evidence and record each physical observation manually. Neither path proves the
+other.
 
 To populate the six slots with live Codex and Claude Code state, also complete
 the guarded [`wrkpad` service and hook setup](../docs/hook-setup.md). A configured
