@@ -112,7 +112,7 @@ export default function NativeControlCheck({ receipt, busy, error, onSave }: { r
       <ControlOutcome id="dial" label="Left rotary dial" detail="Turn left, turn right, and press" value={outcomes.dial} onChange={(value) => updateControl('dial', value)} />
       <ControlOutcome id="joystick" label="Right planar toggle / joystick" detail="Move up, right, down, and left" value={outcomes.joystick} onChange={(value) => updateControl('joystick', value)} />
       {agentKeys.map((key, index) => <ControlOutcome key={key} id={key} label={`${key} · Agent ${index + 1}`} detail={index < 2 ? 'Upper center Agent position' : 'Second-row Agent position'} value={outcomes.agentKeys[key]} onChange={(value) => updateAgent(key, value)} />)}
-      {actionKeys.map((key, index) => <ControlOutcome key={key} id={key} label={`${key} · Action ${index + 1}`} detail={key === 'ACT10' ? 'Bottom Voice position' : key === 'ACT11' ? 'Bottom Send / Continue position' : key === 'ACT12' ? 'Transparent Attention position' : 'Third-row action position'} value={outcomes.actionKeys[key]} onChange={(value) => updateAction(key, value)} />)}
+      {actionKeys.map((key, index) => <ControlOutcome key={key} id={key} label={`${key} · Action ${index + 1}`} detail={key === 'ACT10' ? 'Bottom Voice position' : key === 'ACT11' ? 'Bottom Copy next / Continue position' : key === 'ACT12' ? 'Transparent Attention position' : 'Third-row action position'} value={outcomes.actionKeys[key]} onChange={(value) => updateAction(key, value)} />)}
       <ControlOutcome id="lighting" label="Lighting" detail="Inspect the physical board; the screen legend remains authoritative" value={outcomes.lighting} onChange={(value) => updateControl('lighting', value)} />
     </div>
 

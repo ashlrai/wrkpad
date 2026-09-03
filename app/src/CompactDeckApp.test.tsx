@@ -68,6 +68,7 @@ describe('Compact Deck', () => {
   it('mirrors the four-row physical geometry and hides private titles by default', async () => {
     render(<CompactDeckApp />)
     await screen.findByText('Session feed live; hardware control unproven.')
+    expect(screen.getByText('Virtual Deck — Creator Micro 2 layout')).toBeTruthy()
     expect(screen.getByRole('status').textContent).toContain('session feed live')
     const deck = screen.getByLabelText('Creator Micro 2 control layout')
     const rows = Array.from(deck.children)
@@ -80,6 +81,11 @@ describe('Compact Deck', () => {
     expect(within(rows[1] as HTMLElement).getAllByRole('button')).toHaveLength(4)
     expect(within(rows[2] as HTMLElement).getAllByRole('button').map((button) => button.textContent)).toEqual(expect.arrayContaining(['7Amplify', '8Verify', '9Polish', '0Advance']))
     expect(within(rows[3] as HTMLElement).getAllByRole('button')).toHaveLength(4)
+    expect(deck.querySelectorAll('[data-cap="black-opaque"]')).toHaveLength(12)
+    const attention = within(rows[3] as HTMLElement).getByRole('button', { name: /Attention:/ })
+    expect(attention.className).toContain('transparent-key')
+    expect(attention.getAttribute('data-cap')).toBe('transparent')
+    expect(within(rows[3] as HTMLElement).getByRole('button', { name: /Privacy, virtual deck screen-only control:/ })).toBeTruthy()
     expect(screen.queryByText('Control deck')).toBeNull()
   })
 
@@ -116,7 +122,7 @@ describe('Compact Deck', () => {
   it('makes title visibility explicit and persists it', async () => {
     render(<CompactDeckApp />)
     await screen.findByText('Session feed live; hardware control unproven.')
-    fireEvent.click(screen.getByRole('button', { name: 'Privacy: session titles are hidden' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Privacy, virtual deck screen-only control: session titles are hidden' }))
     await waitFor(() => expect(savePreferences).toHaveBeenCalledWith(expect.objectContaining({ showTitles: true })))
     expect(await screen.findByText('Control deck')).toBeTruthy()
   })

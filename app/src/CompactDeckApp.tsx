@@ -168,6 +168,7 @@ function AgentKey({ agent, selected, showTitle, onActivate }: {
   const ProviderIcon = agent.provider === 'claude' ? Bot : Command
   return <button
     type="button"
+    data-cap="black-opaque"
     className={`deck-key agent-key state-${agent.state} ${selected ? 'selected' : ''}`}
     aria-label={`Agent ${agent.slot}, ${provider}, ${stateLabels[agent.state]}${showTitle && agent.title ? `, ${agent.title}` : ''}`}
     aria-pressed={selected}
@@ -217,7 +218,7 @@ export default function CompactDeckApp() {
       return
     }
     setSelectedSlot(slot)
-    await run(() => bridge.focusAgentSlot(slot), `Opening agent ${slot}…`)
+    await run(() => bridge.focusAgentSlot(slot), 'Foregrounding provider app…')
   }, [bridge, run])
 
   const moveSelection = useCallback((direction: -1 | 1) => {
@@ -258,7 +259,7 @@ export default function CompactDeckApp() {
       setReceipt('Open Agent Board to find the highest-priority agent.')
       return
     }
-    await run(() => bridge.focusAttention(), 'Finding the highest-priority agent…')
+    await run(() => bridge.focusAttention(), 'Resolving attention, then foregrounding its provider app…')
   }, [bridge, run])
 
   const savePreferences = useCallback(async (change: Partial<Pick<CompactPreferences, 'alwaysOnTop' | 'openAtLaunch' | 'showTitles'>>) => {
@@ -331,7 +332,7 @@ export default function CompactDeckApp() {
 
   return <main className="compact-deck-shell" aria-busy={loading}>
     <header className="compact-titlebar">
-      <strong>Agent Board</strong>
+      <strong>Virtual Deck — Creator Micro 2 layout</strong>
       <span className={`route-label session-feed-label ${snapshot.agentSource}`} role="status">
         <i className={`bridge-light ${snapshot.agentSource}`} aria-hidden="true" />
         {snapshot.agentSource === 'observer_online' ? 'session feed live' : snapshot.agentSource === 'invalid' ? 'session feed invalid' : 'session feed unavailable'}
@@ -367,17 +368,17 @@ export default function CompactDeckApp() {
         {agents.slice(2).map((agent) => <AgentKey key={agent.slot} agent={agent} selected={selectedSlot === agent.slot} showTitle={preferences.showTitles} onActivate={(slot) => { void focusSlot(slot) }} />)}
       </div>
       <div className="deck-row deck-row-actions">
-        {skillActions.map(({ actionId, label, keyHint, Icon }) => <button type="button" className="deck-key skill-key" key={actionId} onClick={() => { void runSkill(actionId) }} aria-label={`${label}: copy provider-neutral delivery instruction`}>
+        {skillActions.map(({ actionId, label, keyHint, Icon }) => <button type="button" data-cap="black-opaque" className="deck-key skill-key" key={actionId} onClick={() => { void runSkill(actionId) }} aria-label={`${label}: copy provider-neutral delivery instruction`}>
           <small>{keyHint}</small><Icon size={14} aria-hidden="true" /><strong>{label}</strong>
         </button>)}
       </div>
       <div className="deck-row deck-row-workflow">
-        <button type="button" className="deck-key utility-key touch-key" aria-label={`Privacy: session titles are ${preferences.showTitles ? 'visible' : 'hidden'}`} onClick={() => { void savePreferences({ showTitles: !preferences.showTitles }) }}>
-          {preferences.showTitles ? <Eye size={14} /> : <EyeOff size={14} />}<strong>Privacy</strong><small>.</small>
+        <button type="button" className="deck-key utility-key touch-key" aria-label={`Privacy, virtual deck screen-only control: session titles are ${preferences.showTitles ? 'visible' : 'hidden'}`} onClick={() => { void savePreferences({ showTitles: !preferences.showTitles }) }}>
+          {preferences.showTitles ? <Eye size={14} /> : <EyeOff size={14} />}<strong>Privacy</strong><small>screen</small>
         </button>
-        <button type="button" className="deck-key utility-key" aria-label="Voice: prepare voice capture" onClick={() => { void runWorkflow('stage_voice') }}><AudioLines size={14} /><strong>Voice</strong></button>
-        <button type="button" className="deck-key utility-key continue-key" aria-label="Continue: copy a guarded continuation without submitting it" onClick={() => { void runWorkflow('copy_guarded_continue') }}><Send size={14} /><strong>Continue</strong></button>
-        <button type="button" className={`deck-key utility-key attention-key ${attentionUrgent ? 'urgent' : snapshot.attentionSlot === null ? 'quiet' : 'active'}`} aria-label={snapshot.attentionSlot === null ? 'Attention: no agent needs attention' : `Attention: open highest-priority agent ${snapshot.attentionSlot}`} onClick={() => { void focusAttention() }}>
+        <button type="button" data-cap="black-opaque" className="deck-key utility-key" aria-label="Voice: prepare voice capture" onClick={() => { void runWorkflow('stage_voice') }}><AudioLines size={14} /><strong>Voice</strong></button>
+        <button type="button" data-cap="black-opaque" className="deck-key utility-key continue-key" aria-label="Continue: copy a guarded continuation without submitting it" onClick={() => { void runWorkflow('copy_guarded_continue') }}><Send size={14} /><strong>Continue</strong></button>
+        <button type="button" data-cap="transparent" className={`deck-key utility-key attention-key transparent-key ${attentionUrgent ? 'urgent' : snapshot.attentionSlot === null ? 'quiet' : 'active'}`} aria-label={snapshot.attentionSlot === null ? 'Attention: no agent needs attention' : `Attention: open highest-priority agent ${snapshot.attentionSlot}`} onClick={() => { void focusAttention() }}>
           {attentionUrgent ? <CircleAlert size={15} /> : snapshot.attentionSlot === null ? <Check size={15} /> : <Play size={15} />}<strong>Attention</strong><small>↵</small>
         </button>
       </div>

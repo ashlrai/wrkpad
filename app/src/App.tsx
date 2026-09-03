@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
-  Activity, Bot, BrainCircuit, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp,
-  CircleCheck, CircleStop, CircleX, Command, Download, FolderOpen, Gauge, GitBranch, Keyboard,
-  Mic2, Play, RotateCcw, ShieldCheck, Sparkles, Split, TerminalSquare, Waypoints, X, Zap,
+  Activity, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp,
+  CircleAlert, CircleCheck, CircleStop, CircleX, Command, Download, FolderOpen, Gauge, GitBranch, Keyboard,
+  Mic2, Play, RotateCcw, Send, ShieldCheck, Sparkles, Split, TerminalSquare, Waypoints, X, Zap,
 } from 'lucide-react'
 import {
   actions, controls, correctedInputProfileObserved, correctedInputProfileObservedForVariant, effortLevels, hardware, profileOrder, profiles,
@@ -116,6 +116,7 @@ const hardwareIds: Partial<Record<ControlId, string>> = {
 
 const STATUS_REFRESH_TIMEOUT_MS = 13_000
 const NATIVE_ACCEPTANCE_POLL_MS = 5_000
+const viewOrder = ['operate', 'flight', 'setup'] as const
 
 const flightLiveGatesReady = (status: SystemStatus, variant: FlightVariant) =>
   status.boardRoute === 'ashlr_layer'
@@ -643,6 +644,18 @@ function App() {
           ? { label: nativeEvidenceFresh ? 'Native connection failed' : 'Native evidence expired', tone: 'warn' as const }
           : { label: 'Native unverified', tone: 'off' as const }
 
+  const moveViewFocus = (currentView: typeof viewOrder[number], key: string) => {
+    const currentIndex = viewOrder.indexOf(currentView)
+    const nextIndex = key === 'Home'
+      ? 0
+      : key === 'End'
+        ? viewOrder.length - 1
+        : (currentIndex + (key === 'ArrowLeft' ? -1 : 1) + viewOrder.length) % viewOrder.length
+    const nextView = viewOrder[nextIndex]
+    changeView(nextView)
+    document.getElementById(`view-tab-${nextView}`)?.focus()
+  }
+
   return (
     <main className="app-shell">
       <header className="topbar">
@@ -651,9 +664,21 @@ function App() {
           <div><span className="eyebrow">ASHLR // TACTILE AGENT OPERATIONS</span><h1>Agent Board</h1></div>
         </div>
         <div className="view-switch" role="tablist" aria-label="Agent Board view">
-          <button type="button" role="tab" aria-selected={view === 'operate'} className={view === 'operate' ? 'active' : ''} onClick={() => void changeView('operate')}>Operate</button>
-          <button type="button" role="tab" aria-selected={view === 'flight'} className={view === 'flight' ? 'active' : ''} onClick={() => void changeView('flight')}>Flight Check</button>
-          <button type="button" role="tab" aria-selected={view === 'setup'} className={view === 'setup' ? 'active' : ''} onClick={() => void changeView('setup')}>Setup</button>
+          {viewOrder.map((candidate) => <button
+            id={`view-tab-${candidate}`}
+            key={candidate}
+            type="button"
+            role="tab"
+            aria-selected={view === candidate}
+            tabIndex={view === candidate ? 0 : -1}
+            className={view === candidate ? 'active' : ''}
+            onClick={() => void changeView(candidate)}
+            onKeyDown={(event) => {
+              if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+              event.preventDefault()
+              moveViewFocus(candidate, event.key)
+            }}
+          >{candidate === 'operate' ? 'Operate' : candidate === 'flight' ? 'Flight Check' : 'Setup'}</button>)}
         </div>
         <div className="system-strip" aria-label="System status">
           <button type="button" className="status-pill compact-launch" onClick={() => void bridge?.showCompactDeck?.()}><Command size={14} /> Compact Deck</button>
@@ -679,15 +704,41 @@ function App() {
       </header>
 
       {view === 'operate' ? <>
-        <nav className="profile-rail" aria-label="Software lenses">
+        <nav className="profile-rail" aria-label="Software lenses" role="tablist">
           {profileOrder.map((id, index) => {
             const candidate = profiles[id]
-            return <button type="button" key={id} onClick={() => setProfileId(id)} className={id === profileId ? 'profile-tab active' : 'profile-tab'}>
+            return <button
+              id={`profile-tab-${id}`}
+              type="button"
+              role="tab"
+              aria-selected={id === profileId}
+              tabIndex={id === profileId ? 0 : -1}
+              key={id}
+              onClick={() => setProfileId(id)}
+              onKeyDown={(event) => {
+                if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+                event.preventDefault()
+                const nextIndex = event.key === 'Home'
+                  ? 0
+                  : event.key === 'End'
+                    ? profileOrder.length - 1
+                    : (index + (event.key === 'ArrowLeft' ? -1 : 1) + profileOrder.length) % profileOrder.length
+                const nextProfile = profileOrder[nextIndex]
+                setProfileId(nextProfile)
+                document.getElementById(`profile-tab-${nextProfile}`)?.focus()
+              }}
+              className={id === profileId ? 'profile-tab active' : 'profile-tab'}>
               <span className="profile-number">0{index + 1}</span><span className="profile-signal" style={{ background: candidate.color }} />
               <span>{candidate.name}</span><small>{candidate.shortLabel}</small>
             </button>
           })}
-          <div className="profile-rail-note">JOYSTICK ← → CHANGES LENS · AGENT KEYS NEVER MOVE</div>
+          <div className={`profile-rail-note route-${status.boardRoute}`} aria-live="polite">
+            {status.boardRoute === 'ashlr_layer'
+              ? 'JOYSTICK ← → CHANGES LENS · ↑ ↓ RUNS LENS ACTIONS'
+              : status.boardRoute === 'codex_native'
+                ? 'JOYSTICK OWNED BY CODEX · SCREEN TWIN DISABLED'
+                : 'CHOOSE A BOARD ROUTE · SCREEN TWIN IS PREVIEW ONLY'}
+          </div>
         </nav>
 
 
@@ -725,7 +776,7 @@ function App() {
 
             {nativeRoute && <div className="native-observer-note"><ShieldCheck size={15} /><span><strong>Codex Native observer only.</strong> This Ashlr twin does not represent Codex’s native key map or RGB, and its mapped actions are disabled.</span></div>}
             <div className={nativeRoute ? 'deck-and-trace native-observer' : 'deck-and-trace'}>
-              <div className="device-frame" aria-label="Creator Micro 2 screen twin with black caps and transparent ACT12">
+              <div className="device-frame" aria-label={`Creator Micro 2 screen twin with black caps and transparent ACT12${nativeRoute ? '; disabled while Codex Native owns the controls' : ''}`} aria-disabled={nativeRoute}>
                 <div className="device-inner">
                   <span className="case-copy left">Work Louder | Creator Micro 2</span>
                   <span className="case-copy right">Screen legend</span>
@@ -733,19 +784,19 @@ function App() {
                   <span className="cable-arrow">↑</span>
                   <span className="case-screw tl" /><span className="case-screw tr" /><span className="case-screw bl" /><span className="case-screw br" />
                   <div className="hardware-grid">
-                    <Dial active={activeControl} onSelect={selectControl} showIds={showIds} />
-                    <BoardKey control="agent1" action={actions[profile.mapping.agent1]} agent={mission.agents[0]} active={activeControl === 'agent1'} onSelect={selectControl} kind="agent" showIds={showIds} />
-                    <BoardKey control="agent2" action={actions[profile.mapping.agent2]} agent={mission.agents[1]} active={activeControl === 'agent2'} onSelect={selectControl} kind="agent" showIds={showIds} />
-                    <Joystick active={activeControl} onSelect={selectControl} showIds={showIds} />
-                    {(['agent3', 'agent4', 'agent5', 'agent6'] as ControlId[]).map((control, index) => <BoardKey key={control} control={control} action={actions[profile.mapping[control]]} agent={mission.agents[index + 2]} active={activeControl === control} onSelect={selectControl} kind="agent" showIds={showIds} />)}
-                    <BoardKey control="cmd1" action={actions[profile.mapping.cmd1]} active={activeControl === 'cmd1'} onSelect={selectControl} kind="action" factoryIcon={<Zap />} showIds={showIds} />
-                    <BoardKey control="cmd2" action={actions[profile.mapping.cmd2]} active={activeControl === 'cmd2'} onSelect={selectControl} kind="action" factoryIcon={<CircleCheck />} showIds={showIds} />
-                    <BoardKey control="cmd3" action={actions[profile.mapping.cmd3]} active={activeControl === 'cmd3'} onSelect={selectControl} kind="action" factoryIcon={<CircleX />} showIds={showIds} />
-                    <BoardKey control="cmd4" action={actions[profile.mapping.cmd4]} active={activeControl === 'cmd4'} onSelect={selectControl} kind="action" factoryIcon={<Split />} showIds={showIds} />
+                    <Dial active={activeControl} onSelect={selectControl} showIds={showIds} disabled={nativeRoute} />
+                    <BoardKey control="agent1" action={actions[profile.mapping.agent1]} agent={mission.agents[0]} active={activeControl === 'agent1'} onSelect={selectControl} kind="agent" showIds={showIds} disabled={nativeRoute} />
+                    <BoardKey control="agent2" action={actions[profile.mapping.agent2]} agent={mission.agents[1]} active={activeControl === 'agent2'} onSelect={selectControl} kind="agent" showIds={showIds} disabled={nativeRoute} />
+                    <Joystick active={activeControl} onSelect={selectControl} showIds={showIds} disabled={nativeRoute} />
+                    {(['agent3', 'agent4', 'agent5', 'agent6'] as ControlId[]).map((control, index) => <BoardKey key={control} control={control} action={actions[profile.mapping[control]]} agent={mission.agents[index + 2]} active={activeControl === control} onSelect={selectControl} kind="agent" showIds={showIds} disabled={nativeRoute} />)}
+                    <BoardKey control="cmd1" action={actions[profile.mapping.cmd1]} active={activeControl === 'cmd1'} onSelect={selectControl} kind="action" factoryIcon={<Zap />} showIds={showIds} disabled={nativeRoute} />
+                    <BoardKey control="cmd2" action={actions[profile.mapping.cmd2]} active={activeControl === 'cmd2'} onSelect={selectControl} kind="action" factoryIcon={<CircleCheck />} showIds={showIds} disabled={nativeRoute} />
+                    <BoardKey control="cmd3" action={actions[profile.mapping.cmd3]} active={activeControl === 'cmd3'} onSelect={selectControl} kind="action" factoryIcon={<CircleX />} showIds={showIds} disabled={nativeRoute} />
+                    <BoardKey control="cmd4" action={actions[profile.mapping.cmd4]} active={activeControl === 'cmd4'} onSelect={selectControl} kind="action" factoryIcon={<Split />} showIds={showIds} disabled={nativeRoute} />
                     <TouchSensor showIds={showIds} />
-                    <BoardKey control="cmd5" action={actions[profile.mapping.cmd5]} active={activeControl === 'cmd5'} onSelect={selectControl} kind="action" factoryIcon={<Mic2 />} showIds={showIds} />
-                    <BoardKey control="cmd6" action={actions[profile.mapping.cmd6]} active={activeControl === 'cmd6'} onSelect={selectControl} kind="action" factoryIcon={<Mic2 />} showIds={showIds} />
-                    <BoardKey control="cmd7" action={actions[profile.mapping.cmd7]} active={activeControl === 'cmd7'} onSelect={selectControl} kind="action transparent" factoryIcon={<BrainCircuit />} showIds={showIds} />
+                    <BoardKey control="cmd5" action={actions[profile.mapping.cmd5]} active={activeControl === 'cmd5'} onSelect={selectControl} kind="action" factoryIcon={<ActionIcon icon={actions[profile.mapping.cmd5].icon} size={21} />} showIds={showIds} disabled={nativeRoute} />
+                    <BoardKey control="cmd6" action={actions[profile.mapping.cmd6]} active={activeControl === 'cmd6'} onSelect={selectControl} kind="action" factoryIcon={<ActionIcon icon={actions[profile.mapping.cmd6].icon} size={21} />} showIds={showIds} disabled={nativeRoute} />
+                    <BoardKey control="cmd7" action={actions[profile.mapping.cmd7]} active={activeControl === 'cmd7'} onSelect={selectControl} kind="action transparent" factoryIcon={<ActionIcon icon={actions[profile.mapping.cmd7].icon} size={21} />} showIds={showIds} disabled={nativeRoute} />
                   </div>
                 </div>
               </div>
@@ -826,18 +877,19 @@ function ActionIcon({ icon, size = 24 }: { icon: string; size?: number }) {
     shield: <ShieldCheck {...props} />, terminal: <TerminalSquare {...props} />, mic: <Mic2 {...props} />,
     fleet: <Waypoints {...props} />, refresh: <RotateCcw {...props} />, stop: <CircleStop {...props} />,
     activity: <Activity {...props} />, sparkles: <Sparkles {...props} />,
+    send: <Send {...props} />, attention: <CircleAlert {...props} />,
   }
   return icons[icon] ?? <Command {...props} />
 }
 
-function BoardKey({ control, action, agent, active, onSelect, kind, factoryIcon, showIds }: {
+function BoardKey({ control, action, agent, active, onSelect, kind, factoryIcon, showIds, disabled = false }: {
   control: ControlId; action: ActionDefinition; active: boolean; onSelect: (control: ControlId) => void
-  kind: string; factoryIcon?: ReactNode; showIds: boolean; agent?: AgentSlotSummary
+  kind: string; factoryIcon?: ReactNode; showIds: boolean; agent?: AgentSlotSummary; disabled?: boolean
 }) {
   const accessibleName = agent
     ? `${hardwareIds[control]}: Agent ${agent.slot}, ${agentProviderLabel(agent)}, ${agent.title}, ${agentVisibleStateLabel(agent)}. ${action.title}.`
     : `${hardwareIds[control]}: ${action.title}`
-  return <button type="button" aria-pressed={active} aria-label={accessibleName} className={`board-key ${kind} ${agent ? `provider-${agent.provider ?? 'empty'} state-${agent.state}` : ''} ${active ? 'active' : ''}`} onClick={() => onSelect(control)}>
+  return <button type="button" disabled={disabled} aria-pressed={active} aria-label={accessibleName} className={`board-key ${kind} ${agent ? `provider-${agent.provider ?? 'empty'} state-${agent.state}` : ''} ${active ? 'active' : ''}`} onClick={() => onSelect(control)}>
     {showIds && <span className="hardware-id">{hardwareIds[control]}</span>}
     <span className="key-glyph">{factoryIcon ?? <span className="agent-plus">+</span>}</span>
     <strong>{agent?.provider ? agent.title : action.shortTitle}</strong>
@@ -845,28 +897,28 @@ function BoardKey({ control, action, agent, active, onSelect, kind, factoryIcon,
   </button>
 }
 
-function Dial({ active, onSelect, showIds }: { active: ControlId; onSelect: (control: ControlId) => void; showIds: boolean }) {
-  return <div className="dial-module">
-    <button type="button" className="dial-zone ccw" aria-label="Turn dial counterclockwise" onClick={() => onSelect('dialLeft')}><ChevronLeft /></button>
-    <button type="button" aria-pressed={active === 'dialPress'} className={active === 'dialPress' ? 'dial active' : 'dial'} onClick={() => onSelect('dialPress')} aria-label="Press rotary encoder"><span /></button>
-    <button type="button" className="dial-zone cw" aria-label="Turn dial clockwise" onClick={() => onSelect('dialRight')}><ChevronRight /></button>
+function Dial({ active, onSelect, showIds, disabled = false }: { active: ControlId; onSelect: (control: ControlId) => void; showIds: boolean; disabled?: boolean }) {
+  return <div className="dial-module" role="group" aria-label={disabled ? 'Screen twin dial; disabled for the selected board route' : 'Screen twin dial controls'}>
+    <button type="button" disabled={disabled} className="dial-zone ccw" aria-label="Turn dial counterclockwise" onClick={() => onSelect('dialLeft')}><ChevronLeft /></button>
+    <button type="button" disabled={disabled} aria-pressed={active === 'dialPress'} className={active === 'dialPress' ? 'dial active' : 'dial'} onClick={() => onSelect('dialPress')} aria-label="Press rotary encoder"><span /></button>
+    <button type="button" disabled={disabled} className="dial-zone cw" aria-label="Turn dial clockwise" onClick={() => onSelect('dialRight')}><ChevronRight /></button>
     {showIds && <small>{active === 'dialLeft' ? 'ENC_CC' : active === 'dialRight' ? 'ENC_CW' : 'ENC_CLK'}</small>}
   </div>
 }
 
-function Joystick({ active, onSelect, showIds }: { active: ControlId; onSelect: (control: ControlId) => void; showIds: boolean }) {
-  return <div className="joystick-module">
-    <button type="button" className={active === 'joyUp' ? 'joy-hit up active' : 'joy-hit up'} aria-label="Joystick up" onClick={() => onSelect('joyUp')}><ChevronUp /></button>
-    <button type="button" className={active === 'joyLeft' ? 'joy-hit left active' : 'joy-hit left'} aria-label="Joystick left" onClick={() => onSelect('joyLeft')}><ChevronLeft /></button>
+function Joystick({ active, onSelect, showIds, disabled = false }: { active: ControlId; onSelect: (control: ControlId) => void; showIds: boolean; disabled?: boolean }) {
+  return <div className="joystick-module" role="group" aria-label={disabled ? 'Screen twin joystick; disabled for the selected board route' : 'Screen twin joystick controls'}>
+    <button type="button" disabled={disabled} className={active === 'joyUp' ? 'joy-hit up active' : 'joy-hit up'} aria-label="Joystick up" onClick={() => onSelect('joyUp')}><ChevronUp /></button>
+    <button type="button" disabled={disabled} className={active === 'joyLeft' ? 'joy-hit left active' : 'joy-hit left'} aria-label="Joystick left" onClick={() => onSelect('joyLeft')}><ChevronLeft /></button>
     <span className="joystick"><i /></span>
-    <button type="button" className={active === 'joyRight' ? 'joy-hit right active' : 'joy-hit right'} aria-label="Joystick right" onClick={() => onSelect('joyRight')}><ChevronRight /></button>
-    <button type="button" className={active === 'joyDown' ? 'joy-hit down active' : 'joy-hit down'} aria-label="Joystick down" onClick={() => onSelect('joyDown')}><ChevronDown /></button>
+    <button type="button" disabled={disabled} className={active === 'joyRight' ? 'joy-hit right active' : 'joy-hit right'} aria-label="Joystick right" onClick={() => onSelect('joyRight')}><ChevronRight /></button>
+    <button type="button" disabled={disabled} className={active === 'joyDown' ? 'joy-hit down active' : 'joy-hit down'} aria-label="Joystick down" onClick={() => onSelect('joyDown')}><ChevronDown /></button>
     {showIds && <small>JOY_4-WAY</small>}
   </div>
 }
 
 function TouchSensor({ showIds }: { showIds: boolean }) {
-  return <div className="touch-module" aria-label="Firmware-owned Bluetooth profile touch sensor">
+  return <div className="touch-module" aria-label="Physical touch control: firmware-owned layer and connection selector; not a customizable app key">
     <span className="profile-leds"><i /><i /><i /></span><span className="touch-pad" /><small>{showIds ? 'FW PROFILE' : 'LAYER / LINK'}</small>
   </div>
 }

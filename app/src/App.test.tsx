@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import type { NativeAcceptanceSnapshot, PhysicalSignalEnvelope } from './board'
@@ -142,6 +142,13 @@ describe('operator interface', () => {
     expect(nativeRibbon?.textContent).not.toContain('shortcut receiver')
     expect(nativeRibbon?.textContent).not.toContain('desktop endpoints')
     expect(screen.getByRole('button', { name: 'Disabled in Codex Native' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.getByText('JOYSTICK OWNED BY CODEX · SCREEN TWIN DISABLED')).toBeTruthy()
+    const disabledTwin = screen.getByLabelText(/Creator Micro 2 screen twin.*disabled while Codex Native owns the controls/i)
+    const twinButtons = within(disabledTwin).getAllByRole('button') as HTMLButtonElement[]
+    expect(twinButtons).toHaveLength(20)
+    twinButtons.forEach((button) => expect(button.disabled).toBe(true))
+    expect(within(disabledTwin).getByRole('group', { name: /Screen twin dial; disabled/i })).toBeTruthy()
+    expect(within(disabledTwin).getByRole('group', { name: /Screen twin joystick; disabled/i })).toBeTruthy()
     fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
     expect(screen.queryByRole('button', { name: /Run Ashlr Flight Check/i })).toBeNull()
     const routeWarning = screen.getByRole('alert', { name: /Possible native-layer mismatch/i })
@@ -611,11 +618,33 @@ describe('operator interface', () => {
 
   it('renders ACT10 and ACT11 as separate bottom-row keys', () => {
     render(<App />)
-    fireEvent.click(screen.getByRole('button', { name: /Pair.*CLAUDE \+ CODEX/i }))
+    fireEvent.click(screen.getByRole('tab', { name: /Pair.*CLAUDE \+ CODEX/i }))
     fireEvent.click(screen.getByRole('button', { name: /ACT10: Voice capture/i }))
     expect(screen.getByRole('heading', { name: 'Voice capture' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: /ACT11: Guarded Continue/i })).toBeTruthy()
-    expect(screen.getByRole('button', { name: /ACT12:/i }).className).toContain('transparent')
+    expect(screen.getByRole('button', { name: /ACT10: Voice capture/i }).querySelector('.lucide-mic-vocal')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /ACT11: Guarded Continue/i }).querySelector('.lucide-send')).toBeTruthy()
+    const attention = screen.getByRole('button', { name: /ACT12:/i })
+    expect(attention.className).toContain('transparent')
+    expect(attention.querySelector('.lucide-circle-alert')).toBeTruthy()
+  })
+
+  it('uses roving keyboard focus for views and software lenses', () => {
+    render(<App />)
+    const operate = screen.getByRole('tab', { name: 'Operate' }) as HTMLButtonElement
+    const flight = screen.getByRole('tab', { name: 'Flight Check' }) as HTMLButtonElement
+    expect(operate.tabIndex).toBe(0)
+    expect(flight.tabIndex).toBe(-1)
+    operate.focus()
+    fireEvent.keyDown(operate, { key: 'ArrowRight' })
+    expect(flight.getAttribute('aria-selected')).toBe('true')
+    expect(document.activeElement).toBe(flight)
+    fireEvent.click(screen.getByRole('tab', { name: 'Operate' }))
+    const attention = screen.getByRole('tab', { name: /Attention/i }) as HTMLButtonElement
+    attention.focus()
+    fireEvent.keyDown(attention, { key: 'End' })
+    const recovery = screen.getByRole('tab', { name: /Recovery/i }) as HTMLButtonElement
+    expect(recovery.getAttribute('aria-selected')).toBe('true')
+    expect(document.activeElement).toBe(recovery)
   })
 
   it('keeps macOS permission verification visibly unresolved', () => {
@@ -982,7 +1011,7 @@ describe('operator interface', () => {
 
     render(<App />)
     await act(async () => { await Promise.resolve() })
-    fireEvent.click(screen.getByRole('button', { name: /Recovery.*GUARDED STOPS/i }))
+    fireEvent.click(screen.getByRole('tab', { name: /Recovery.*GUARDED STOPS/i }))
     fireEvent.click(screen.getByRole('button', { name: /ACT06: Pause autonomous fleet/i }))
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Arm action' }))
@@ -1050,7 +1079,7 @@ describe('operator interface', () => {
 
     render(<App />)
     await act(async () => { await Promise.resolve() })
-    fireEvent.click(screen.getByRole('button', { name: /Recovery.*GUARDED STOPS/i }))
+    fireEvent.click(screen.getByRole('tab', { name: /Recovery.*GUARDED STOPS/i }))
     fireEvent.click(screen.getByRole('button', { name: /ACT06: Pause autonomous fleet/i }))
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Arm action' }))

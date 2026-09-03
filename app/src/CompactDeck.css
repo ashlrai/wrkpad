@@ -28,7 +28,7 @@ button { color: inherit; }
 .compact-deck-shell {
   --aluminum: #d9d9d3;
   --aluminum-light: #eeeee9;
-  --key: #f8f8f5;
+  --key: #17191d;
   --ink: #202328;
   --muted: #70747a;
   --blue: #586dff;
@@ -61,6 +61,10 @@ button { color: inherit; }
 }
 
 .compact-titlebar strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 11px;
   letter-spacing: -.01em;
 }
@@ -135,7 +139,7 @@ button { color: inherit; }
 .joystick-control {
   min-width: 0;
   min-height: 0;
-  border: 1px solid rgba(32, 35, 40, .13);
+  border: 1px solid rgba(255, 255, 255, .11);
   border-radius: 9px;
   background: var(--key);
   box-shadow: 0 2px 2px rgba(32, 35, 40, .14), inset 0 1px rgba(255,255,255,.9);
@@ -155,6 +159,9 @@ button { color: inherit; }
   gap: 3px;
   padding: 3px 5px;
   overflow: hidden;
+  color: #f1f2ee;
+  background: linear-gradient(145deg, #2c2f34, var(--key) 62%, #0e1013);
+  box-shadow: 0 3px 4px rgba(24, 27, 31, .32), inset 0 1px rgba(255,255,255,.1), inset 0 -2px rgba(0,0,0,.28);
 }
 
 .deck-key:hover,
@@ -164,7 +171,8 @@ button { color: inherit; }
 .dial-control:active { transform: translateY(1px); box-shadow: inset 0 1px 3px rgba(32, 35, 40, .15); }
 
 .deck-key:focus-visible,
-.dial-control:focus-visible,
+.dial-control button:focus-visible,
+.joystick-control button:focus-visible,
 .chrome-button:focus-visible,
 .compact-settings input:focus-visible {
   outline: 2px solid var(--blue);
@@ -172,7 +180,7 @@ button { color: inherit; }
 }
 
 .deck-key strong { font-size: 9px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.deck-key small { color: var(--muted); font-size: 7px; font-weight: 700; }
+.deck-key small { color: #a9adb4; font-size: 7px; font-weight: 700; }
 
 .agent-key {
   display: grid;
@@ -201,12 +209,12 @@ button { color: inherit; }
 
 .agent-key > svg { grid-column: 1; grid-row: 2; align-self: center; }
 .agent-key > strong { grid-column: 2; grid-row: 2; max-width: 100%; align-self: center; }
-.agent-key > span:last-child { grid-column: 1 / -1; grid-row: 3; color: var(--muted); font-size: 7px; line-height: 1; }
+.agent-key > span:last-child { grid-column: 1 / -1; grid-row: 3; color: #a9adb4; font-size: 7px; line-height: 1; }
 .agent-key.state-error .agent-key-top i { background: var(--red); box-shadow: 0 0 0 2px rgba(239,77,104,.13); }
 .agent-key.state-needs_input .agent-key-top i { background: var(--amber); }
 .agent-key.state-working .agent-key-top i { background: var(--blue); }
 .agent-key.state-unread .agent-key-top i { background: var(--green); }
-.agent-key.state-off { color: #8c8f94; background: #ecece8; }
+.agent-key.state-off { color: #92969d; background: linear-gradient(145deg, #25282c, #121417); }
 
 .dial-control {
   display: grid;
@@ -267,7 +275,7 @@ button { color: inherit; }
     radial-gradient(circle at 22% 30%, rgba(88,109,255,.5) 0 1px, transparent 2px),
     radial-gradient(circle at 40% 66%, rgba(88,109,255,.42) 0 1px, transparent 2px),
     radial-gradient(circle at 72% 34%, rgba(88,109,255,.36) 0 1px, transparent 2px),
-    #24272c;
+    #111318;
   color: white;
 }
 
@@ -276,8 +284,10 @@ button { color: inherit; }
 .continue-key svg { color: var(--green); }
 
 .attention-key {
-  background: rgba(255,255,255,.62);
-  color: #4f545c;
+  border-color: rgba(255,255,255,.72);
+  background: linear-gradient(145deg, rgba(255,255,255,.8), rgba(223,231,229,.48));
+  color: #343940;
+  box-shadow: 0 3px 5px rgba(24,27,31,.24), inset 0 1px 2px rgba(255,255,255,.95), inset 0 -2px 3px rgba(63,72,71,.13);
 }
 
 .attention-key.urgent {

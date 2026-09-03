@@ -49,4 +49,8 @@ test('software-only agent slot focus remains outside the configured action gate'
   assert.doesNotMatch(focusImplementation, /routeAllowsConfiguredActions/)
   assert.doesNotMatch(focusFromSnapshot, /routeAllowsConfiguredActions/)
   assert.match(focusFromSnapshot, /appForProvider/)
+  assert.match(focusFromSnapshot, /title:`Opened \$\{appName\}`/)
+  assert.doesNotMatch(focusFromSnapshot, /title:`Opened \$\{appName\} for/)
+  assert.match(focusFromSnapshot, /cannot select or verify an exact pane/)
+  assert.match(focusFromSnapshot, /cannot select or verify an exact task/)
 })

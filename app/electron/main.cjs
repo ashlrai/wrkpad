@@ -422,9 +422,9 @@ async function focusAgentFromSnapshot(slot, snapshot) {
   const opened = await openFixedApp(appName)
   if (!opened) return { ok:false,title:`Could not open ${appName}`,message:'The provider app was not available. No fallback terminal or command was launched.',timestamp:new Date().toISOString() }
   const message = agent.provider === 'claude'
-    ? 'cmux is foregrounded. Exact pane correlation is not available in the installed cmux build, so no terminal input was sent.'
-    : 'Codex Desktop is foregrounded. No prompt, approval, or task was submitted.'
-  return { ok:true,title:`Opened ${appName} for ${agent.title}`,message,timestamp:new Date().toISOString() }
+    ? 'cmux is foregrounded. Agent Board cannot select or verify an exact pane, so no terminal input was sent.'
+    : 'Codex Desktop is foregrounded. Agent Board cannot select or verify an exact task, so no prompt or approval was submitted.'
+  return { ok:true,title:`Opened ${appName}`,message,timestamp:new Date().toISOString() }
 }
 
 async function focusAgentSlotResult(slot) {

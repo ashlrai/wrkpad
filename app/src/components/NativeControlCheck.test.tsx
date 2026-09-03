@@ -21,6 +21,8 @@ describe('NativeControlCheck', () => {
     expect(screen.getByLabelText(/Right planar toggle/i)).toBeTruthy()
     expect(screen.getByLabelText(/AG00 · Agent 1/i)).toBeTruthy()
     expect(screen.getByLabelText(/AG05 · Agent 6/i)).toBeTruthy()
+    expect(screen.getByLabelText(/ACT11 · Action 6.*Bottom Copy next \/ Continue position/i)).toBeTruthy()
+    expect(document.body.textContent).not.toContain('Bottom Send / Continue position')
   })
 
   it('requires a Settings observation and a changed result before saving', async () => {
