@@ -101,10 +101,11 @@ export default function NativeControlCheck({ receipt, busy, error, onSave }: { r
       <b>Put the board on the native wired route first</b>
       <ol>
         <li>On Creator Micro 2 Pro, hold the bottom-left touch sensor for three seconds, then tap through the channels to the fourth <strong>WIRED</strong> mode. Its underglow is white; let the selector exit after five seconds without touching it.</li>
-        <li>Only after the communication selector exits, confirm firmware <strong>Layer 1</strong>. Short taps on that same sensor cycle layers; stop when the layer LEDs indicate Layer 1, then do not touch it during this test.</li>
-        <li>If transport or layer changed, Command-Q and reopen ChatGPT Desktop before checking Settings again. Do not reset settings, import a profile, or automate a device write for this check.</li>
+        <li>A numeric <strong>Layer 1</strong> indicator identifies only a layer position—not its bindings. In verified Work Louder Input, manually confirm that the intended existing layer contains the native <strong>KV_OAI_*</strong> controls before using short taps to select it.</li>
+        <li>If those native bindings are absent or unverified, export a backup, then use Input’s manual <strong>Import layer</strong>. Drag <strong>Codex Native Recovery</strong> to the first visible position so its badge is 1; Ashlr Daily becomes badge 2. Wait for <strong>Layout updated</strong>, then export and verify again.</li>
+        <li>A native layer found elsewhere in an export is not sufficient. Confirm first position yourself, quit Input, Command-Q and reopen ChatGPT Desktop, then complete this physical check. Never use Reset settings or let Agent Board automate the import, reorder, or device write.</li>
       </ol>
-      <p><ShieldCheck size={13} /> White underglow proves only firmware-selected wired mode. Layer 1 and Connected + Granted still do not prove that Codex consumed a press.</p>
+      <p><ShieldCheck size={13} /> White underglow proves only firmware-selected wired mode. A layer number, Connected, and Granted still do not prove native binding content or that Codex consumed a press.</p>
     </div>
 
     <div className="native-test-card">
