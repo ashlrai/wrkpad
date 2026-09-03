@@ -107,3 +107,17 @@ test('README commissions native Codex without treating connection as acceptance'
   assert.match(readme, /quit Karabiner or Logitech Options\+ when it has\s+Input Monitoring/)
   assert.match(readme, /Reset settings[\s\S]*deletes all profiles, layers, and actions/)
 })
+
+test('architecture keeps one mixed queue and scopes only the provider view', () => {
+  const root = join(import.meta.dirname, '..')
+  const architecture = readFileSync(join(root, 'docs', 'architecture.md'), 'utf8')
+
+  assert.match(architecture, /one mixed, provider-neutral queue/)
+  assert.match(architecture, /`all` must remain the default/)
+  assert.match(architecture, /`all \| codex \| claude`/)
+  assert.match(architecture, /not a second reducer/)
+  assert.match(architecture, /Hidden slots retain[\s\S]*global AG00-AG05 identities/)
+  assert.match(architecture, /resolve the provider from the fresh main-process snapshot/)
+  assert.match(architecture, /cannot promise the same mixed-provider physical key semantics/)
+  assert.match(architecture, /must not claim exact Codex-task or cmux-pane\s+focus/)
+})

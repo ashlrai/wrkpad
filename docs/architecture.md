@@ -61,6 +61,44 @@ The server bounds persisted JSON to 4 MiB, refuses symlinked state files, atomic
 
 Crash-injection and cross-platform filesystem acceptance are still required before describing persistence as crash durable across every supported filesystem.
 
+## Unified slot and intent routing
+
+The implemented HASP reducer is one mixed, provider-neutral queue. Codex and
+Claude Code events compete for the same six sticky slots under the same state
+priority and overflow rules. Provider identity is part of the token-keyed HMAC
+input before the reducer sees a session binding, so equal provider-local session
+IDs do not collide. The snapshot keeps the provider on each occupied slot; Agent
+Board uses that field to choose only a fixed application target: `codex` opens
+ChatGPT and `claude` opens cmux.
+
+This produces one provider-neutral intent vocabulary:
+
+| Intent | Resolution rule | Current evidence boundary |
+| --- | --- | --- |
+| `focus_slot(slot)` | Read the provider from that occupied global slot, then open its fixed provider application | Implemented; application foregrounding only |
+| `focus_attention(all)` | Select `error > needs_input > working > unread > idle`, then the lowest global slot number | Implemented as the default Attention behavior |
+| `focus_attention(codex\|claude)` | Apply the same priority rule to slots from one provider, without moving or renumbering them | Proposed; no preference or selector exists yet |
+
+`all` must remain the default. A future Codex/Claude scope toggle is a local
+presentation and Attention filter over the same snapshot, not a second reducer,
+provider-specific slot bank, hook change, or hardware remap. Hidden slots retain
+their global AG00-AG05 identities and continue receiving state updates. Direct
+slot focus must still resolve the provider from the fresh main-process snapshot,
+never from a renderer-supplied provider or the selected lens.
+
+The smallest implementation gap is therefore one bounded `all | codex | claude`
+view preference and one pure candidate selector shared by the runway and
+Attention action. Tests must pin mixed ordering, unchanged global slot numbers,
+empty filtered results, deterministic ties, invalid-scope fallback to `all`, and
+fixed provider targets. This change must not claim exact Codex-task or cmux-pane
+focus and must not paste, submit, approve, or send terminal input.
+
+Codex Native is an explicit exception at the physical-control layer. ChatGPT owns
+the Creator Micro keys on that route, so Agent Board can mirror observed slots on
+screen but cannot promise the same mixed-provider physical key semantics. Daily
+cross-provider control requires the Ashlr Layer route; native firmware
+qualification remains a separate passive route and evidence chain.
+
 ## Extension policy
 
 New providers implement normalization into HASP; they do not add provider semantics to the reducer. New hardware implements the private adapter behind the same occupancy and lighting planner. Remote networking, agent control, and approvals require separate protocols and threat models and are not backwards-compatible HASP additions.
