@@ -181,8 +181,8 @@ For a first native Codex test:
 5. Open a normal task and double-tap a different assigned Agent Key within 350
    milliseconds. The documented behavior is to switch tasks and foreground
    ChatGPT; a single tap can switch without bringing ChatGPT forward.
-6. If the board is still silent, quit competing keyboard utilities, reconnect,
-   and run `npm run doctor`. Follow the
+6. If the board is still silent, quit Karabiner or Logitech Options+ when it has
+   Input Monitoring, reconnect, and run `npm run doctor`. Follow the
    [native-layer recovery guide](app/docs/codex-native-layer-recovery.md) before
    considering a reset. Work Louder states that Input's **Reset settings**
    deletes all profiles, layers, and actions, so back up first and make that

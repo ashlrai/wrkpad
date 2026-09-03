@@ -104,5 +104,6 @@ test('README commissions native Codex without treating connection as acceptance'
   }
 
   assert.match(readme, /indicators prove discovery and permission state, not that a physical\s+key navigated a task/)
+  assert.match(readme, /quit Karabiner or Logitech Options\+ when it has\s+Input Monitoring/)
   assert.match(readme, /Reset settings[\s\S]*deletes all profiles, layers, and actions/)
 })
