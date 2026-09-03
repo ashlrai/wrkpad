@@ -24,10 +24,14 @@ for(const mode of ['data-view="hardware"','data-view="deck"'])if(!html.includes(
 for(const scene of ['data-scene="build"','data-scene="review"','data-scene="quiet"'])if(!html.includes(scene))failures.push(`missing synthetic workload ${scene}`)
 if((html.match(/class="key agent/g)??[]).length!==6)failures.push('expected six Agent keys')
 if((html.match(/class="key action/g)??[]).length!==4)failures.push('expected four delivery actions')
-const physicalOrder=['data-control="Dial left"','data-slot="0"','data-slot="1"','aria-label="Planar toggle and joystick on the right"','data-slot="2"','data-slot="3"','data-slot="4"','data-slot="5"','data-control="Amplify"','data-control="Verify"','data-control="Polish"','data-control="Advance"','data-control="Layer and connection touch"','data-control="Voice"','data-control="Send / Continue"','data-control="Attention"']
+const physicalOrder=['data-control="Dial left"','data-slot="0"','data-slot="1"','aria-label="Four-direction planar stick on the right"','data-slot="2"','data-slot="3"','data-slot="4"','data-slot="5"','data-control="Amplify"','data-control="Verify"','data-control="Polish"','data-control="Advance"','data-control="Layer and connection touch"','data-control="Voice"','data-control="Copy next brief"','data-control="Attention"']
 let cursor=-1
 for(const marker of physicalOrder){const next=html.indexOf(marker,cursor+1);if(next<0)failures.push(`missing physical control ${marker}`);else if(next<cursor)failures.push(`physical control out of order ${marker}`);else cursor=next}
 if(!html.includes('transparent-key'))failures.push('missing transparent Attention key treatment')
+if((html.match(/class="joy-(?:up|right|down|left)"/g)??[]).length!==4)failures.push('expected exactly four planar stick directions')
+if(/Planar press|joy-press|aria-keyshortcuts="J"|\['KeyJ'/.test(`${html}\n${css}\n${js}`))failures.push('invented planar stick press binding')
+if((html.match(/data-hero-target=/g)??[]).length!==16)failures.push('expected sixteen interactive hero control groups')
+if(!html.includes('Original CSS illustration—not a product photograph'))failures.push('missing synthetic hero media boundary')
 if(!html.includes('aria-keyshortcuts='))failures.push('missing declared keyboard shortcuts')
 if(/role="radio(?:group)?"/.test(html))failures.push('custom radio controls require complete keyboard semantics')
 if(/<(?!button\b)[a-z][^>]*\bdata-control=/i.test(html))failures.push('non-button synthetic control')

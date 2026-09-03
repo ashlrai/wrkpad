@@ -31,12 +31,29 @@
         <div class="actions"><a class="button primary" href="#build">Build locally</a><a class="button" href="#demo">Explore the synthetic demo</a></div>
         <ul class="facts"><li><b>MIT</b> core</li><li><b>Apache-2.0</b> app</li><li><b>0</b> device writes</li><li><b>6</b> stable slots</li></ul>
       </div>
-      <aside class="product-reference" aria-labelledby="hardware-reference-title">
-        <p>Official hardware reference</p>
-        <h2 id="hardware-reference-title">Creator Micro 2</h2>
-        <dl><div><dt>Mechanical switches</dt><dd>13</dd></div><div><dt>Rotary encoder</dt><dd>1</dd></div><div><dt>Planar joystick</dt><dd>1</dd></div><div><dt>Touch sensor</dt><dd>1</dd></div></dl>
-        <a class="button primary" href="https://worklouder.cc/creator-micro-2">View official product photography</a>
-        <small>Independent interoperability project. Official photography is not bundled while written reuse permission is pending.</small>
+      <aside class="hero-device" aria-labelledby="hardware-reference-title">
+        <div class="hero-device-head"><div><span>Interactive screen twin</span><h2 id="hardware-reference-title">Creator Micro 2 layout</h2></div><b>Synthetic</b></div>
+        <div class="hero-chassis" role="group" aria-label="Synthetic four by four Creator Micro 2 control layout. Dial left, directional stick right, thirteen switches, and touch selector.">
+          <button class="hero-control hero-dial" type="button" data-hero-target="Dial press" aria-label="Dial on the left. Open its synthetic demo control"><i aria-hidden="true"></i><span>Dial</span></button>
+          <button class="hero-cap agent error" type="button" data-hero-target="Chat 1"><span>01</span><b>Needs you</b></button>
+          <button class="hero-cap agent working" type="button" data-hero-target="Chat 2"><span>02</span><b>Working</b></button>
+          <button class="hero-control hero-stick" type="button" data-hero-target="Planar right" aria-label="Four-direction planar stick on the right. Open its synthetic demo control"><i aria-hidden="true"></i><span>4-way stick</span></button>
+          <button class="hero-cap agent complete" type="button" data-hero-target="Chat 3"><span>03</span><b>Ready</b></button>
+          <button class="hero-cap agent idle" type="button" data-hero-target="Chat 4"><span>04</span><b>Idle</b></button>
+          <button class="hero-cap agent" type="button" data-hero-target="Chat 5"><span>05</span><b>Open</b></button>
+          <button class="hero-cap agent" type="button" data-hero-target="Chat 6"><span>06</span><b>Open</b></button>
+          <button class="hero-cap" type="button" data-hero-target="Amplify"><span>07</span><b>Amplify</b></button>
+          <button class="hero-cap" type="button" data-hero-target="Verify"><span>08</span><b>Verify</b></button>
+          <button class="hero-cap" type="button" data-hero-target="Polish"><span>09</span><b>Polish</b></button>
+          <button class="hero-cap" type="button" data-hero-target="Advance"><span>10</span><b>Advance</b></button>
+          <button class="hero-control hero-touch" type="button" data-hero-target="Layer and connection touch" aria-label="Firmware-owned touch selector. Open its synthetic demo control"><i aria-hidden="true"></i><span>Layer</span></button>
+          <button class="hero-cap" type="button" data-hero-target="Voice"><span>11</span><b>Voice</b></button>
+          <button class="hero-cap" type="button" data-hero-target="Copy next brief"><span>12</span><b>Copy next</b></button>
+          <button class="hero-cap hero-clear error" type="button" data-hero-target="Attention"><span>13</span><b>Attention</b></button>
+        </div>
+        <p class="hero-device-note"><span><b>13</b> switches</span><span><b>1</b> rotary dial</span><span><b>4</b> stick directions</span><span><b>1</b> touch selector</span></p>
+        <a href="https://worklouder.cc/creator-micro-2">See the real hardware on Work Louder</a>
+        <small>Original CSS illustration—not a product photograph. Independent interoperability project; official media is not bundled.</small>
       </aside>
     </section>
 
@@ -51,7 +68,7 @@
         <div class="scene-switch" role="group" aria-label="Synthetic workload"><span>Workload</span><button type="button" data-scene="build" aria-pressed="true">Live build</button><button type="button" data-scene="review" aria-pressed="false">Review queue</button><button type="button" data-scene="quiet" aria-pressed="false">Quiet desk</button></div>
       </div>
       <div class="route" role="group" aria-label="Synthetic route preview"><button type="button" data-route="ashlr" aria-pressed="true">Ashlr Layer</button><button type="button" data-route="native" aria-pressed="false">Codex Native</button><span id="route-summary">Shared Codex + Claude/cmux shortcuts. Actions remain guarded.</span></div>
-      <p class="keyboard-guide" id="keyboard-guide"><strong>Keyboard or numpad:</strong> 1–6 agents · 7–0 delivery · arrows planar toggle · [ / ] or numpad − / + for dial · V voice · S guarded send · Space attention.</p>
+      <p class="keyboard-guide" id="keyboard-guide"><strong>Keyboard or numpad:</strong> 1–6 agents · 7–0 delivery · arrows move the four-way stick · [ / ] or numpad − / + turns the dial · V voice · N previews Copy next · Space attention.</p>
       <div class="demo-grid">
         <div class="board" id="demo-board" role="region" data-view="hardware" data-scene="build" aria-label="Synthetic Creator Micro 2 screen twin" aria-describedby="keyboard-guide">
           <div class="board-head"><span id="surface-name">Creator Micro 2 · hardware map</span><b>Synthetic demo</b></div>
@@ -59,7 +76,7 @@
             <div class="control dial" role="group" aria-label="Rotary dial on the left"><button class="dial-step dial-back" type="button" data-control="Dial left" data-detail="Move backward through the synthetic review timeline" data-shortcut="[" aria-keyshortcuts="[" aria-label="Turn rotary dial left">−</button><button class="dial-face" type="button" data-control="Dial press" data-detail="Select the highlighted synthetic timeline item" data-shortcut="D" aria-keyshortcuts="D" aria-label="Press rotary dial"><i aria-hidden="true"></i><span>Review timeline</span></button><button class="dial-step dial-forward" type="button" data-control="Dial right" data-detail="Move forward through the synthetic review timeline" data-shortcut="]" aria-keyshortcuts="]" aria-label="Turn rotary dial right">+</button></div>
             <button class="key agent error selected" type="button" data-slot="0" data-control="Chat 1" data-detail="Needs your input · review blocked" data-shortcut="1" aria-keyshortcuts="1"><span>01</span><b>Needs you</b><small>Codex</small></button>
             <button class="key agent working" type="button" data-slot="1" data-control="Chat 2" data-detail="Working · tests running" data-shortcut="2" aria-keyshortcuts="2"><span>02</span><b>Working</b><small>Claude</small></button>
-            <div class="control joystick" role="group" aria-label="Planar toggle and joystick on the right"><button class="joy-up" type="button" data-control="Planar up" data-detail="Move to the synthetic status lane above" data-shortcut="↑" aria-keyshortcuts="ArrowUp" aria-label="Move planar toggle up">↑</button><button class="joy-left" type="button" data-control="Planar left" data-detail="Move to the previous synthetic workspace" data-shortcut="←" aria-keyshortcuts="ArrowLeft" aria-label="Move planar toggle left">←</button><button class="joy-press" type="button" data-control="Planar press" data-detail="Select the highlighted synthetic workspace" data-shortcut="J" aria-keyshortcuts="J" aria-label="Press planar toggle"></button><button class="joy-right" type="button" data-control="Planar right" data-detail="Move to the next synthetic workspace" data-shortcut="→" aria-keyshortcuts="ArrowRight" aria-label="Move planar toggle right">→</button><button class="joy-down" type="button" data-control="Planar down" data-detail="Move to the synthetic status lane below" data-shortcut="↓" aria-keyshortcuts="ArrowDown" aria-label="Move planar toggle down">↓</button></div>
+            <div class="control joystick" role="group" aria-label="Four-direction planar stick on the right"><button class="joy-up" type="button" data-control="Planar up" data-detail="Move to the synthetic status lane above" data-shortcut="↑" aria-keyshortcuts="ArrowUp" aria-label="Move planar stick up">↑</button><button class="joy-left" type="button" data-control="Planar left" data-detail="Move to the previous synthetic workspace" data-shortcut="←" aria-keyshortcuts="ArrowLeft" aria-label="Move planar stick left">←</button><i class="joy-center" aria-hidden="true"></i><button class="joy-right" type="button" data-control="Planar right" data-detail="Move to the next synthetic workspace" data-shortcut="→" aria-keyshortcuts="ArrowRight" aria-label="Move planar stick right">→</button><button class="joy-down" type="button" data-control="Planar down" data-detail="Move to the synthetic status lane below" data-shortcut="↓" aria-keyshortcuts="ArrowDown" aria-label="Move planar stick down">↓</button></div>
             <button class="key agent complete" type="button" data-slot="2" data-control="Chat 3" data-detail="Ready to review · diff prepared" data-shortcut="3" aria-keyshortcuts="3"><span>03</span><b>Ready</b><small>Codex</small></button>
             <button class="key agent idle" type="button" data-slot="3" data-control="Chat 4" data-detail="Idle · repo enrolled" data-shortcut="4" aria-keyshortcuts="4"><span>04</span><b>Idle</b><small>Fleet</small></button>
             <button class="key agent" type="button" data-slot="4" data-control="Chat 5" data-detail="Available slot" data-shortcut="5" aria-keyshortcuts="5"><span>05</span><b>Open</b><small>Available</small></button>
@@ -70,7 +87,7 @@
             <button class="key action" type="button" data-control="Advance" data-detail="Prepare the safest highest-value next step" data-shortcut="0" aria-keyshortcuts="0"><span>10</span><b>Advance</b><small>Prepared brief</small></button>
             <button class="control touch" type="button" data-control="Layer and connection touch" data-detail="Preview the firmware-owned layer and connection selector" data-shortcut="L" aria-keyshortcuts="L" aria-label="Firmware-owned touch selector"><span aria-hidden="true"></span><i aria-hidden="true"></i><i aria-hidden="true"></i><i aria-hidden="true"></i><small>Layer / link</small></button>
             <button class="key utility" type="button" data-control="Voice" data-detail="Proposed: stage a local voice capture" data-shortcut="V" aria-keyshortcuts="V"><span>11</span><b>Voice</b><small>Proposed</small></button>
-            <button class="key utility guarded" type="button" data-control="Send / Continue" data-detail="Preview only: require a verified supported composer and explicit confirmation" data-shortcut="S" aria-keyshortcuts="S"><span>12</span><b>Send / Continue</b><small>Guarded · never sent</small></button>
+            <button class="key utility" type="button" data-control="Copy next brief" data-detail="Preview a bounded continuation brief for the operator to copy, review, and submit" data-shortcut="N" aria-keyshortcuts="N"><span>12</span><b>Copy next brief</b><small>Clipboard-only proposal</small></button>
             <button class="key hero-key transparent-key" type="button" data-control="Attention" data-detail="Select and foreground the highest-priority visible item" data-shortcut="Space" aria-keyshortcuts="Space"><span>13</span><b>Attention</b><small>Transparent · never replies</small></button>
           </div>
           <div class="legend"><span><i class="red"></i>Error</span><span><i class="amber"></i>Needs you</span><span><i class="blue"></i>Working</span><span><i class="green"></i>Ready</span><span><i class="white"></i>Idle</span></div>

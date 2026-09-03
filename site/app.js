@@ -50,6 +50,7 @@ const routeButtons = [...document.querySelectorAll('[data-route]')]
 const viewButtons = [...document.querySelectorAll('[data-view]:not(#demo-board)')]
 const sceneButtons = [...document.querySelectorAll('[data-scene]:not(#demo-board)')]
 const controls = [...document.querySelectorAll('[data-control]')]
+const heroControls = [...document.querySelectorAll('[data-hero-target]')]
 const agents = [...document.querySelectorAll('[data-slot]')]
 const announcement = document.querySelector('#demo-announcement')
 let route = 'ashlr'
@@ -141,12 +142,11 @@ const keyboardControls = new Map([
   ['BracketRight', document.querySelector('[data-control="Dial right"]')], ['NumpadAdd', document.querySelector('[data-control="Dial right"]')],
   ['ArrowUp', document.querySelector('[data-control="Planar up"]')],
   ['ArrowLeft', document.querySelector('[data-control="Planar left"]')],
-  ['KeyJ', document.querySelector('[data-control="Planar press"]')],
   ['ArrowRight', document.querySelector('[data-control="Planar right"]')],
   ['ArrowDown', document.querySelector('[data-control="Planar down"]')],
   ['KeyL', document.querySelector('[data-control="Layer and connection touch"]')],
   ['KeyV', document.querySelector('[data-control="Voice"]')],
-  ['KeyS', document.querySelector('[data-control="Send / Continue"]')],
+  ['KeyN', document.querySelector('[data-control="Copy next brief"]')],
   ['Space', document.querySelector('[data-control="Attention"]')], ['NumpadDecimal', document.querySelector('[data-control="Attention"]')],
 ])
 
@@ -154,6 +154,13 @@ routeButtons.forEach((button) => button.addEventListener('click', () => chooseRo
 viewButtons.forEach((button) => button.addEventListener('click', () => chooseView(button.dataset.view)))
 sceneButtons.forEach((button) => button.addEventListener('click', () => chooseScene(button.dataset.scene)))
 controls.forEach((control) => control.addEventListener('click', () => chooseControl(control)))
+heroControls.forEach((heroControl) => heroControl.addEventListener('click', () => {
+  const control = controls.find((candidate) => candidate.dataset.control === heroControl.dataset.heroTarget)
+  if (!control) return
+  chooseControl(control, 'Hero twin')
+  document.querySelector('#demo').scrollIntoView()
+  control.focus({ preventScroll: true })
+}))
 
 document.addEventListener('keydown', (event) => {
   if (event.repeat || event.altKey || event.ctrlKey || event.metaKey) return

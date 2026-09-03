@@ -73,3 +73,13 @@ test('operator docs preserve the exact twenty-gesture cross-provider contract', 
   assert.match(setup, /16 control groups[\s\S]*not the\s+20-gesture Ashlr Layer Flight Check/)
   assert.doesNotMatch(publicDocs, /19-gesture|all 19 daily signals|wide microphone cap/i)
 })
+
+test('README uses the canonical matrix without a stale renderer screenshot', () => {
+  const root = join(import.meta.dirname, '..')
+  const readme = readFileSync(join(root, 'README.md'), 'utf8')
+
+  assert.match(readme, /DIAL\s+\| AG00\s+\| AG01\s+\| STICK/)
+  assert.match(readme, /TOUCH \| ACT10 \| ACT11 \| ACT12 \(transparent\)/)
+  assert.match(readme, /clearly synthetic[\s\S]*not vendor artwork/)
+  assert.doesNotMatch(readme, /agent-board-public-demo\.png|accurate Creator Micro 2 control geometry/i)
+})

@@ -20,19 +20,19 @@ or firmware lighting.
 > There is not yet a signed, notarized, immutable public macOS release. See the
 > [release evidence layers](docs/release.md) before making distribution claims.
 
-![Synthetic Ashlr Agent Board documentation view showing six text-labeled agent states, the black-cap legend, and the accurate Creator Micro 2 control geometry](docs/assets/agent-board-public-demo.png)
-
-_Captured from the real renderer with the repository's fixed-data public
-fixture. It contains no live sessions or personal paths; USB, physical RGB,
-provider receipt, and Fleet authority remain unverified. See
-[architecture and trust boundaries](app/docs/architecture.md)._
-
 ```text
 DIAL  | AG00  | AG01  | STICK
 AG02  | AG03  | AG04  | AG05
 ACT06 | ACT07 | ACT08 | ACT09
 TOUCH | ACT10 | ACT11 | ACT12 (transparent)
 ```
+
+This matrix is the canonical control-group order. The
+[landing page](site/index.html#demo) includes an original, clearly synthetic
+CSS screen twin with black caps; it is an interaction guide, not vendor artwork
+or a dimensional product rendering. Real product photography remains linked
+only from Work Louder while reuse permission is unrecorded. See
+[architecture and trust boundaries](app/docs/architecture.md).
 
 The project is local-first and fail-closed. It preserves Codex and Claude's own
 permission systems, performs no HID writes, and contains no one-press push,
@@ -67,8 +67,8 @@ marks missing observers and optional CLIs as unavailable.
   attention runway, window-scoped numpad controls, privacy switch, and four
   provider-neutral delivery skills. It never installs a global keyboard hook.
 - Across the four daily lenses, ACT06–ACT09 keep stable Amplify, Verify, Polish,
-  and Advance muscle memory; ACT10 stages Voice, ACT11 copies a guarded
-  Continue prompt, and transparent ACT12 opens the highest-priority observed
+  and Advance muscle memory; ACT10 stages Voice, ACT11 copies a bounded next-step
+  brief for review, and transparent ACT12 opens the highest-priority observed
   provider surface. Recovery deliberately replaces only ACT06–ACT09 with
   guarded fleet controls.
 - On Ashlr Layer, Agent Board maps 20 shortcuts across five software lenses,
