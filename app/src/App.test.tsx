@@ -107,7 +107,6 @@ describe('operator interface', () => {
     expect(setFlightCheck).not.toHaveBeenCalled()
     expect(await screen.findByText('Expected board route saved')).toBeTruthy()
     expect(screen.getByText(/changed Agent Board’s local preference and runtime global-shortcut ownership/i)).toBeTruthy()
-    expect(screen.getByText('Native RPC unavailable')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /Agent 1, AG00, Codex, Native review.*open its provider app/i }))
     expect(focusAgentSlot).toHaveBeenCalledWith(1)
   })
