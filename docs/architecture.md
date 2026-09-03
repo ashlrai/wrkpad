@@ -57,7 +57,7 @@ Operator recovery follows `CLI forget → authenticated HASP DELETE → reducer 
 
 ## Persistence
 
-The server bounds persisted JSON to 4 MiB, refuses symlinked state files, atomically writes through a private temporary file and rename, synchronizes the file and parent directory on Unix, and rolls live state back when persistence fails. Raw provider session IDs and working directories are converted to token-keyed HMAC-SHA-256 bindings before persistence. The token and state directory are user-private on Unix.
+The server bounds persisted JSON to 4 MiB, refuses symlinked state files, atomically writes through a private temporary file and rename, synchronizes the file and parent directory on Unix, and rolls live state back when persistence fails. A versioned domain, canonical provider tag, and provider-local session ID become the token-keyed HMAC-SHA-256 binding; changing or omitting a working directory cannot fork one provider session into another slot. Raw session IDs and working directories are not persisted. The token and state directory are user-private on Unix.
 
 Crash-injection and cross-platform filesystem acceptance are still required before describing persistence as crash durable across every supported filesystem.
 
@@ -70,6 +70,15 @@ input before the reducer sees a session binding, so equal provider-local session
 IDs do not collide. The snapshot keeps the provider on each occupied slot; Agent
 Board uses that field to choose only a fixed application target: `codex` opens
 ChatGPT and `claude` opens cmux.
+
+Within one private session binding, event time is monotonic: after exact-duplicate
+handling, an event older than the persisted `updated_at` value fails closed
+without changing state, metadata, slot assignment, revision, or event history.
+This prevents delayed working or end events from clearing newer attention state.
+The wire schema is unchanged. Bindings from the earlier unversioned derivation
+cannot be recovered from persisted state because the raw provider identity was
+intentionally discarded; each stale pre-upgrade slot may require an
+operator-owned forget after upgrade.
 
 This produces one provider-neutral intent vocabulary:
 
@@ -102,8 +111,9 @@ qualification remains a separate passive route and evidence chain.
 The [cmux provider adapter](../protocol/cmux-provider-adapter.md) implements a
 fixed-path, capability-negotiated exact-focus substrate without terminal
 read/write authority. Locator capture and socket-password enrollment remain
-absent, so current Claude slot focus deliberately takes the cmux application
-foreground fallback.
+absent, and no one-use human authorization issuer exists, so current Claude slot
+focus deliberately takes the cmux application foreground fallback without a
+socket probe.
 
 ## Extension policy
 

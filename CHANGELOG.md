@@ -64,6 +64,11 @@ All notable changes will be documented here. The project follows semantic versio
 
 ### Fixed
 
+- Keep a provider session on one private slot when its working directory is
+  added, omitted, or changed between lifecycle hooks.
+- For an existing private binding, reject older non-duplicate lifecycle events
+  before they can regress newer agent state, metadata, slot assignment,
+  revision, or event history.
 - Keep macOS USB parsers and Unix durability helpers out of unsupported platform
   builds so strict Linux and Windows lint gates remain portable.
 - Permanently invalidate the current physical-acceptance run when any live gate

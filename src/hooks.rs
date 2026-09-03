@@ -4,11 +4,8 @@ use std::path::Path;
 use anyhow::{Context, Result, bail};
 use chrono::Utc;
 use serde_json::Value;
-use uuid::Uuid;
 
 use crate::model::{EventKind, HaspEvent, Provider};
-
-const EVENT_NAMESPACE: Uuid = Uuid::from_u128(0x517c7f8d_f6b0_4777_921e_f0658249f380);
 
 pub fn normalize(
     provider: Provider,
@@ -90,10 +87,10 @@ pub fn normalize(
     let title = cwd.as_deref().and_then(workspace_label);
     let turn_id = first_string(object, &["turn_id", "turn-id", "prompt_id"]);
 
-    let event_id = turn_id.map_or_else(Uuid::new_v4, |turn| {
-        let key = format!("{provider:?}\0{session_id}\0{turn}\0{kind:?}");
-        Uuid::new_v5(&EVENT_NAMESPACE, key.as_bytes())
-    });
+    // The hook client never retries. A fresh identifier per delivered lifecycle
+    // signal avoids collapsing distinct events that share a provider turn and
+    // resulting state, such as UserPromptSubmit and PostToolUse.
+    let event_id = uuid::Uuid::new_v4();
     let mut labels = BTreeMap::new();
     labels.insert("source_event".to_owned(), source_event.to_owned());
     if let Some(turn) = turn_id {
@@ -175,6 +172,35 @@ mod tests {
         assert!(!encoded.contains("command"));
         assert!(!encoded.contains("allow"));
         assert!(!encoded.contains("deny"));
+        Ok(())
+    }
+
+    #[test]
+    fn same_turn_lifecycle_signals_receive_distinct_event_ids() -> anyhow::Result<()> {
+        let initial = normalize(
+            Provider::Claude,
+            None,
+            &json!({
+                "session_id": "claude-1",
+                "turn_id": "turn-1",
+                "hook_event_name": "UserPromptSubmit"
+            }),
+        )?
+        .ok_or_else(|| anyhow::anyhow!("event ignored"))?;
+        let resumed = normalize(
+            Provider::Claude,
+            None,
+            &json!({
+                "session_id": "claude-1",
+                "turn_id": "turn-1",
+                "hook_event_name": "PostToolUse"
+            }),
+        )?
+        .ok_or_else(|| anyhow::anyhow!("event ignored"))?;
+
+        assert_eq!(initial.kind, EventKind::Working);
+        assert_eq!(resumed.kind, EventKind::Working);
+        assert_ne!(initial.event_id, resumed.event_id);
         Ok(())
     }
 
