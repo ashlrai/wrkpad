@@ -101,9 +101,9 @@ export default function NativeControlCheck({ receipt, busy, error, onSave }: { r
       <b>Put the board on the native wired route first</b>
       <ol>
         <li>On Creator Micro 2 Pro, hold the bottom-left touch sensor for three seconds, then tap through the channels to the fourth <strong>WIRED</strong> mode. Its underglow is white; let the selector exit after five seconds without touching it.</li>
-        <li>A numeric <strong>Layer 1</strong> indicator identifies only a layer position—not its bindings. In verified Work Louder Input, manually confirm that the intended existing layer contains the native <strong>KV_OAI_*</strong> controls before using short taps to select it.</li>
-        <li>If those native bindings are absent or unverified, export a backup, then use Input’s manual <strong>Import layer</strong>. Drag <strong>Codex Native Recovery</strong> to the first visible position so its badge is 1; Ashlr Daily becomes badge 2. Wait for <strong>Layout updated</strong>, then export and verify again.</li>
-        <li>A native layer found elsewhere in an export is not sufficient. Confirm first position yourself, quit Input, Command-Q and reopen ChatGPT Desktop, then complete this physical check. Never use Reset settings or let Agent Board automate the import, reorder, or device write.</li>
+        <li>A numeric <strong>Layer 1</strong> indicator identifies only a position—not its bindings. If native controls are absent or uncertain, stop; do not import into or alter the existing profile.</li>
+        <li>Before recovery, require Setup to show verified Input integrity and preserve rollback exports. Follow <strong>app/docs/codex-native-layer-recovery.md</strong> for the new candidate profile, manual layer import and first-position reorder, post-import export verification, and human activation.</li>
+        <li>Return only after the candidate’s first-position content is verified and you activated it yourself. Quit Input, Command-Q and reopen ChatGPT Desktop, then complete this physical check. Never use Reset settings or let Agent Board import, reorder, activate, or write the device.</li>
       </ol>
       <p><ShieldCheck size={13} /> White underglow proves only firmware-selected wired mode. A layer number, Connected, and Granted still do not prove native binding content or that Codex consumed a press.</p>
     </div>

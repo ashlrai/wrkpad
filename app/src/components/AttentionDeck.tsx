@@ -81,18 +81,20 @@ export default function AttentionDeck({ agents, selectedSlot, source, boardRoute
       <div><span className="eyebrow">LIVE ATTENTION RUNWAY</span><h2 id="attention-title">Your agents, one stable map.</h2></div>
       <span className={`source-receipt ${source}`}>{source === 'observer_online' ? 'SESSION FEED LIVE' : source === 'invalid' ? 'SESSION FEED INVALID' : 'SESSION FEED UNAVAILABLE'}</span>
     </div>
-    <div className={`provider-contract route-${boardRoute}`} role="note">
-      <strong>{boardRoute === 'ashlr_layer' ? 'Unified physical map' : boardRoute === 'codex_native' ? 'Mixed screen map · Codex-only physical route' : 'Mixed screen map · physical route undeclared'}</strong>
-      <span>{boardRoute === 'ashlr_layer'
-        ? 'AG00–AG05 keep the same mixed Codex + Claude Code slots in every workflow lens.'
-        : boardRoute === 'codex_native'
-          ? 'These screen slots remain mixed, but physical AG00–AG05 are owned by Codex. Choose Ashlr Layer for shared physical semantics.'
-          : 'Declare Ashlr Layer for shared physical semantics; the screen runway remains usable without remapping slots.'}</span>
-    </div>
-    <div className="provider-lens-row">
-      <span>Optional screen lens · slots never reorder</span>
-      <div role="group" aria-label="Agent provider screen lens">
-        {([['mixed', 'Mixed'], ['codex', 'Codex'], ['claude', 'Claude']] as Array<[ProviderLens, string]>).map(([id, label]) => <button type="button" key={id} aria-pressed={providerLens === id} onClick={() => setProviderLens(id)}>{label}</button>)}
+    <div className="provider-routing-row">
+      <div className={`provider-contract route-${boardRoute}`} role="note">
+        <strong>{boardRoute === 'ashlr_layer' ? 'Unified physical map' : boardRoute === 'codex_native' ? 'Mixed screen map · Codex-only physical route' : 'Mixed screen map · physical route undeclared'}</strong>
+        <span>{boardRoute === 'ashlr_layer'
+          ? 'AG00–AG05 keep the same mixed Codex + Claude Code slots in every workflow lens.'
+          : boardRoute === 'codex_native'
+            ? 'These screen slots remain mixed, but physical AG00–AG05 are owned by Codex. Choose Ashlr Layer for shared physical semantics.'
+            : 'Declare Ashlr Layer for shared physical semantics; the screen runway remains usable without remapping slots.'}</span>
+      </div>
+      <div className="provider-lens-row">
+        <span>Screen lens · slots stay fixed</span>
+        <div role="group" aria-label="Agent provider screen lens">
+          {([['mixed', 'Mixed'], ['codex', 'Codex'], ['claude', 'Claude']] as Array<[ProviderLens, string]>).map(([id, label]) => <button type="button" key={id} aria-pressed={providerLens === id} onClick={() => setProviderLens(id)}>{label}</button>)}
+        </div>
       </div>
     </div>
     <div className="slot-geometry">
