@@ -27,12 +27,18 @@ function routeOwnsShortcuts(route) {
   return route === ASHLR_LAYER_ROUTE || route === HYBRID_NATIVE_ROUTE
 }
 
+function routeAllowsShortcutDelivery(registeredRoute, currentRoute, inputApplication) {
+  if (registeredRoute !== currentRoute || !routeOwnsShortcuts(registeredRoute)) return false
+  return registeredRoute !== HYBRID_NATIVE_ROUTE || inputApplication?.status === 'not_running'
+}
+
 module.exports = {
   ASHLR_LAYER_ROUTE,
   ASHLR_LAYER_SIGNAL_IDS,
   CODEX_NATIVE_ROUTE,
   HYBRID_NATIVE_ROUTE,
   HYBRID_NATIVE_SIGNAL_IDS,
+  routeAllowsShortcutDelivery,
   routeOwnsShortcuts,
   shortcutSignalsForRoute,
 }

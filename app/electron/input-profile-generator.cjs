@@ -30,6 +30,18 @@ function keycodeCell(keycode) {
   return { keycode }
 }
 
+function exactKeycodeCells(cells, expected) {
+  return Array.isArray(cells)
+    && cells.length === expected.length
+    && cells.every((cell, index) => hasExactKeys(cell, ['keycode']) && cell.keycode === expected[index])
+}
+
+function exactKeycodeRows(rows, expected) {
+  return Array.isArray(rows)
+    && rows.length === expected.length
+    && rows.every((row, index) => exactKeycodeCells(row, expected[index]))
+}
+
 /**
  * Build Work Louder Input's layer-import envelope, not the on-device
  * keymap.json format. This is an unofficial interoperability artifact derived
@@ -64,11 +76,8 @@ function layerHasExactCodexNativeLayout(layer) {
   if (!Array.isArray(layer.layout.joystick.sectors) || layer.layout.joystick.sectors.length !== 0) return false
   const rows = layer.layout.base
   const encoder = layer.layout.encoders?.[0]
-  if (!Array.isArray(rows) || rows.length !== CODEX_NATIVE_KEYMAP.length || !Array.isArray(encoder)) return false
-  const rowKeycodes = rows.map((row) => Array.isArray(row) ? row.map((cell) => cell?.keycode) : null)
-  const encoderKeycodes = encoder.map((cell) => cell?.keycode)
-  return JSON.stringify(rowKeycodes) === JSON.stringify(CODEX_NATIVE_KEYMAP)
-    && JSON.stringify(encoderKeycodes) === JSON.stringify(CODEX_NATIVE_ENCODER)
+  return exactKeycodeRows(rows, CODEX_NATIVE_KEYMAP)
+    && exactKeycodeCells(encoder, CODEX_NATIVE_ENCODER)
 }
 
 function hasExactKeys(value, keys) {
@@ -218,16 +227,16 @@ function generateInputProfile(source, variant = 'daily') {
 
 function layerHasExactAshlrDailyLayout(layer) {
   if (!layer || layer.name !== 'Ashlr Daily' || layer.os !== 0 || layer.layout?.joystick?.type !== 'RADIAL') return false
-  const base = layer.layout.base?.map((row) => Array.isArray(row) ? row.map((cell) => cell?.keycode) : null)
-  const encoders = layer.layout.encoders?.[0]?.map((cell) => cell?.keycode)
+  const base = layer.layout.base
+  const encoders = layer.layout.encoders?.[0]
   const sectors = layer.layout.joystick.sectors
-  return JSON.stringify(base) === JSON.stringify([
+  return exactKeycodeRows(base, [
     ['KA_0', 'KA_1'],
     ['KA_2', 'KA_3', 'KA_4', 'KA_5'],
     ['KA_6', 'KA_7', 'KA_8', 'KA_9'],
     ['KA_10', 'KA_11', 'KA_12'],
   ])
-    && JSON.stringify(encoders) === JSON.stringify(['KA_18', 'KA_17', 'KA_19'])
+    && exactKeycodeCells(encoders, ['KA_18', 'KA_17', 'KA_19'])
     && JSON.stringify(sectors) === JSON.stringify([
       { k: 'KA_15', a1: 0.1875, a2: 0.3125 }, { k: 'KC_NONE', a1: 0.3125, a2: 0.4375 },
       { k: 'KA_16', a1: 0.4375, a2: 0.5625 }, { k: 'KC_NONE', a1: 0.5625, a2: 0.6875 },
@@ -313,16 +322,16 @@ function generateHybridNativeInputProfile(source) {
 
 function layerHasExactHybridNativeLayout(layer) {
   if (!layer || layer.name !== HYBRID_NATIVE_LAYER_NAME || layer.os !== 0 || layer.layout?.joystick?.type !== 'RADIAL') return false
-  const base = layer.layout.base?.map((row) => Array.isArray(row) ? row.map((cell) => cell?.keycode) : null)
-  const encoders = layer.layout.encoders?.[0]?.map((cell) => cell?.keycode)
+  const base = layer.layout.base
+  const encoders = layer.layout.encoders?.[0]
   const sectors = layer.layout.joystick.sectors
-  return JSON.stringify(base) === JSON.stringify([
+  return exactKeycodeRows(base, [
     ['KV_OAI_AG00', 'KV_OAI_AG01'],
     ['KV_OAI_AG02', 'KV_OAI_AG03', 'KV_OAI_AG04', 'KV_OAI_AG05'],
     ['KA_6', 'KA_7', 'KA_8', 'KA_9'],
     ['KA_10', 'KA_11', 'KA_12'],
   ])
-    && JSON.stringify(encoders) === JSON.stringify(['KA_18', 'KA_17', 'KA_19'])
+    && exactKeycodeCells(encoders, ['KA_18', 'KA_17', 'KA_19'])
     && JSON.stringify(sectors) === JSON.stringify([
       { k: 'KA_15', a1: 0.1875, a2: 0.3125 }, { k: 'KC_NONE', a1: 0.3125, a2: 0.4375 },
       { k: 'KA_16', a1: 0.4375, a2: 0.5625 }, { k: 'KC_NONE', a1: 0.5625, a2: 0.6875 },

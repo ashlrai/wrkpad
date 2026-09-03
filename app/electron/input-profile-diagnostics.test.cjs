@@ -166,6 +166,11 @@ test('recognizes only the exact mixed Hybrid Native ownership surface', () => {
     macros: taps.map((tap, index) => macro(index + 1, tap)),
   }
   assert.equal(classifyInputKeymap(raw).configuredLayers[0].mapping, 'hybrid_native')
+  const malformedGeometry = structuredClone(raw)
+  malformedGeometry.profiles[0].layers[0].layout.keymap = [
+    malformedGeometry.profiles[0].layers[0].layout.keymap.flat(),
+  ]
+  assert.equal(classifyInputKeymap(malformedGeometry).configuredLayers[0].mapping, 'unknown')
   raw.profiles[0].layers[0].layout.keymap[0][0] = 'KA_A1'
   assert.equal(classifyInputKeymap(raw).configuredLayers[0].mapping, 'unknown')
 })

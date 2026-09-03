@@ -32,7 +32,7 @@ const { appForProvider, collectMissionControl } = require('./mission-control.cjs
 const { configuredRendererUrl, trustedRendererUrl } = require('./renderer-trust.cjs')
 const { appSettingsPath, readWorkspaceSettings, saveBoardRouteSettings, saveWorkspaceSettings, validBoardRoute } = require('./settings.cjs')
 const { passiveRouteActionResult, routeAllowsConfiguredActions } = require('./action-route-policy.cjs')
-const { routeOwnsShortcuts, shortcutSignalsForRoute } = require('./board-route-policy.cjs')
+const { routeAllowsShortcutDelivery, routeOwnsShortcuts, shortcutSignalsForRoute } = require('./board-route-policy.cjs')
 const { createShortcutCallbackGuard, createShortcutOwnershipController } = require('./shortcut-ownership.cjs')
 const { resolveTool } = require('./tool-resolver.cjs')
 
@@ -281,14 +281,30 @@ function registerShortcuts(boardRoute) {
     const accelerator = HOTKEYS[control]
     if (typeof accelerator !== 'string') throw new Error('Shortcut route contains an unknown signal')
     const registered = globalShortcut.register(accelerator, shortcutCallbackGuard.bind(() => {
+      let deliveryAllowed = false
+      try {
+        const currentRoute = readSettings().boardRoute
+        const inputApplication = boardRoute === 'hybrid_native' ? inspectInputApplicationRuntime() : null
+        deliveryAllowed = routeAllowsShortcutDelivery(boardRoute, currentRoute, inputApplication)
+      } catch {}
+      if (!deliveryAllowed) {
+        shortcutCallbackGuard.invalidate()
+        try { synchronizeShortcutOwnership('unknown') } catch {
+          shortcutRegistrations = []
+          try { globalShortcut.unregisterAll() } catch {}
+          resetFlightState()
+          approvals.clear()
+        }
+        return
+      }
       const envelope = {
-      schemaVersion: 1,
-      sequence: ++signalSequence,
-      signalId: control,
-      source: 'global-shortcut',
-      accelerator,
-      receivedAt: new Date().toISOString(),
-      monotonicNs: process.hrtime.bigint().toString(),
+        schemaVersion: 1,
+        sequence: ++signalSequence,
+        signalId: control,
+        source: 'global-shortcut',
+        accelerator,
+        receivedAt: new Date().toISOString(),
+        monotonicNs: process.hrtime.bigint().toString(),
       }
       flightSession.record(envelope)
       mainWindow?.webContents.send('board:control', envelope)

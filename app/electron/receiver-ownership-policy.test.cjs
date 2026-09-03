@@ -16,6 +16,7 @@ test('main synchronizes receiver ownership before registering shortcuts', () => 
   assert.match(source, /function synchronizeShortcutOwnership\(boardRoute\)/)
   assert.match(source, /unregisterAll: \(\) => globalShortcut\.unregisterAll\(\)/)
   assert.match(source, /for \(const control of shortcutSignalsForRoute\(boardRoute\)\)[\s\S]*globalShortcut\.register\(accelerator, shortcutCallbackGuard\.bind\(\(\) => \{[\s\S]*flightSession\.record\(envelope\)[\s\S]*webContents\.send\('board:control', envelope\)/)
+  assert.match(source, /inputApplication = boardRoute === 'hybrid_native' \? inspectInputApplicationRuntime\(\) : null[\s\S]*routeAllowsShortcutDelivery\(boardRoute, currentRoute, inputApplication\)[\s\S]*if \(!deliveryAllowed\) \{[\s\S]*shortcutCallbackGuard\.invalidate\(\)[\s\S]*synchronizeShortcutOwnership\('unknown'\)/)
   assert.match(source, /if \(!routeOwnsShortcuts\(boardRoute\)\) shortcutCallbackGuard\.invalidate\(\)/)
   assert.match(source, /boardRoute !== 'hybrid_native' \|\| runtime\?\.inputApplication\?\.status === 'not_running'/)
   assert.match(source, /catch \(error\) \{[\s\S]*shortcutRegistrations = \[\][\s\S]*shortcutCallbackGuard\.invalidate\(\)[\s\S]*throw error/)

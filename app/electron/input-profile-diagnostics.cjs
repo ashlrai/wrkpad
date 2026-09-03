@@ -20,16 +20,22 @@ function unavailable(cacheStatus) {
 }
 
 const EXPECTED_DAILY_BASE_KEYS = Object.freeze([
-  'KC_1', 'KC_2', 'KC_3', 'KC_4', 'KC_5', 'KC_6',
-  'KC_A', 'KC_B', 'KC_C', 'KC_D', 'KC_E', 'KC_F', 'KC_G',
+  Object.freeze(['KC_1', 'KC_2']),
+  Object.freeze(['KC_3', 'KC_4', 'KC_5', 'KC_6']),
+  Object.freeze(['KC_A', 'KC_B', 'KC_C', 'KC_D']),
+  Object.freeze(['KC_E', 'KC_F', 'KC_G']),
 ])
 const EXPECTED_NATIVE_BASE_KEYS = Object.freeze([
-  'KV_OAI_AG00', 'KV_OAI_AG01', 'KV_OAI_AG02', 'KV_OAI_AG03', 'KV_OAI_AG04', 'KV_OAI_AG05',
-  'KV_OAI_ACT06', 'KV_OAI_ACT07', 'KV_OAI_ACT08', 'KV_OAI_ACT09', 'KV_OAI_ACT10', 'KV_OAI_ACT11', 'KV_OAI_ACT12',
+  Object.freeze(['KV_OAI_AG00', 'KV_OAI_AG01']),
+  Object.freeze(['KV_OAI_AG02', 'KV_OAI_AG03', 'KV_OAI_AG04', 'KV_OAI_AG05']),
+  Object.freeze(['KV_OAI_ACT06', 'KV_OAI_ACT07', 'KV_OAI_ACT08', 'KV_OAI_ACT09']),
+  Object.freeze(['KV_OAI_ACT10', 'KV_OAI_ACT11', 'KV_OAI_ACT12']),
 ])
 const EXPECTED_HYBRID_BASE_KEYS = Object.freeze([
-  'KV_OAI_AG00', 'KV_OAI_AG01', 'KV_OAI_AG02', 'KV_OAI_AG03', 'KV_OAI_AG04', 'KV_OAI_AG05',
-  'KC_A', 'KC_B', 'KC_C', 'KC_D', 'KC_E', 'KC_F', 'KC_G',
+  Object.freeze(['KV_OAI_AG00', 'KV_OAI_AG01']),
+  Object.freeze(['KV_OAI_AG02', 'KV_OAI_AG03', 'KV_OAI_AG04', 'KV_OAI_AG05']),
+  Object.freeze(['KC_A', 'KC_B', 'KC_C', 'KC_D']),
+  Object.freeze(['KC_E', 'KC_F', 'KC_G']),
 ])
 const EXPECTED_NATIVE_ENCODER_KEYS = Object.freeze(['KV_OAI_ENC_CC', 'KV_OAI_ENC_CW', 'KV_OAI_ENC_CLK'])
 const EXPECTED_DAILY_JOYSTICK = Object.freeze([
@@ -46,13 +52,12 @@ function referencedKeycode(value) {
 function classifyLayer(layer, macros) {
   const name = sanitizeLabel(layer?.name)
   const rawBase = Array.isArray(layer?.layout?.base) ? layer.layout.base : layer?.layout?.keymap
-  const base = Array.isArray(rawBase) ? rawBase.flat() : []
-  const resolvedBase = base.map((cell) => {
+  const resolvedBase = Array.isArray(rawBase) ? rawBase.map((row) => Array.isArray(row) ? row.map((cell) => {
     const reference = referencedKeycode(cell)
     if (typeof reference !== 'string') return null
     if (reference.startsWith('KV_OAI_')) return reference
     return macroTapKey(macroForReference(reference, macros))
-  })
+  }) : null) : []
   const encoder = layer?.layout?.encoders?.[0]
   const encoderDirection = classifyEncoderDirection(encoder, macros)
   const encoderKeycodes = Array.isArray(encoder) ? encoder.map(referencedKeycode) : []

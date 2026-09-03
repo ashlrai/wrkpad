@@ -192,6 +192,8 @@ test('hybrid-native verifier rejects changed native, shortcut, motion, and owner
     (value) => { value.profile.layers[1].layout.base[0][0].keycode = 'KV_OAI_AG00' },
     (value) => { value.profile.layers[1].color = '#123456' },
     (value) => { value.actions[6].keyInputs[3].keycode = 'KC_Z' },
+    (value) => { value.profile.layers[0].layout.base[0][0].unexpected = { command: 'not-allowed' } },
+    (value) => { value.profile.layers[0].layout.encoders[0][0].unexpected = true },
     (value) => { value.linkedApps = [] },
     (value) => { value.smartActions = [{ id: 1 }] },
     (value) => { value.profile.layers[0].lights.backlight.color = '#123456' },

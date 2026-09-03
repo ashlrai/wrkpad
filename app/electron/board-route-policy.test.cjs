@@ -3,6 +3,7 @@ const assert = require('node:assert/strict')
 const {
   ASHLR_LAYER_SIGNAL_IDS,
   HYBRID_NATIVE_SIGNAL_IDS,
+  routeAllowsShortcutDelivery,
   routeOwnsShortcuts,
   shortcutSignalsForRoute,
 } = require('./board-route-policy.cjs')
@@ -15,6 +16,17 @@ test('Hybrid Native owns exactly the fourteen non-Agent controls in Flight order
   ])
   assert.equal(HYBRID_NATIVE_SIGNAL_IDS.length, 14)
   assert.equal(HYBRID_NATIVE_SIGNAL_IDS.some((signal) => signal.startsWith('agent')), false)
+})
+
+test('shortcut delivery revalidates the route and Hybrid Input isolation', () => {
+  assert.equal(routeAllowsShortcutDelivery('ashlr_layer', 'ashlr_layer', null), true)
+  assert.equal(routeAllowsShortcutDelivery('hybrid_native', 'hybrid_native', { status: 'not_running' }), true)
+  for (const inputApplication of [{ status: 'running' }, { status: 'unavailable' }, null]) {
+    assert.equal(routeAllowsShortcutDelivery('hybrid_native', 'hybrid_native', inputApplication), false)
+  }
+  assert.equal(routeAllowsShortcutDelivery('hybrid_native', 'ashlr_layer', { status: 'not_running' }), false)
+  assert.equal(routeAllowsShortcutDelivery('ashlr_layer', 'hybrid_native', null), false)
+  assert.equal(routeAllowsShortcutDelivery('codex_native', 'codex_native', null), false)
 })
 
 test('route shortcut plans are explicit, immutable, and fail closed', () => {
