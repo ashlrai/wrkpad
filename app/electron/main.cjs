@@ -15,6 +15,7 @@ const { inspectInputProfile } = require('./input-profile-diagnostics.cjs')
 const { inspectInputRuntime } = require('./input-runtime-diagnostics.cjs')
 const { createCachedAsarHasher, inspectPackagedReceiverPeers, inspectReceiverRuntime, shouldRegisterShortcuts } = require('./receiver-runtime-diagnostics.cjs')
 const { createCmuxFocusAdapter } = require('./cmux-focus-adapter.cjs')
+const { hasFreshExactDualPlaneAshlrAttestation } = require('./dual-plane-attestation.cjs')
 const { writeGeneratedProfile } = require('./input-profile-generator.cjs')
 const { buildRecoveryChecklist, observeRecoveryArtifact, readRecoveryReceipt, recoveryChecklistText, recoveryReceiptPath, removeRecoveryReceipt, writeRecoveryReceipt } = require('./recovery-receipt.cjs')
 const { acceptNativeAcceptance, evaluateNativeAcceptance, prepareNativeAcceptance, readNativeAcceptanceReceipt, removeNativeAcceptanceReceipt, stageNativeAcceptance, writeNativeAcceptanceReceipt } = require('./native-acceptance-receipt.cjs')
@@ -45,10 +46,18 @@ let missionCache = null; let missionCacheAt = 0; let missionInFlight = null
 const approvals = new Map()
 const flightSession = createFlightSession()
 const flightOperations = createFlightOperationCoordinator(flightSession)
+let activeFlightAdmission = null
+let flightAdmissionMutation = 0
 const cachedReceiverAsarHash = createCachedAsarHasher({ ttlMs: 30_000, maxEntries: 32 })
 const inspectInputInstallationAsync = createInputInstallationInspector()
 const shortcutCallbackGuard = createShortcutCallbackGuard()
 const cmuxFocusAdapter = createCmuxFocusAdapter({ foreground: () => openFixedApp('cmux') })
+
+function resetFlightState() {
+  flightAdmissionMutation += 1
+  activeFlightAdmission = null
+  flightOperations.reset()
+}
 
 function settingsPath() { return appSettingsPath(app.getPath('appData')) }
 function compactSettingsPath() { return path.join(path.dirname(settingsPath()), 'compact-deck.json') }
@@ -138,7 +147,7 @@ function createWindow() {
   mainWindow.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false))
   mainWindow.loadURL(rendererUrl)
   mainWindow.on('closed', () => {
-    flightOperations.reset()
+    resetFlightState()
     approvals.clear()
     mainWindow = null
   })
@@ -337,7 +346,7 @@ const shortcutOwnership = createShortcutOwnershipController({
   inspectRuntime: inspectCurrentReceiverRuntime,
   registerShortcuts,
   registrationsAreActive,
-  resetFlight: () => flightOperations.reset(),
+  resetFlight: resetFlightState,
   runtimeOwnsShortcuts: receiverOwnsShortcuts,
   shortcutsAreReleased,
   unregisterAll: () => globalShortcut.unregisterAll(),
@@ -385,7 +394,7 @@ function inspectCurrentInputInstallation(force = false) {
   return inspectInputInstallationAsync({ home: app.getPath('home'), force })
 }
 
-async function verifyFlightGates(variant, forceInput = true) {
+async function verifyFlightGates(variant, forceInput = true, dualPlaneAshlrLayerSelected = false) {
   const home = app.getPath('home')
   const inputInstallation = await inspectCurrentInputInstallation(forceInput)
   const board = await boardConnected()
@@ -396,6 +405,7 @@ async function verifyFlightGates(variant, forceInput = true) {
   const currentReceiverRuntime = synchronizeShortcutOwnership(settings.boardRoute).runtime
   return evaluateFlightGates({
     variant,
+    dualPlaneAshlrLayerSelected: dualPlaneAshlrLayerSelected === true,
     boardRoute: settings.boardRoute,
     usbDetected: Boolean(board),
     inputInstallation,
@@ -404,6 +414,27 @@ async function verifyFlightGates(variant, forceInput = true) {
     shortcutRegistrations,
     expectedSignals: Object.keys(HOTKEYS),
   })
+}
+
+function inputProfileFingerprint(admission) {
+  const profile = admission?.evidence?.inputProfile
+  if (!profile || typeof profile !== 'object') return null
+  return JSON.stringify({
+    activeProfile: profile.activeProfile,
+    activeLayer: profile.activeLayer,
+    encoderDirection: profile.encoderDirection,
+    configuredLayers: profile.configuredLayers,
+  })
+}
+
+async function verifyBoundFlightGates(variant) {
+  const bound = activeFlightAdmission
+  if (!bound || bound.variant !== variant) throw new Error('Flight admission is not bound to this run')
+  const admission = await verifyFlightGates(variant, true, bound.dualPlaneAshlrLayerSelected)
+  if (admission.ready !== true || inputProfileFingerprint(admission) !== bound.inputProfileFingerprint) {
+    throw new Error('Flight admission identity changed')
+  }
+  return admission
 }
 
 async function missionControl(force = false) {
@@ -546,6 +577,8 @@ ipcMain.handle('board:setBoardRoute', trustedIpc((_event, boardRoute) => {
       if (shortcutState.released !== true) throw new Error('Shortcut release could not be verified')
     }
     saveBoardRoute(boardRoute)
+    flightAdmissionMutation += 1
+    activeFlightAdmission = null
     if (boardRoute === 'ashlr_layer') synchronizeShortcutOwnership(boardRoute)
     return boardRoute
   })
@@ -599,15 +632,42 @@ ipcMain.handle('compact:hide', trustedCompactIpc(() => {
   return { ok: true }
 }))
 ipcMain.handle('board:setProfile', trustedIpc((_event, profile) => { if (PROFILE_IDS.has(profile)) currentProfile = profile; return currentProfile }))
-ipcMain.handle('board:setFlightCheck', trustedIpc(async (_event, active, variant) => {
+ipcMain.handle('board:setFlightCheck', trustedIpc(async (_event, active, variant, attestation) => {
+  const mutation = ++flightAdmissionMutation
+  const dualPlaneAshlrLayerSelected = active === true && hasFreshExactDualPlaneAshlrAttestation(attestation)
+  let admission = null
   const state = active === true
-    ? await flightOperations.start(() => verifyFlightGates(variant, true))
+    ? await flightOperations.start(async () => {
+      admission = await verifyFlightGates(variant, true, dualPlaneAshlrLayerSelected)
+      return admission
+    })
     : flightOperations.stop()
+  if (mutation === flightAdmissionMutation) {
+    activeFlightAdmission = state.acknowledged && state.active && admission?.ready === true
+      ? {
+          variant,
+          startedAt: state.startedAt,
+          attestedAt: dualPlaneAshlrLayerSelected ? attestation.attestedAt : null,
+          dualPlaneAshlrLayerSelected,
+          inputProfileFingerprint: inputProfileFingerprint(admission),
+        }
+      : null
+  }
   if (state.acknowledged && state.active) approvals.clear()
   return state
 }))
 ipcMain.handle('board:restartFlightCheck', trustedIpc(async (_event, variant) => {
-  const state = await flightOperations.restart(() => verifyFlightGates(variant, true))
+  const mutation = ++flightAdmissionMutation
+  const prior = activeFlightAdmission
+  if (prior?.dualPlaneAshlrLayerSelected) {
+    throw new Error('End the check, re-establish native layer 1, move exactly once to Ashlr layer 2, and provide a fresh attestation')
+  }
+  const state = await flightOperations.restart(() => verifyBoundFlightGates(variant))
+  if (mutation === flightAdmissionMutation) {
+    activeFlightAdmission = state.acknowledged && state.active && prior
+      ? { ...prior, startedAt: state.startedAt }
+      : null
+  }
   if (state.acknowledged && state.active) approvals.clear()
   return state
 }))
@@ -712,7 +772,7 @@ ipcMain.handle('board:saveFlightReceipt', trustedIpc(async (_event, receipt) => 
   const suggestedName = `ashlr-agent-board-flight-check-${new Date().toISOString().replace(/[:.]/g, '-')}.json`
   return saveBoundFlightReceipt({
     coordinator: flightOperations,
-    verifyGates: () => verifyFlightGates(variant, true),
+    verifyGates: () => verifyBoundFlightGates(variant),
     chooseDestination: async () => {
       const result = await dialog.showSaveDialog(mainWindow, { title: 'Save Flight Check receipt', defaultPath: path.join(app.getPath('documents'), suggestedName), filters: [{ name: 'JSON receipt', extensions: ['json'] }] })
       return result.canceled || !result.filePath ? null : result.filePath
@@ -731,7 +791,15 @@ ipcMain.handle('board:saveFlightReceipt', trustedIpc(async (_event, receipt) => 
         exportedAt: new Date().toISOString(),
         appVersion: app.getVersion(),
         device: { expectedName: 'Creator Micro 2', usbDetected },
-        configuration: { registrations: shortcutRegistrations, registeredCount, admission: admission.evidence, gates: admission.gates },
+        configuration: {
+          registrations: shortcutRegistrations,
+          registeredCount,
+          admission: admission.evidence,
+          gates: admission.gates,
+          dualPlaneLayerAttestation: activeFlightAdmission?.dualPlaneAshlrLayerSelected
+            ? { source: 'operator', attestedAt: activeFlightAdmission.attestedAt }
+            : null,
+        },
         evaluation,
         rawEvents: flight.rawEvents,
         disclaimer: 'Operator-guided global-shortcut receipt; not a cryptographic device-identity attestation.',
@@ -832,7 +900,7 @@ if (!hasSingleInstanceLock) {
     stopCompactSnapshotFeed()
     if (compactBoundsTimer) clearTimeout(compactBoundsTimer)
     compactBoundsTimer = null
-    flightOperations.reset()
+    resetFlightState()
     globalShortcut.unregisterAll()
   })
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })

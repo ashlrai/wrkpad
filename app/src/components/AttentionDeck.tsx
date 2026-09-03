@@ -101,7 +101,7 @@ export default function AttentionDeck({ agents, selectedSlot, source, boardRoute
       <div className="slot-row top"><span className="slot-anchor" aria-hidden="true">DIAL</span>{slots.slice(0, 2).map((agent) => <Slot key={agent.slot} agent={agent} selected={agent.slot === selectedSlot} outsideLens={outsideLens(agent)} onSelect={onSelect} onFocus={onFocus} />)}<span className="slot-anchor" aria-hidden="true">STICK</span></div>
       <div className="slot-row bottom">{slots.slice(2).map((agent) => <Slot key={agent.slot} agent={agent} selected={agent.slot === selectedSlot} outsideLens={outsideLens(agent)} onSelect={onSelect} onFocus={onFocus} />)}</div>
     </div>
-    <p className="appsense-handoff"><strong>AppSense handoff:</strong> an occupied slot uses observed provider metadata to foreground ChatGPT or cmux. Exact Codex task focus is unavailable; cmux pane focus is upgradeable only after capability negotiation and human-enabled access. No prompt, terminal input, or key is sent.</p>
+    <p className="appsense-handoff"><strong>Provider handoff:</strong> an occupied slot uses observed provider metadata to foreground ChatGPT or cmux. Exact Codex task focus is unavailable; cmux pane focus is upgradeable only after capability negotiation and human-enabled access. No prompt, terminal input, or key is sent.</p>
     <div className="screen-legend" aria-label="Agent state legend for opaque keycaps">
       <span className="legend-title">BLACK-CAP LEGEND</span>
       {agentStateLegendOrder.map((state) => <span key={state}><i className={agentStateClassName(state)} />{agentStateLabels[state]}</span>)}

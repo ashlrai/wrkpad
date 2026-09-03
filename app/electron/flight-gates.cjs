@@ -5,6 +5,30 @@ const EXPECTED_PROFILE = Object.freeze({
   diagnostic: Object.freeze({ profile: 'Ashlr Flight Check Corrected - diagnostic', layer: 'Ashlr Diagnostic' }),
 })
 
+const DUAL_PLANE_PROFILE = 'Ashlr Dual Plane (UNOFFICIAL)'
+
+function exactDualPlaneLayers(layers) {
+  return Array.isArray(layers)
+    && layers.length === 2
+    && layers[0]?.name === 'Codex Native Recovery (UNOFFICIAL)'
+    && layers[0]?.mapping === 'codex_native'
+    && layers[1]?.name === 'Ashlr Daily'
+    && layers[1]?.mapping === 'ashlr_daily'
+    && layers[1]?.encoderDirection === 'correct'
+}
+
+function profileReady(profile, variant, expected, dualPlaneAshlrLayerSelected) {
+  if (!expected || profile?.cacheStatus !== 'available') return false
+  if (profile.activeProfile === expected.profile
+    && profile.activeLayer === expected.layer
+    && profile.encoderDirection === 'correct') return true
+  return variant === 'daily'
+    && dualPlaneAshlrLayerSelected === true
+    && profile.activeProfile === DUAL_PLANE_PROFILE
+    && profile.activeLayer === null
+    && exactDualPlaneLayers(profile.configuredLayers)
+}
+
 function validVersion(value) {
   return typeof value === 'string' && /^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$/.test(value)
 }
@@ -34,11 +58,7 @@ function evaluateFlightGates(evidence) {
     route: evidence?.boardRoute === 'ashlr_layer',
     usb: evidence?.usbDetected === true,
     input: input?.status === 'verified' && validVersion(input?.version),
-    profile: Boolean(expected)
-      && profile?.cacheStatus === 'available'
-      && profile?.activeProfile === expected.profile
-      && profile?.activeLayer === expected.layer
-      && profile?.encoderDirection === 'correct',
+    profile: profileReady(profile, variant, expected, evidence?.dualPlaneAshlrLayerSelected),
     receiver: receiver?.status === 'exclusive'
       && receiver?.instanceCount === 1
       && receiver?.distinctBuildCount === 1,
@@ -50,6 +70,7 @@ function evaluateFlightGates(evidence) {
     gates,
     evidence: {
       boardRoute: typeof evidence?.boardRoute === 'string' ? evidence.boardRoute : 'unknown',
+      dualPlaneAshlrLayerSelected: evidence?.dualPlaneAshlrLayerSelected === true,
       usbDetected: evidence?.usbDetected === true,
       inputInstallation: {
         status: typeof input?.status === 'string' ? input.status : 'probe_unavailable',
@@ -60,6 +81,13 @@ function evaluateFlightGates(evidence) {
         activeProfile: typeof profile?.activeProfile === 'string' ? profile.activeProfile : null,
         activeLayer: typeof profile?.activeLayer === 'string' ? profile.activeLayer : null,
         encoderDirection: typeof profile?.encoderDirection === 'string' ? profile.encoderDirection : 'unavailable',
+        configuredLayers: Array.isArray(profile?.configuredLayers)
+          ? profile.configuredLayers.slice(0, 6).map((layer) => ({
+            name: typeof layer?.name === 'string' ? layer.name : null,
+            mapping: ['ashlr_daily', 'codex_native', 'unknown'].includes(layer?.mapping) ? layer.mapping : 'unknown',
+            encoderDirection: typeof layer?.encoderDirection === 'string' ? layer.encoderDirection : 'unavailable',
+          }))
+          : [],
       },
       receiverRuntime: {
         status: typeof receiver?.status === 'string' ? receiver.status : 'unavailable',

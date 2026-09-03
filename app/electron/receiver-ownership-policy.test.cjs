@@ -26,9 +26,18 @@ test('startup and route switches apply the declared route before owning shortcut
 })
 
 test('main independently revalidates every Flight Check admission and receipt', () => {
-  assert.match(source, /async function verifyFlightGates\(variant, forceInput = true\)/)
-  assert.match(source, /verifyGates: \(\) => verifyFlightGates\(variant, true\)/)
-  assert.match(source, /configuration: \{ registrations: shortcutRegistrations, registeredCount, admission: admission\.evidence, gates: admission\.gates \}/)
+  assert.match(source, /async function verifyFlightGates\(variant, forceInput = true, dualPlaneAshlrLayerSelected = false\)/)
+  assert.match(source, /verifyGates: \(\) => verifyBoundFlightGates\(variant\)/)
+  assert.match(source, /configuration: \{\s*registrations: shortcutRegistrations,\s*registeredCount,\s*admission: admission\.evidence,\s*gates: admission\.gates,\s*dualPlaneLayerAttestation:/)
+})
+
+test('main wires the validated dual-plane attestation and profile binding into Flight Check', () => {
+  assert.match(source, /require\('\.\/dual-plane-attestation\.cjs'\)/)
+  assert.match(source, /inputProfileFingerprint: inputProfileFingerprint\(admission\)/)
+  assert.match(source, /inputProfileFingerprint\(admission\) !== bound\.inputProfileFingerprint/)
+  assert.match(source, /if \(prior\?\.dualPlaneAshlrLayerSelected\) \{[\s\S]*provide a fresh attestation/)
+  assert.match(source, /dualPlaneLayerAttestation: activeFlightAdmission\?\.dualPlaneAshlrLayerSelected[\s\S]*source: 'operator'[\s\S]*attestedAt: activeFlightAdmission\.attestedAt/)
+  assert.match(source, /ipcMain\.handle\('board:saveFlightReceipt',[\s\S]*?async \(_event, receipt\)/)
 })
 
 test('status IPC does not expose the local receiver executable path', () => {

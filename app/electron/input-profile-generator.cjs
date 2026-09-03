@@ -15,6 +15,7 @@ const DEFAULT_LIGHTS = Object.freeze({
 })
 
 const CODEX_NATIVE_RECOVERY_LAYER_NAME = 'Codex Native Recovery (UNOFFICIAL)'
+const DUAL_PLANE_PROFILE_NAME = 'Ashlr Dual Plane (UNOFFICIAL)'
 const CODEX_NATIVE_KEYMAP = Object.freeze([
   Object.freeze(['KV_OAI_AG00', 'KV_OAI_AG01']),
   Object.freeze(['KV_OAI_AG02', 'KV_OAI_AG03', 'KV_OAI_AG04', 'KV_OAI_AG05']),
@@ -66,6 +67,26 @@ function layerHasExactCodexNativeLayout(layer) {
   const encoderKeycodes = encoder.map((cell) => cell?.keycode)
   return JSON.stringify(rowKeycodes) === JSON.stringify(CODEX_NATIVE_KEYMAP)
     && JSON.stringify(encoderKeycodes) === JSON.stringify(CODEX_NATIVE_ENCODER)
+}
+
+function hasExactKeys(value, keys) {
+  return Boolean(value)
+    && typeof value === 'object'
+    && !Array.isArray(value)
+    && JSON.stringify(Object.keys(value).sort()) === JSON.stringify([...keys].sort())
+}
+
+function hasExactLights(lights) {
+  if (!hasExactKeys(lights, ['backlight', 'underglow'])) return false
+  return ['backlight', 'underglow'].every((channel) => {
+    const value = lights[channel]
+    if (!hasExactKeys(value, ['effect', 'brightness', 'speed', 'magic', 'color'])) return false
+    try {
+      return JSON.stringify(safeLights({ backlight: lights.backlight, underglow: lights.underglow })[channel]) === JSON.stringify(value)
+    } catch {
+      return false
+    }
+  })
 }
 
 function inspectCodexNativeRecovery(value) {
@@ -193,6 +214,129 @@ function generateInputProfile(source, variant = 'daily') {
   return profile
 }
 
+function layerHasExactAshlrDailyLayout(layer) {
+  if (!layer || layer.name !== 'Ashlr Daily' || layer.os !== 0 || layer.layout?.joystick?.type !== 'RADIAL') return false
+  const base = layer.layout.base?.map((row) => Array.isArray(row) ? row.map((cell) => cell?.keycode) : null)
+  const encoders = layer.layout.encoders?.[0]?.map((cell) => cell?.keycode)
+  const sectors = layer.layout.joystick.sectors
+  return JSON.stringify(base) === JSON.stringify([
+    ['KA_0', 'KA_1'],
+    ['KA_2', 'KA_3', 'KA_4', 'KA_5'],
+    ['KA_6', 'KA_7', 'KA_8', 'KA_9'],
+    ['KA_10', 'KA_11', 'KA_12'],
+  ])
+    && JSON.stringify(encoders) === JSON.stringify(['KA_18', 'KA_17', 'KA_19'])
+    && JSON.stringify(sectors) === JSON.stringify([
+      { k: 'KA_15', a1: 0.1875, a2: 0.3125 }, { k: 'KC_NONE', a1: 0.3125, a2: 0.4375 },
+      { k: 'KA_16', a1: 0.4375, a2: 0.5625 }, { k: 'KC_NONE', a1: 0.5625, a2: 0.6875 },
+      { k: 'KA_13', a1: 0.6875, a2: 0.8125 }, { k: 'KC_NONE', a1: 0.8125, a2: 0.9375 },
+      { k: 'KA_14', a1: 0.9375, a2: 0.0625 }, { k: 'KC_NONE', a1: 0.0625, a2: 0.1875 },
+    ])
+}
+
+function hasExactShortcutActions(actions) {
+  if (!Array.isArray(actions) || actions.length !== shortcutActions.length) return false
+  return shortcutActions.every(([name, keycode], id) => {
+    const action = actions[id]
+    return action?.id === id
+      && hasExactKeys(action, ['id', 'name', 'color', 'keyInputs'])
+      && action.name === `Ashlr ${name}`
+      && action.color === null
+      && Array.isArray(action.keyInputs)
+      && action.keyInputs.every((keyInput) => hasExactKeys(keyInput, ['keycode', 'delay', 'actionType']))
+      && JSON.stringify(action.keyInputs) === JSON.stringify([
+        { keycode: 'KC_LCTL', delay: 0, actionType: 1 },
+        { keycode: 'KC_LALT', delay: 0, actionType: 1 },
+        { keycode: 'KC_LGUI', delay: 0, actionType: 1 },
+        { keycode, delay: 0, actionType: 2 },
+        { keycode: 'KC_LGUI', delay: 0, actionType: 0 },
+        { keycode: 'KC_LALT', delay: 0, actionType: 0 },
+        { keycode: 'KC_LCTL', delay: 0, actionType: 0 },
+      ])
+  })
+}
+
+/**
+ * Build one bounded profile with Codex's protected native layout first and the
+ * provider-neutral Ashlr shortcut layout second. The touch surface remains the
+ * firmware-owned layer selector; this artifact does not add app links or write
+ * Input/device state.
+ */
+function generateDualPlaneInputProfile(source) {
+  const daily = generateInputProfile(source, 'daily')
+  if (daily.profile.layers[0].os !== 0) throw new Error('Dual Plane currently supports only a macOS source export')
+  const nativeLayer = structuredClone(generateCodexNativeRecoveryLayer().layer)
+  nativeLayer.id = 0
+  nativeLayer.lights = structuredClone(daily.profile.layers[0].lights)
+  const dailyLayer = structuredClone(daily.profile.layers[0])
+  dailyLayer.id = 1
+  return {
+    ...daily,
+    profile: {
+      id: 0,
+      name: DUAL_PLANE_PROFILE_NAME,
+      layers: [nativeLayer, dailyLayer],
+    },
+  }
+}
+
+function inspectDualPlaneInputProfile(value) {
+  if (!value || value.keyboard !== 'creator_micro_v2' || value.language !== 'us') {
+    return { status: 'mismatch', reason: 'expected_us_creator_micro_v2' }
+  }
+  if (!hasExactKeys(value, ['keyboard', 'language', 'profile', 'actions', 'actionGroups', 'multiactions', 'multiactionGroups', 'smartActions', 'smartActionGroups'])
+    || !hasExactKeys(value.profile, ['id', 'name', 'layers'])
+    || value.profile.id !== 0
+    || value.profile?.name !== DUAL_PLANE_PROFILE_NAME
+    || !Array.isArray(value.profile.layers)
+    || value.profile.layers.length !== 2) {
+    return { status: 'mismatch', reason: 'expected_exact_two_layer_profile' }
+  }
+  const [nativeLayer, dailyLayer] = value.profile.layers
+  if (!hasExactKeys(nativeLayer, ['id', 'name', 'color', 'layout', 'os', 'lights'])
+    || nativeLayer.id !== 0
+    || nativeLayer.name !== CODEX_NATIVE_RECOVERY_LAYER_NAME
+    || !hasExactKeys(nativeLayer.layout, ['base', 'encoders', 'joystick'])
+    || !hasExactLights(nativeLayer.lights)
+    || !layerHasExactCodexNativeLayout(nativeLayer)) {
+    return { status: 'mismatch', reason: 'native_layer_must_be_first' }
+  }
+  const exactActionGroups = JSON.stringify(value.actionGroups) === JSON.stringify([{ id: 0, name: 'Ashlr Agent Board', actionIds: shortcutActions.map((_, id) => id) }])
+  const exactEmptyGroups = JSON.stringify(value.multiactions) === '[]'
+    && JSON.stringify(value.smartActions) === '[]'
+    && JSON.stringify(value.multiactionGroups) === JSON.stringify([{ id: 0, name: 'Default', actionIds: [] }])
+    && JSON.stringify(value.smartActionGroups) === JSON.stringify([{ id: 0, name: 'Default', actionIds: [] }])
+  if (!hasExactKeys(dailyLayer, ['id', 'name', 'color', 'layout', 'os', 'lights'])
+    || dailyLayer.id !== 1
+    || !hasExactKeys(dailyLayer.layout, ['base', 'encoders', 'joystick'])
+    || !hasExactLights(dailyLayer.lights)
+    || JSON.stringify(nativeLayer.lights) !== JSON.stringify(dailyLayer.lights)
+    || !layerHasExactAshlrDailyLayout(dailyLayer)
+    || !hasExactShortcutActions(value.actions)
+    || !exactActionGroups
+    || !exactEmptyGroups) {
+    return { status: 'mismatch', reason: 'ashlr_daily_layer_missing_or_changed' }
+  }
+  return { status: 'match', reason: 'exact_dual_plane_profile' }
+}
+
+function writeGeneratedDualPlaneProfile(sourcePath, outputPath) {
+  const source = readSourceProfile(sourcePath)
+  const generated = generateDualPlaneInputProfile(source)
+  const output = `${JSON.stringify(generated, null, 2)}\n`
+  writeFileSync(outputPath, output, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+  return {
+    outputPath,
+    schema: 'work_louder_input_profile_import_unofficial',
+    sha256: createHash('sha256').update(output).digest('hex'),
+    layers: 2,
+    nativeLayer: 1,
+    sharedLayer: 2,
+    physicalGestures: 20,
+    mutatesInputOrDevice: false,
+  }
+}
+
 function readSourceProfile(sourcePath) {
   let descriptor
   try {
@@ -225,14 +369,19 @@ module.exports = {
   CODEX_NATIVE_ENCODER,
   CODEX_NATIVE_KEYMAP,
   CODEX_NATIVE_RECOVERY_LAYER_NAME,
+  DUAL_PLANE_PROFILE_NAME,
   DEFAULT_LIGHTS,
   MAX_SOURCE_BYTES,
   generateCodexNativeRecoveryLayer,
+  generateDualPlaneInputProfile,
   generateInputProfile,
+  inspectDualPlaneInputProfile,
   inspectCodexNativeRecovery,
+  layerHasExactAshlrDailyLayout,
   layerHasExactCodexNativeLayout,
   readSourceProfile,
   safeLights,
   writeGeneratedCodexNativeRecoveryLayer,
+  writeGeneratedDualPlaneProfile,
   writeGeneratedProfile,
 }

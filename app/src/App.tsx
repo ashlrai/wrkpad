@@ -5,7 +5,7 @@ import {
   Mic2, Play, RotateCcw, Send, ShieldCheck, Sparkles, Split, TerminalSquare, Waypoints, X, Zap,
 } from 'lucide-react'
 import {
-  actions, controls, correctedInputProfileObserved, correctedInputProfileObservedForVariant, effortLevels, hardware, profileOrder, profiles,
+  actions, controls, correctedInputProfileObserved, correctedInputProfileObservedForVariant, dualPlaneInputProfileConfigured, effortLevels, hardware, profileOrder, profiles,
   type ActionDefinition, type AgentSlotSummary, type BoardRoute, type ControlId, type ExecutionResult, type InputInstallationStatus, type MissionControlSnapshot, type NativeAcceptanceAttestations, type NativeAcceptanceSnapshot, type PhysicalSignalEnvelope, type ProfileId, type ProfileRepairResult, type ReceiverRuntimeStatus, type SystemStatus, type WorkspaceSnapshot,
 } from './board'
 import { agentProviderLabel, agentStateClassName, agentStateLabels, agentStateLegendOrder, agentVisibleStateLabel } from './agent-accessibility'
@@ -119,13 +119,13 @@ const STATUS_REFRESH_TIMEOUT_MS = 13_000
 const NATIVE_ACCEPTANCE_POLL_MS = 5_000
 const viewOrder = ['operate', 'flight', 'setup'] as const
 
-const flightLiveGatesReady = (status: SystemStatus, variant: FlightVariant) =>
+const flightLiveGatesReady = (status: SystemStatus, variant: FlightVariant, dualPlaneAshlrLayerAttested = false) =>
   status.boardRoute === 'ashlr_layer'
   && status.boardConnected
   && status.shortcutCount === hardware.bindableSignals
   && verifiedInputInstallation(status.inputInstallation ?? initialStatus.inputInstallation)
   && exclusiveReceiverRuntime(status.receiverRuntime ?? initialStatus.receiverRuntime)
-  && correctedInputProfileObservedForVariant(status.inputProfile ?? initialStatus.inputProfile, variant)
+  && correctedInputProfileObservedForVariant(status.inputProfile ?? initialStatus.inputProfile, variant, dualPlaneAshlrLayerAttested)
 
 function App() {
   const bridge = window.agentBoard
@@ -148,6 +148,8 @@ function App() {
   const [flightStartedAt, setFlightStartedAt] = useState<string | null>(null)
   const [flightExport, setFlightExport] = useState<string | null>(null)
   const [flightVariant, setFlightVariant] = useState<FlightVariant>('daily')
+  const [dualPlaneAshlrLayerAttestedAt, setDualPlaneAshlrLayerAttestedAt] = useState<string | null>(null)
+  const dualPlaneAshlrLayerAttested = dualPlaneAshlrLayerAttestedAt !== null
   const [flightInvalidatedRun, setFlightInvalidatedRun] = useState<number | null>(null)
   const [routeSaving, setRouteSaving] = useState(false)
   const [routeError, setRouteError] = useState<string | null>(null)
@@ -189,7 +191,7 @@ function App() {
       ])
       if (!nextStatus || request !== statusRequest.current || mutation !== routeMutation.current || flightGeneration !== flightRequest.current) return null
       const run = flightRun.current
-      if (run.underTest && !flightLiveGatesReady(nextStatus, run.variant)) {
+      if (run.underTest && !flightLiveGatesReady(nextStatus, run.variant, dualPlaneAshlrLayerAttested)) {
         flightRun.current = { ...run, invalidated: true }
         setFlightInvalidatedRun(run.request)
         setFlightExport(null)
@@ -201,7 +203,7 @@ function App() {
     } finally {
       if (timeout !== undefined) window.clearTimeout(timeout)
     }
-  }, [bridge])
+  }, [bridge, dualPlaneAshlrLayerAttested])
   const refreshMission = useCallback(async () => {
     if (bridge?.getMissionControl) setMission(await bridge.getMissionControl())
   }, [bridge])
@@ -252,18 +254,10 @@ function App() {
     try {
       const focusedSlot = action.executor.startsWith('focus_agent_') ? Number(action.executor.slice('focus_agent_'.length)) : null
       if (focusedSlot) setSelectedAgentSlot(focusedSlot)
-      const priority = { error: 0, needs_input: 1, working: 2, unread: 3, idle: 4, off: 5 } as const
-      const attentionSlot = action.executor === 'stage_attention'
-        ? [...mission.agents]
-          .filter((agent) => agent.state !== 'off')
-          .sort((left, right) => priority[left.state] - priority[right.state] || left.slot - right.slot)[0]?.slot ?? null
-        : null
-      const response = attentionSlot
-        ? bridge.focusAgentSlot
-          ? await bridge.focusAgentSlot(attentionSlot)
-          : { ok: false, title: 'Attention unavailable', message: 'This app build does not expose live provider focus.', timestamp: new Date().toISOString() }
-        : action.executor === 'stage_attention'
-          ? { ok: false, title: 'No agent needs attention', message: 'All six observed slots are off. Start or resume a Codex or Claude Code session, then refresh.', timestamp: new Date().toISOString() }
+      const response = action.executor === 'stage_attention'
+        ? bridge.focusAttention
+          ? await bridge.focusAttention()
+          : { ok: false, title: 'Attention unavailable', message: 'This app build does not expose atomic live provider focus.', timestamp: new Date().toISOString() }
         : focusedSlot
         ? bridge.focusAgentSlot
           ? await bridge.focusAgentSlot(focusedSlot)
@@ -285,7 +279,7 @@ function App() {
     }
   // executeInternal intentionally tracks the current profile and effort.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bridge, mission.agents, profileId, refreshMission, refreshStatus])
+  }, [bridge, profileId, refreshMission, refreshStatus])
 
   const executeControl = useCallback((rawControl: ControlId) => {
     const control = normalizeControl(rawControl)
@@ -423,6 +417,7 @@ function App() {
     setRouteError(null)
     try {
       const saved = await bridge.setBoardRoute(boardRoute)
+      setDualPlaneAshlrLayerAttestedAt(null)
       setStatus((current) => ({ ...current, boardRoute: saved }))
       setApproval(null)
       internalResult(
@@ -450,14 +445,14 @@ function App() {
       setFlightPhase('inactive')
       return
     }
-    if (!correctedInputProfileObservedForVariant(status.inputProfile ?? initialStatus.inputProfile, variant)) {
+    if (!correctedInputProfileObservedForVariant(status.inputProfile ?? initialStatus.inputProfile, variant, dualPlaneAshlrLayerAttested)) {
       setView('setup')
       internalResult(
         'Activate the corrected Input profile first',
         status.inputProfile?.encoderDirection === 'reversed'
           ? 'The read-only Input receipt shows clockwise and counterclockwise are reversed. Flight Check cannot produce a valid first gesture until the corrected profile is active.'
           : variant === 'daily'
-            ? 'Daily Flight Check requires the read-only Input receipt to confirm Ashlr Agent Board Corrected, Ashlr Daily, and the corrected encoder order.'
+            ? 'Daily Flight Check requires either the corrected one-layer profile or a current Dual Plane profile with an exact Ashlr Daily layer. The active firmware layer is proved only by the physical receipt.'
             : 'Diagnostic Flight Check requires the temporary Ashlr Flight Check Corrected - diagnostic profile, Ashlr Diagnostic layer, and the corrected encoder order.',
       )
       return
@@ -488,9 +483,12 @@ function App() {
       return
     }
     try {
-      const acknowledgement = await bridge.setFlightCheck(true, variant)
+      const acknowledgement = dualPlaneAshlrLayerAttestedAt
+        ? await bridge.setFlightCheck(true, variant, { dualPlaneAshlrLayerSelected: true, attestedAt: dualPlaneAshlrLayerAttestedAt })
+        : await bridge.setFlightCheck(true, variant)
       if (request !== flightRequest.current) return
       if (!acknowledgement.acknowledged || !acknowledgement.active) {
+        setDualPlaneAshlrLayerAttestedAt(null)
         flightRun.current = { request, underTest: false, invalidated: false, variant }
         setFlightPhase('error')
         return
@@ -498,7 +496,7 @@ function App() {
       setFlightStartedAt(acknowledgement.startedAt)
       const confirmedStatus = await refreshStatus()
       if (request !== flightRequest.current) return
-      if (!confirmedStatus || !flightLiveGatesReady(confirmedStatus, variant)) {
+      if (!confirmedStatus || !flightLiveGatesReady(confirmedStatus, variant, dualPlaneAshlrLayerAttested)) {
         flightRun.current = { request, underTest: true, invalidated: true, variant }
         setFlightInvalidatedRun(request)
         setFlightPhase('error')
@@ -509,6 +507,7 @@ function App() {
       setFlightPhase('active')
     } catch {
       if (request === flightRequest.current) {
+        setDualPlaneAshlrLayerAttestedAt(null)
         flightRun.current = { request, underTest: false, invalidated: false, variant }
         setFlightPhase('error')
       }
@@ -538,6 +537,7 @@ function App() {
       flightExpected.current = []
       flightRun.current = { request, underTest: false, invalidated: false, variant: flightVariant }
       setFlightInvalidatedRun(null)
+      setDualPlaneAshlrLayerAttestedAt(null)
       setFlightPhase('inactive')
       return true
     } catch {
@@ -558,7 +558,11 @@ function App() {
 
   const restartFlightCheck = async () => {
     if (!bridge?.restartFlightCheck || flightPhase !== 'active') return
-    if (!flightLiveGatesReady(status, flightVariant)) return
+    if (!flightLiveGatesReady(status, flightVariant, dualPlaneAshlrLayerAttested)) return
+    if (dualPlaneInputProfileConfigured(status.inputProfile ?? initialStatus.inputProfile)) {
+      await stopFlightCheck()
+      return
+    }
     const request = ++flightRequest.current
     flightRun.current = { request, underTest: true, invalidated: true, variant: flightVariant }
     setFlightInvalidatedRun(request)
@@ -579,7 +583,7 @@ function App() {
       flightExpected.current = stepsForVariant(flightVariant)[0].signals
       const confirmedStatus = await refreshStatus()
       if (request !== flightRequest.current) return
-      if (!confirmedStatus || !flightLiveGatesReady(confirmedStatus, flightVariant)) {
+      if (!confirmedStatus || !flightLiveGatesReady(confirmedStatus, flightVariant, dualPlaneAshlrLayerAttested)) {
         flightRun.current = { request, underTest: true, invalidated: true, variant: flightVariant }
         setFlightInvalidatedRun(request)
         setFlightPhase('error')
@@ -595,12 +599,12 @@ function App() {
 
   const exportFlightReceipt = async () => {
     if (!bridge || !flightStartedAt || flightPhase !== 'active') return
-    if (flightRun.current.invalidated || flightInvalidatedRun === flightRequest.current || !flightLiveGatesReady(status, flightVariant)) return
+    if (flightRun.current.invalidated || flightInvalidatedRun === flightRequest.current || !flightLiveGatesReady(status, flightVariant, dualPlaneAshlrLayerAttested)) return
     const request = flightRequest.current
     const selectedSteps = stepsForVariant(flightVariant)
     const acceptance = flightAcceptance(flightVariant, flightEvents, status.boardConnected, status.shortcutCount, hardware.bindableSignals)
     const missing = selectedSteps.filter((step) => !flightStepComplete(step, flightEvents)).flatMap((step) => step.signals)
-    const response = await bridge.saveFlightReceipt({
+    const receipt = {
       schemaVersion: 1,
       device: { name: hardware.name, usbName: hardware.usbName, expectedSignals: hardware.bindableSignals },
       status: acceptance.passed ? 'passed' : acceptance.routesComplete ? 'failed' : 'incomplete',
@@ -619,7 +623,8 @@ function App() {
         receivedAt: event.receivedAt,
       })),
       events: flightEvents,
-    })
+    }
+    const response = await bridge.saveFlightReceipt(receipt)
     if (response
       && request === flightRequest.current
       && flightRun.current.request === request
@@ -633,6 +638,16 @@ function App() {
     return () => window.removeEventListener('blur', cancelHold)
   }, [cancelHold])
   useEffect(() => () => cancelHold(), [cancelHold])
+  useEffect(() => {
+    if (!dualPlaneAshlrLayerAttestedAt || flightPhase !== 'inactive') return
+    const remaining = Date.parse(dualPlaneAshlrLayerAttestedAt) + 30_000 - Date.now()
+    if (remaining <= 0) {
+      setDualPlaneAshlrLayerAttestedAt(null)
+      return
+    }
+    const timer = window.setTimeout(() => setDualPlaneAshlrLayerAttestedAt(null), remaining)
+    return () => window.clearTimeout(timer)
+  }, [dualPlaneAshlrLayerAttestedAt, flightPhase])
 
   const nativeRoute = status.boardRoute === 'codex_native'
   const nativeEvidenceFresh = nativeCodexMicro.fresh === true
@@ -655,7 +670,7 @@ function App() {
   const nativePill = status.boardRoute !== 'codex_native'
     ? { label: status.boardRoute === 'ashlr_layer' ? 'Native not in use' : 'Native route not selected', tone: 'off' as const }
     : nativeCodexMicro.status === 'connected' && nativeEvidenceFresh
-      ? { label: 'Native initialization observed', tone: 'warn' as const }
+      ? { label: 'Native initialization inferred', tone: 'warn' as const }
       : nativeCodexMicro.status === 'firmware_rpc_missing'
         ? { label: nativeEvidenceFresh ? 'Native RPC unavailable' : 'Historical native RPC 404', tone: 'warn' as const }
         : nativeCodexMicro.status === 'connection_failed'
@@ -769,7 +784,7 @@ function App() {
             <span className={nativeCodexMicro.status === 'connected' && nativeEvidenceFresh ? 'check observed' : 'check warn'}><Activity size={12} /> {nativeCodexMicro.status === 'connected' && nativeEvidenceFresh ? 'Native initialization inferred' : 'Native initialization unverified'}</span>
           </> : status.boardRoute === 'ashlr_layer' ? <>
             <span className={status.shortcutCount === hardware.bindableSignals ? 'check ready' : 'check'}><Check size={12} /> {status.shortcutCount}/{hardware.bindableSignals} desktop endpoints registered</span>
-            <span className={inputInstallationReady ? 'check ready' : 'check warn'}><Check size={12} /> {inputInstallationReady ? `Input ${inputInstallation.version ?? ''} verified`.replace('  ', ' ') : inputInstallationDescription.state}</span>
+            <span className={inputInstallationReady ? 'check ready' : 'check warn'}><Check size={12} /> {inputInstallationReady ? `Input app integrity ${inputInstallation.version ?? ''} verified`.replace('  ', ' ') : inputInstallationDescription.state}</span>
             <span className={receiverExclusive ? 'check ready' : 'check warn'}><ShieldCheck size={12} /> {receiverExclusive ? 'One shortcut receiver' : receiverRuntime.status === 'unavailable' ? 'Receiver ownership unavailable' : `${receiverRuntime.instanceCount} receivers · ownership disabled`}</span>
           </> : <span className="check warn"><ShieldCheck size={12} /> Select a board route before commissioning</span>}
           {status.workspaceSnapshot?.isGit && <span className={!status.workspaceSnapshot.statusKnown || status.workspaceSnapshot.dirtyFiles ? 'check warn' : 'check ready'}><GitBranch size={12} /> {status.workspaceSnapshot.branch} · {!status.workspaceSnapshot.statusKnown ? 'status unknown' : status.workspaceSnapshot.dirtyFiles ? `${status.workspaceSnapshot.dirtyFiles} changed` : 'clean'}</span>}
@@ -837,6 +852,7 @@ function App() {
       </> : view === 'flight' ? <FlightCheckView
         active={flightActive} events={flightEvents} startedAt={flightStartedAt}
         exportPath={flightExport} status={status} variant={flightVariant} phase={flightPhase}
+        dualPlaneAshlrLayerAttested={dualPlaneAshlrLayerAttested} onDualPlaneAshlrLayerAttested={(checked) => setDualPlaneAshlrLayerAttestedAt(checked ? new Date().toISOString() : null)}
         liveGateInvalidated={flightInvalidatedRun === flightRequest.current} onStart={startFlightCheck}
         onStop={() => void stopFlightCheck()} onRestart={() => void restartFlightCheck()} onExport={exportFlightReceipt}
         onSetup={() => void changeView('setup')} onOperate={() => void changeView('operate')}
@@ -920,7 +936,7 @@ const boardRouteOptions: Array<{ id: BoardRoute; label: string; detail: string }
 
 function BoardRouteRail({ route, saving, error, onChange }: { route: BoardRoute; saving: boolean; error: string | null; onChange: (route: BoardRoute) => void }) {
   return <section className="board-route-rail" aria-labelledby="board-route-heading">
-    <div><span className="eyebrow">BOARD ROUTE</span><h2 id="board-route-heading">Choose the expected physical behavior.</h2><p>{saving ? 'Saving local preference…' : error ?? 'Declared here — not detected. Device policy remains Observe · writes off.'}</p></div>
+    <div><span className="eyebrow">BOARD ROUTE</span><h2 id="board-route-heading">Choose the expected physical behavior.</h2><p>{saving ? 'Saving local preference…' : error ?? 'Declared here — not detected. After every physical layer change, update this route to match. Device policy remains Observe · writes off.'}</p></div>
     <div className="board-route-options" role="radiogroup" aria-label="Expected board route">
       {boardRouteOptions.map((option, index) => <button
         id={`board-route-${option.id}`} type="button" role="radio" aria-checked={route === option.id} key={option.id}
@@ -1081,10 +1097,11 @@ function ActionConsole({ activeControl, action, result, approval, isRunning, hol
   </aside>
 }
 
-function FlightCheckView({ active, events, startedAt, exportPath, status, variant, phase, liveGateInvalidated, onStart, onStop, onRestart, onExport, onSetup, onOperate }: {
+function FlightCheckView({ active, events, startedAt, exportPath, status, variant, phase, liveGateInvalidated, dualPlaneAshlrLayerAttested, onDualPlaneAshlrLayerAttested, onStart, onStop, onRestart, onExport, onSetup, onOperate }: {
   active: boolean; events: FlightEvent[]; startedAt: string | null; exportPath: string | null; status: SystemStatus; variant: 'daily' | 'diagnostic'
   phase: 'inactive' | 'arming' | 'active' | 'disarming' | 'error'
   liveGateInvalidated: boolean
+  dualPlaneAshlrLayerAttested: boolean; onDualPlaneAshlrLayerAttested: (value: boolean) => void
   onStart: (variant: 'daily' | 'diagnostic') => void; onStop: () => void; onRestart: () => void; onExport: () => void; onSetup: () => void; onOperate: () => void
 }) {
   const [clock, setClock] = useState(0)
@@ -1110,8 +1127,9 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
   const inputInstallationDescription = describeInputInstallation(inputInstallation)
   const inputInstallationReady = verifiedInputInstallation(inputInstallation)
   const receiverExclusive = exclusiveReceiverRuntime(receiverRuntime)
+  const dualPlaneConfigured = dualPlaneInputProfileConfigured(currentInputProfile)
   const hardwareReady = status.boardRoute === 'ashlr_layer' && status.boardConnected && inputInstallationReady && receiverExclusive && status.shortcutCount === hardware.bindableSignals
-  const dailyPreflightReady = hardwareReady && correctedInputProfileObservedForVariant(currentInputProfile, 'daily')
+  const dailyPreflightReady = hardwareReady && correctedInputProfileObservedForVariant(currentInputProfile, 'daily', dualPlaneAshlrLayerAttested)
   const diagnosticPreflightReady = hardwareReady && correctedInputProfileObservedForVariant(currentInputProfile, 'diagnostic')
   const preflightReady = dailyPreflightReady || diagnosticPreflightReady
   const selectedVariantReady = variant === 'daily' ? dailyPreflightReady : diagnosticPreflightReady
@@ -1119,16 +1137,16 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
   const currentGateFailure = runUnderTest && !selectedVariantReady
   const runInvalidated = liveGateInvalidated || currentGateFailure
   const complete = phase === 'active' && acceptance.passed && selectedVariantReady && !runInvalidated
-  const profileBlocked = !correctedInputProfileObservedForVariant(currentInputProfile, variant)
+  const profileBlocked = !correctedInputProfileObservedForVariant(currentInputProfile, variant, dualPlaneAshlrLayerAttested)
   const runCannotPass = problems.length > 0 || runInvalidated
   const concurrentCodexTraffic = status.inputRuntime?.codexProtocolTraffic?.status === 'recurring_unresolved_response'
     && status.inputRuntime.codexProtocolTraffic.fresh
-  const phaseLabel = active ? 'ACTIONS SUPPRESSED' : phase === 'arming' ? 'ARMING INTERLOCK' : phase === 'disarming' ? 'RELEASING INTERLOCK' : phase === 'error' ? 'INTERLOCK UNVERIFIED' : 'ACTIONS ENABLED'
+  const phaseLabel = active ? 'ASHLR ACTIONS SUPPRESSED · NATIVE PATH NOT INTERCEPTED' : phase === 'arming' ? 'ARMING ASHLR INTERLOCK' : phase === 'disarming' ? 'RELEASING ASHLR INTERLOCK' : phase === 'error' ? 'ASHLR INTERLOCK UNVERIFIED' : status.boardRoute === 'ashlr_layer' ? 'ASHLR ACTIONS ENABLED' : 'ASHLR ACTIONS DISABLED'
   const blockedCompletion = routesComplete && !complete
   const showNoSignalRecovery = noSignalRecoveryNeeded(active, startedAt, events, clock)
   return <section className="flight-view">
     <div className="flight-hero">
-      <div><span className="eyebrow">HARDWARE ACCEPTANCE / {phaseLabel}</span><h2>{nativeRoute ? 'Flight Check belongs to Ashlr Layer.' : complete ? 'Every signal is accounted for.' : blockedCompletion ? 'Acceptance is blocked by evidence.' : active ? 'Prove the physical path.' : phase === 'arming' ? 'Establishing the safety barrier…' : 'Run a safe Flight Check.'}</h2><p>{nativeRoute ? 'This receipt validates Work Louder Input shortcuts, not Codex’s native keys or lighting. Keep Codex Native declared so Agent Board remains passive, quit Work Louder Input, restart ChatGPT Desktop, then verify Settings → Creator Micro.' : 'Press the real board controls only after the app confirms Actions Suppressed. The board twin and mouse clicks do not count; ordinary keyboard use can generate the same shortcuts, so keep your hands on the board during acceptance.'}</p></div>
+      <div><span className="eyebrow">HARDWARE ACCEPTANCE / {phaseLabel}</span><h2>{nativeRoute ? 'Flight Check belongs to Ashlr Layer.' : complete ? 'Every signal is accounted for.' : blockedCompletion ? 'Acceptance is blocked by evidence.' : active ? 'Prove the physical path.' : phase === 'arming' ? 'Establishing the safety barrier…' : 'Run a safe Flight Check.'}</h2><p>{nativeRoute ? 'This receipt validates Work Louder Input shortcuts, not Codex’s native keys or lighting. Keep Codex Native declared so Agent Board remains passive, quit Work Louder Input, restart ChatGPT Desktop, then verify Settings → Creator Micro.' : 'Press the real board controls only after the app confirms Ashlr Actions Suppressed. Native Codex HID is never intercepted. For a Dual Plane profile, first use the bottom-left touch selector to choose Ashlr layer 2. The board twin and mouse clicks do not count; ordinary keyboard use can generate the same shortcuts, so keep your hands on the board during acceptance.'}</p></div>
       <div className={complete ? 'flight-score complete' : 'flight-score'} role="progressbar" aria-label="Physical Flight Check progress" aria-valuemin={0} aria-valuemax={expectedSignals} aria-valuenow={completedSignals} aria-valuetext={`${completedSignals} of ${expectedSignals} routed signals; ${completedGestures} of ${expectedGestures} gestures complete`}><strong>{completedSignals}<small>/{expectedSignals}</small></strong><span>{completedGestures}/{expectedGestures} gestures</span><i aria-hidden="true" style={{ '--flight-progress': `${progress}%` } as React.CSSProperties} /></div>
     </div>
 
@@ -1137,8 +1155,11 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
         <div className="flight-prompt">
           <div className={complete ? 'prompt-icon complete' : active ? 'prompt-icon live' : 'prompt-icon'}>{complete ? <Check /> : active ? <Activity /> : <Keyboard />}</div>
           <div><span className="eyebrow">{complete ? 'ACCEPTANCE PASSED' : runCannotPass ? 'THIS RUN CANNOT PASS' : blockedCompletion ? 'ACCEPTANCE FAILED' : active ? 'NEXT PHYSICAL GESTURE' : phase === 'arming' ? 'WAIT FOR INTERLOCK' : 'READY WHEN YOU ARE'}</span><h3>{complete ? `${expectedSignals} routed signals received` : runInvalidated ? 'A live acceptance gate changed' : runCannotPass ? 'A signal arrived out of order' : blockedCompletion ? 'Resolve the recorded blockers and restart' : active && nextStep ? nextStep.label : preflightReady ? 'Start a clean receipt' : 'Complete preflight first'}</h3><p>{complete ? 'ACT10 and ACT11 each reported from their own physical key.' : runInvalidated ? 'USB, Input trust, receiver ownership, the declared route, the exact selected profile, or desktop endpoint readiness changed during this run. Recover every gate, then end and restart; this run cannot become passing.' : runCannotPass ? `${problems.length} misroute recorded. Restart to clear this failed evidence; continuing cannot produce a passing receipt.` : blockedCompletion ? `${problems.length} misroutes; USB ${status.boardConnected ? 'present' : 'absent'}; shortcuts ${status.shortcutCount}/${hardware.bindableSignals}.` : active && nextStep ? nextStep.instruction : phase === 'arming' ? 'Do not touch the board until the main process acknowledges action suppression.' : preflightReady ? 'This clears prior observations and temporarily turns every shortcut into a no-op test signal.' : receiverRuntime.status === 'unavailable' ? 'Agent Board could not verify shortcut receiver ownership, so Flight Check is disabled. Refresh Setup; do not assume this copy owns the shortcuts.' : !receiverExclusive ? 'Multiple Agent Board receivers are running, so shortcut ownership is disabled. Fully quit every copy manually, then reopen one exact build.' : !inputInstallationReady ? inputInstallationDescription.guidance : profileBlocked ? status.inputProfile?.encoderDirection === 'reversed' ? 'The active Input receipt has clockwise and counterclockwise reversed. Open Setup and create the corrected profile before Flight Check.' : 'Flight Check requires Ashlr Agent Board Corrected, Ashlr Daily, and a corrected encoder receipt. Open Setup to finish profile recovery.' : `USB must be present and all ${hardware.bindableSignals} desktop endpoints must be registered before physical acceptance starts.`}</p></div>
-          {phase === 'inactive' && !complete && <div className="flight-start-actions"><button type="button" disabled={!dailyPreflightReady} onClick={() => onStart('daily')}><Play size={15} /> Daily profile</button><button type="button" disabled={!diagnosticPreflightReady} onClick={() => onStart('diagnostic')}>20-signal diagnostic</button></div>}
-          {active && runCannotPass && <div className="flight-start-actions"><button type="button" className="stop-flight" disabled={!selectedVariantReady} onClick={onRestart}><RotateCcw size={15} /> {selectedVariantReady ? 'End and restart' : 'Recover gates to restart'}</button><button type="button" className="stop-flight" onClick={onStop}><CircleStop size={15} /> End invalidated check</button></div>}
+          {phase === 'inactive' && !complete && <div className="flight-start-actions">
+            {dualPlaneConfigured && <label className="dual-plane-attestation"><input type="checkbox" checked={dualPlaneAshlrLayerAttested} onChange={(event) => onDualPlaneAshlrLayerAttested(event.target.checked)} /><span>I just proved native layer 1, then short-tapped the bottom-left touch selector exactly once to reach Ashlr layer 2.</span></label>}
+            <button type="button" disabled={!dailyPreflightReady} onClick={() => onStart('daily')}><Play size={15} /> Daily profile</button><button type="button" disabled={!diagnosticPreflightReady} onClick={() => onStart('diagnostic')}>20-signal diagnostic</button>
+          </div>}
+          {active && runCannotPass && <div className="flight-start-actions"><button type="button" className="stop-flight" disabled={!selectedVariantReady} onClick={onRestart}><RotateCcw size={15} /> {selectedVariantReady ? dualPlaneConfigured ? 'End and re-establish layers' : 'End and restart' : 'Recover gates to restart'}</button><button type="button" className="stop-flight" onClick={onStop}><CircleStop size={15} /> End invalidated check</button></div>}
           {active && !complete && !runCannotPass && <button type="button" className="stop-flight" onClick={onStop}><CircleStop size={15} /> End check</button>}
           {phase === 'error' && <button type="button" className="stop-flight" onClick={onStop}><CircleStop size={15} /> Restore safe state</button>}
           {complete && <button type="button" onClick={onExport}><Download size={15} /> Export receipt</button>}
@@ -1164,7 +1185,7 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
           <div><dt>Shortcuts</dt><dd className={status.shortcutCount === hardware.bindableSignals ? 'ready' : ''}>{status.shortcutCount}/20</dd></div>
           <div><dt>Receiver</dt><dd className={receiverExclusive ? 'ready' : 'problem'}>{receiverExclusive ? 'Exclusive' : receiverRuntime.status === 'unavailable' ? 'Unavailable' : 'Contended'}</dd></div>
           <div><dt>Started</dt><dd>{startedAt ? formatClock(new Date(startedAt)) : 'Not started'}</dd></div>
-          <div><dt>Actions</dt><dd className={active ? 'safe' : phase === 'error' ? 'problem' : ''}>{active ? 'Suppressed' : phase === 'arming' ? 'Arming' : phase === 'disarming' ? 'Releasing' : phase === 'error' ? 'Unverified' : 'Enabled'}</dd></div>
+          <div><dt>Ashlr mapped actions</dt><dd className={active ? 'safe' : phase === 'error' ? 'problem' : ''}>{active ? 'Suppressed · native path untouched' : phase === 'arming' ? 'Arming' : phase === 'disarming' ? 'Releasing' : phase === 'error' ? 'Unverified' : status.boardRoute === 'ashlr_layer' ? 'Enabled' : 'Disabled'}</dd></div>
           <div><dt>Raw receipts</dt><dd className={events.length ? 'ready' : ''}>{events.length}</dd></div>
           <div><dt>Misroutes</dt><dd className={problems.length ? 'problem' : 'ready'}>{problems.length}</dd></div>
         </dl>
@@ -1176,7 +1197,7 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
           <strong>No physical shortcut arrived</strong>
           <p>{concurrentCodexTraffic
             ? <>Input is currently receiving recurring Codex-protocol responses, so this check is not an exclusive Input-only window. This proves co-presence, not ownership or cause. End the check, then follow the recovery checklist; no application was automatically quit.</>
-            : <>Use the top-left rotary dial—not the bottom-left layer and connection selector. End this check, quit competing board controllers, then open Work Louder Input alone. Use <b>Set as current profile</b> for <b>Ashlr Agent Board Corrected</b>, verify <b>Ashlr Daily</b>, fully relaunch Input, and run a fresh check. Do not jump to firmware from one zero-signal receipt.</>}</p>
+            : <>Use the top-left rotary dial—not the bottom-left layer and connection selector. If the Dual Plane profile is current, end the check, re-establish and prove native layer 1, then short-tap exactly once to Ashlr layer 2 and provide a fresh attestation. Never infer the selected layer from a zero-signal run. Otherwise open verified Work Louder Input alone, set the intended profile current, fully quit Input, and run a fresh check. Do not jump to firmware from one zero-signal receipt.</>}</p>
           <button type="button" onClick={onSetup}>Open recovery checklist</button>
         </div>}
         {exportPath && !runInvalidated && <div className="exported-receipt"><Check size={14} /><span>Receipt saved</span><code title={exportPath}>{exportPath}</code></div>}
@@ -1233,10 +1254,15 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
   const recentRuntimeEvidence = inputRuntime.status === 'unresolved_profile_layer' && inputRuntime.fresh
   const recentCodexTraffic = inputRuntime.codexProtocolTraffic?.status === 'recurring_unresolved_response'
     && inputRuntime.codexProtocolTraffic.fresh
+  const dualPlaneProfileObserved = dualPlaneInputProfileConfigured(inputProfile)
   const observedInputProfile = inputProfile.activeProfile && inputProfile.activeLayer
     ? `${inputProfile.activeProfile} · ${inputProfile.activeLayer}`
-    : inputProfile.activeProfile
-  const profileState = inputProfile.encoderDirection === 'correct'
+    : dualPlaneProfileObserved
+      ? `${inputProfile.activeProfile} · Native 1 + Ashlr 2`
+      : inputProfile.activeProfile
+  const profileState = dualPlaneProfileObserved
+    ? `${observedInputProfile} · selected layer unobservable`
+    : inputProfile.encoderDirection === 'correct'
     ? `${observedInputProfile ?? 'Input profile'} · cached mapping observed`
     : inputProfile.encoderDirection === 'reversed'
       ? `${observedInputProfile ?? 'Input profile'} · dial directions reversed`
@@ -1244,10 +1270,11 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
         ? `${observedInputProfile} · dial mapping unverified`
         : 'Current keyboard profile requires physical verification'
   const correctedProfileObserved = correctedInputProfileObserved(inputProfile)
+  const ashlrProfileConfigured = correctedProfileObserved || dualPlaneProfileObserved
   const nativeShortcutProfileObserved = status.boardRoute === 'codex_native' && correctedProfileObserved
   const inputRecoveryState = status.boardRoute !== 'ashlr_layer'
     ? 'none'
-    : correctedProfileObserved
+    : ashlrProfileConfigured
       ? recentRuntimeEvidence ? 'runtime_log_advisory' : 'cache_observed'
       : 'profile_repair'
   const ashlrSteps: Array<{ number: string; title: string; detail: string; state: string; ready: boolean; observed?: boolean }> = [
@@ -1256,7 +1283,7 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
     { number: '03', title: 'Verify Work Louder Input', detail: inputInstallationDescription.guidance, state: inputInstallationDescription.state, ready: inputInstallationReady },
     { number: '04', title: 'Prove one shortcut receiver', detail: 'Only one exact Agent Board build may own the 20 global shortcuts. The app detects conflicts but never kills another process.', state: receiverExclusive ? 'One receiver · shortcut ownership available' : receiverRuntime?.status === 'unavailable' ? 'Receiver ownership unavailable · shortcuts disabled' : `${receiverRuntime?.instanceCount ?? 0} receivers / ${receiverRuntime?.distinctBuildCount ?? 0} builds · shortcuts disabled`, ready: receiverExclusive },
     { number: '05', title: 'Verify Input Monitoring', detail: 'In System Settings → Privacy & Security → Input Monitoring, allow the app that should receive board events. Only you can grant this.', state: 'Human verification required', ready: false },
-    { number: '06', title: "Inspect Input's cached profile", detail: !inputInstallationReady ? 'Profile repair, import, activation, and synchronization stay paused until the installed Input copy passes publisher, signature, and Gatekeeper verification.' : inputProfile.encoderDirection === 'reversed' ? 'The read-only Input cache shows the known clockwise/counterclockwise inversion. Import and activate the uniquely named corrected profile through Input before restarting Flight Check.' : correctedProfileObserved ? 'Input’s header is only the profile being edited. The cache-current profile and the profile physically emitting are separate states; a fresh physical Flight Check may supersede older log evidence.' : 'In Input, choose Ashlr Agent Board Corrected, use Set as current profile, and verify Ashlr Daily. A correct encoder-only receipt under another profile name is not enough; cache observation does not prove the board write or physical route.', state: !inputInstallationReady ? 'Blocked by Input integrity' : correctedProfileObserved ? 'Cache observed · Ashlr Agent Board Corrected · Ashlr Daily · device sync unproven' : profileState, ready: false, observed: inputInstallationReady && correctedProfileObserved },
+    { number: '06', title: "Inspect Input's cached profile", detail: !inputInstallationReady ? 'Profile repair, import, activation, and synchronization stay paused until the installed Input copy passes publisher, signature, and Gatekeeper verification.' : inputProfile.encoderDirection === 'reversed' ? 'The read-only Input cache shows the known clockwise/counterclockwise inversion. Import and activate the uniquely named corrected profile through Input before restarting Flight Check.' : dualPlaneProfileObserved ? 'The current profile contains an exact native layer first and exact Ashlr Daily layer second. Input does not expose the selected firmware layer here, so only the ordered physical Flight Check can prove the Ashlr route.' : correctedProfileObserved ? 'Input’s header is only the profile being edited. The cache-current profile and the profile physically emitting are separate states; a fresh physical Flight Check may supersede older log evidence.' : 'Choose the corrected one-layer profile or generate the guarded Dual Plane candidate. A correct encoder-only receipt under another profile name is not enough; cache observation does not prove the board write or physical route.', state: !inputInstallationReady ? 'Blocked by Input integrity' : dualPlaneProfileObserved ? 'Cache observed · Dual Plane · selected layer unobservable · device sync unproven' : correctedProfileObserved ? 'Cache observed · Ashlr Agent Board Corrected · Ashlr Daily · device sync unproven' : profileState, ready: false, observed: inputInstallationReady && ashlrProfileConfigured },
     { number: '07', title: 'Verify the declared physical route', detail: 'Run all 20 gestures. The first gesture uses the top-left rotary dial; the bottom-left circle selects layers and the wired/Bluetooth connection.', state: `${status.shortcutCount}/${hardware.bindableSignals} desktop endpoints registered · physical layer unverified`, ready: false },
   ]
   const nativeInitializationObserved = nativeCodexMicro.status === 'connected' && nativeCodexMicro.fresh === true
@@ -1276,7 +1303,7 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
     { number: '05', title: 'Observe Creator Micro in Codex Settings', detail: 'After the isolated Codex retry, open Settings → Creator Micro and personally observe both Connection: Connected and Input Monitoring: Granted. Detected-only or Connection failed does not count. Record only what you see; Agent Board does not prove a new process generation or permission grant.', state: attestationState('settingsConnected'), ready: false, observed: displayedNativeAttestations.settingsConnected },
     { number: '06', title: 'Exercise the dial', detail: 'Turn the top-left dial left and right, then press it. Confirm each configured Codex response yourself.', state: attestationState('dial'), ready: false, observed: displayedNativeAttestations.dial },
     { number: '07', title: 'Exercise the joystick', detail: 'Move the top-right planar stick up, right, down, and left. The bottom-left circle is not the joystick.', state: attestationState('joystick'), ready: false, observed: displayedNativeAttestations.joystick },
-    { number: '08', title: 'Exercise all six agent keys', detail: 'Press each top-row agent key once and observe its configured Codex behavior.', state: attestationState('agentKeys'), ready: false, observed: displayedNativeAttestations.agentKeys },
+    { number: '08', title: 'Exercise all six agent keys', detail: 'Press both upper Agent keys and all four second-row Agent keys once, observing each configured Codex behavior.', state: attestationState('agentKeys'), ready: false, observed: displayedNativeAttestations.agentKeys },
     { number: '09', title: 'Exercise all seven action keys', detail: 'Press each action switch once. Do not treat a mouse click or ordinary keyboard shortcut as board evidence.', state: attestationState('actionKeys'), ready: false, observed: displayedNativeAttestations.actionKeys },
     { number: '10', title: 'Exercise the bottom keys', detail: 'Press ACT10 and ACT11 separately and observe each configured response.', state: attestationState('microphone'), ready: false, observed: displayedNativeAttestations.microphone },
     { number: '11', title: 'Observe lighting', detail: 'Inspect the black-opaque caps and edge glow in the room lighting you normally use. The on-screen legend remains authoritative.', state: attestationState('lighting'), ready: false, observed: displayedNativeAttestations.lighting },
@@ -1587,8 +1614,8 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
               ['dial', 'Dial left, right, and press observed'],
               ['joystick', 'Joystick up, right, down, and left observed'],
               ['agentKeys', 'All six agent keys observed'],
-              ['actionKeys', 'All seven action keys observed'],
-              ['microphone', 'Microphone key observed'],
+              ['actionKeys', 'ACT06–ACT09 and transparent ACT12 observed'],
+              ['microphone', 'ACT10 and ACT11 independently observed'],
               ['lighting', 'Black-cap lighting observed'],
             ] as Array<[keyof NativeAcceptanceAttestations, string]>).map(([key, label]) => <label key={key}>
               <input type="checkbox" checked={displayedNativeAttestations[key]} disabled={nativeBusy || nativeAccepted || !handoffInitializationObserved} onChange={(event) => setNativeAttestations((current) => ({ ...current, [key]: event.target.checked }))} />

@@ -37,6 +37,8 @@
     "profile:generate": "node scripts/generate-input-profile.mjs",
     "profile:generate-native": "node scripts/generate-codex-native-recovery-layer.mjs",
     "profile:check-native": "node scripts/generate-codex-native-recovery-layer.mjs --verify",
+    "profile:generate-dual": "node scripts/generate-dual-plane-profile.mjs",
+    "profile:check-dual": "node scripts/generate-dual-plane-profile.mjs --verify",
     "build": "tsc -b && vite build",
     "capture:public-demo": "npm run build && electron scripts/capture-public-demo.cjs",
     "lint": "oxlint src electron scripts vite.config.ts vitest.config.ts",

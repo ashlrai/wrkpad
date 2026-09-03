@@ -132,6 +132,6 @@ Rollback artifact/tag:
 
 Never publish full local paths, prompts, transcripts, tokens, or raw private receipts.
 
-## Current v0.1.0 boundary
+## Current v0.2.0 boundary
 
-The package version is `0.1.0`. Source and local packaging can be verified, but signing, notarization, updates, exact task/pane focus, and physical RGB are not implemented. Treat v0.1.0 as unreleased until the distribution gate has an immutable record.
+The desktop package version is `0.2.0`; the Rust core remains `0.1.0`. Source and local packaging can be verified, but signing, notarization, updates, exact task/pane focus, and physical RGB are not implemented. Treat both as unreleased until the distribution gate has an immutable record.

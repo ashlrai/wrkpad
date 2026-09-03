@@ -26,7 +26,7 @@ describe('black-cap attention runway', () => {
     expect(screen.getByLabelText('Agent state legend for opaque keycaps').textContent).toContain('ErrorNeeds youWorkingReady to reviewIdleAvailable')
     expect(screen.getByText('Unified physical map')).toBeTruthy()
     expect(screen.getByText(/same mixed Codex \+ Claude Code slots in every workflow lens/i)).toBeTruthy()
-    const handoff = screen.getByText('AppSense handoff:').closest('.appsense-handoff')
+    const handoff = screen.getByText('Provider handoff:').closest('.appsense-handoff')
     expect(handoff?.textContent).toMatch(/foreground ChatGPT or cmux/i)
     expect(handoff?.textContent).toMatch(/cmux pane focus is upgradeable only after capability negotiation and human-enabled access/i)
   })

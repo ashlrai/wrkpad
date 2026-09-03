@@ -15,7 +15,7 @@ contextBridge.exposeInMainWorld('agentBoard', {
   focusAttention: () => ipcRenderer.invoke('board:focusAttention'),
   showCompactDeck: () => ipcRenderer.invoke('board:showCompactDeck'),
   setProfile: (profile) => ipcRenderer.invoke('board:setProfile', profile),
-  setFlightCheck: (active, variant) => ipcRenderer.invoke('board:setFlightCheck', active, variant),
+  setFlightCheck: (active, variant, attestation) => ipcRenderer.invoke('board:setFlightCheck', active, variant, attestation),
   restartFlightCheck: (variant) => ipcRenderer.invoke('board:restartFlightCheck', variant),
   requestAction: (actionId) => ipcRenderer.invoke('board:requestAction', actionId),
   confirmAction: (actionId, token) => ipcRenderer.invoke('board:confirmAction', actionId, token),

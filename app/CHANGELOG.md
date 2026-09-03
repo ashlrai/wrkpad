@@ -17,6 +17,11 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 
 ### Added
 
+- An offline-generated, verifier-enforced Dual Plane profile with protected
+  Codex Native controls in layer 1 and the provider-neutral Ashlr workflow in
+  layer 2. Multi-layer diagnostics verify the configured Ashlr mapping without
+  inventing the currently selected firmware layer.
+
 - A fixed-bundle-path, versioned cmux focus adapter substrate with bounded
   capability and server-instance identity validation, fresh one-use human
   authorization plus exact password-mode admission, cross-session and

@@ -25,6 +25,12 @@ meaning and lighting of these keys; use the
 [native acceptance procedure](setup.md#codex-native-restart-safe-handoff)
 rather than the Ashlr shortcut table below.
 
+For one reversible profile that keeps Codex Native in firmware layer 1 and the
+shared Codex + Claude workflow in layer 2, use the guarded
+[Dual Plane procedure](dual-plane-profile.md). The touch surface changes layers;
+Agent Board's route declaration must be changed to match because it cannot
+truthfully infer the active firmware layer.
+
 | Physical ID | Desktop signal | Shortcut | Behavior |
 | --- | --- | --- | --- |
 | AG00 | Agent 1 | `Control+Option+Command+1` | Open slot 1 provider surface |

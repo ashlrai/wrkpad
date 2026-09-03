@@ -10,6 +10,11 @@ import {
   inspectCodexNativeRecovery,
   writeGeneratedCodexNativeRecoveryLayer,
 } from './generate-codex-native-recovery-layer.mjs'
+import {
+  generateDualPlaneInputProfile,
+  inspectDualPlaneInputProfile,
+  writeGeneratedDualPlaneProfile,
+} from './generate-dual-plane-profile.mjs'
 
 const source = () => ({
   keyboard: 'creator_micro_v2',
@@ -83,6 +88,68 @@ test('bounds the selected source export before parsing or writing', () => {
     writeFileSync(sourcePath, 'x'.repeat(512 * 1024 + 1))
     assert.throws(() => writeGeneratedProfile(sourcePath, outputPath), /no larger than 512 KiB/)
     assert.throws(() => readFileSync(outputPath), /ENOENT/)
+  } finally {
+    rmSync(directory, { recursive: true })
+  }
+})
+
+test('generates and verifies a native-first dual-plane profile', () => {
+  const profile = generateDualPlaneInputProfile(source())
+  assert.match(profile.profile.name, /UNOFFICIAL/)
+  assert.equal(profile.profile.layers.length, 2)
+  assert.equal(profile.profile.layers[0].name, 'Codex Native Recovery (UNOFFICIAL)')
+  assert.equal(profile.profile.layers[1].name, 'Ashlr Daily')
+  assert.equal(profile.profile.layers[0].id, 0)
+  assert.equal(profile.profile.layers[1].id, 1)
+  assert.equal(profile.profile.layers[0].layout.base[0][0].keycode, 'KV_OAI_AG00')
+  assert.equal(profile.profile.layers[1].layout.base[0][0].keycode, 'KA_0')
+  assert.deepEqual(inspectDualPlaneInputProfile(profile), { status: 'match', reason: 'exact_dual_plane_profile' })
+
+  const reversed = structuredClone(profile)
+  reversed.profile.layers.reverse()
+  assert.deepEqual(inspectDualPlaneInputProfile(reversed), { status: 'mismatch', reason: 'native_layer_must_be_first' })
+
+  const changed = structuredClone(profile)
+  changed.actions[0].keyInputs[3].keycode = 'KC_9'
+  assert.deepEqual(inspectDualPlaneInputProfile(changed), { status: 'mismatch', reason: 'ashlr_daily_layer_missing_or_changed' })
+})
+
+test('dual-plane verifier rejects ownership surfaces, renamed layers, and changed IDs', () => {
+  const candidate = generateDualPlaneInputProfile(source())
+  for (const mutate of [
+    (value) => { value.profile.layers[0].name = 'Native' },
+    (value) => { value.profile.layers[1].id = 7 },
+    (value) => { value.linkedApps = [{ bundle: 'untrusted' }] },
+    (value) => { value.smartActions = [{ id: 1 }] },
+    (value) => { value.multiactions = [{ id: 1 }] },
+    (value) => { value.actions[0].keyInputs = null },
+    (value) => { value.actions[0].keyInputs = { keycode: 'KC_1' } },
+  ]) {
+    const changed = structuredClone(candidate)
+    mutate(changed)
+    assert.doesNotThrow(() => inspectDualPlaneInputProfile(changed))
+    assert.equal(inspectDualPlaneInputProfile(changed).status, 'mismatch')
+  }
+})
+
+test('dual-plane writer is private, exclusive, bounded, and macOS-only', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'ashlr-dual-profile-'))
+  const sourcePath = join(directory, 'source.json')
+  const outputPath = join(directory, 'dual.json')
+  try {
+    writeFileSync(sourcePath, JSON.stringify(source()))
+    const receipt = writeGeneratedDualPlaneProfile(sourcePath, outputPath)
+    assert.equal(receipt.layers, 2)
+    assert.equal(receipt.nativeLayer, 1)
+    assert.equal(receipt.sharedLayer, 2)
+    assert.equal(receipt.mutatesInputOrDevice, false)
+    assert.equal(statSync(outputPath).mode & 0o777, 0o600)
+    assert.equal(inspectDualPlaneInputProfile(JSON.parse(readFileSync(outputPath, 'utf8'))).status, 'match')
+    assert.throws(() => writeGeneratedDualPlaneProfile(sourcePath, outputPath), /EEXIST/)
+
+    const unsupported = source()
+    unsupported.profile.layers[0].os = 1
+    assert.throws(() => generateDualPlaneInputProfile(unsupported), /only a macOS source export/)
   } finally {
     rmSync(directory, { recursive: true })
   }

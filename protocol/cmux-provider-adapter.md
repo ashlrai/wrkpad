@@ -138,8 +138,9 @@ operator enables socket-password focus.
 | Scenario | Exact focus | Required outcome |
 | --- | --- | --- |
 | Claude hook outside cmux | No | Record no locator; preserve ordinary HASP state |
-| Valid hook locators, no socket capability | No | Foreground cmux and report `exact_focus_unavailable` |
+| Valid hook locators, no human authorization | No | Foreground cmux and report `exact_focus_not_authorized` |
 | External CLI access denied | No | Preserve denial as a bounded capability reason; do not retry with another authority path |
+| Authorized probe, missing required password-mode capability | No | Foreground cmux and report `capabilities_incomplete` or `access_mode_not_authorized` |
 | Password capability enabled, locator validation fails | No | Invalidate the association and foreground cmux |
 | Password capability enabled, fresh identity and locators match | Eligible | Select workspace, focus surface, and report only CLI acceptance |
 | Any request for terminal content or input | Forbidden | Fail closed without starting cmux CLI |

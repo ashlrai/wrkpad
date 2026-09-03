@@ -44,6 +44,7 @@ test('reports only sanitized active labels and a correct encoder direction', () 
     activeProfile: 'Ashlr Agent Board',
     activeLayer: 'Ashlr Daily',
     encoderDirection: 'correct',
+    configuredLayers: [{ name: 'Ashlr Daily', mapping: 'unknown', encoderDirection: 'correct' }],
   })
   assert.equal(JSON.stringify(result).includes('KC_'), false)
   assert.equal(JSON.stringify(result).includes('private name'), false)
@@ -58,7 +59,82 @@ test('does not invent an active layer for a multi-layer profile', () => {
   raw.profiles[0].layers.push({ id: 1, name: 'Another layer', layout: { encoders: [['KC_NONE', 'KC_NONE', 'KC_NONE']] } })
   assert.deepEqual(classifyInputKeymap(raw), {
     cacheStatus: 'available', activeProfile: 'Ashlr Agent Board', activeLayer: null, encoderDirection: 'unavailable',
+    configuredLayers: [
+      { name: 'Ashlr Daily', mapping: 'unknown', encoderDirection: 'correct' },
+      { name: 'Another layer', mapping: 'unknown', encoderDirection: 'unrecognized' },
+    ],
   })
+})
+
+test('recognizes exact native and Ashlr mappings inside a dual-plane profile without claiming the selected layer', () => {
+  const taps = ['KC_1', 'KC_2', 'KC_3', 'KC_4', 'KC_5', 'KC_6', 'KC_A', 'KC_B', 'KC_C', 'KC_D', 'KC_E', 'KC_F', 'KC_G', 'KC_UP', 'KC_RGHT', 'KC_DOWN', 'KC_LEFT', 'KC_Q', 'KC_W', 'KC_R']
+  const raw = {
+    activeProfileId: 7,
+    profiles: [{
+      id: 7,
+      name: 'Ashlr Dual Plane (UNOFFICIAL)',
+      layers: [
+        {
+          id: 0,
+          name: 'Codex Native Recovery (UNOFFICIAL)',
+          layout: {
+            keymap: [
+              ['KV_OAI_AG00', 'KV_OAI_AG01'],
+              ['KV_OAI_AG02', 'KV_OAI_AG03', 'KV_OAI_AG04', 'KV_OAI_AG05'],
+              ['KV_OAI_ACT06', 'KV_OAI_ACT07', 'KV_OAI_ACT08', 'KV_OAI_ACT09'],
+              ['KV_OAI_ACT10', 'KV_OAI_ACT11', 'KV_OAI_ACT12'],
+            ],
+            encoders: [['KV_OAI_ENC_CC', 'KV_OAI_ENC_CW', 'KV_OAI_ENC_CLK']],
+            joystick: { type: 'VENDOR', sectors: [] },
+          },
+        },
+        {
+          id: 1,
+          name: 'Ashlr Daily',
+          layout: {
+            keymap: [['KA_A1', 'KA_A2'], ['KA_A3', 'KA_A4', 'KA_A5', 'KA_A6'], ['KA_A7', 'KA_A8', 'KA_A9', 'KA_A10'], ['KA_A11', 'KA_A12', 'KA_A13']],
+            encoders: [['KA_A19', 'KA_A18', 'KA_A20']],
+            joystick: {
+              type: 'RADIAL',
+              sectors: [
+                { k: 'KA_A16', a1: 0.1875, a2: 0.3125 }, { k: 'KC_NONE', a1: 0.3125, a2: 0.4375 },
+                { k: 'KA_A17', a1: 0.4375, a2: 0.5625 }, { k: 'KC_NONE', a1: 0.5625, a2: 0.6875 },
+                { k: 'KA_A14', a1: 0.6875, a2: 0.8125 }, { k: 'KC_NONE', a1: 0.8125, a2: 0.9375 },
+                { k: 'KA_A15', a1: 0.9375, a2: 0.0625 }, { k: 'KC_NONE', a1: 0.0625, a2: 0.1875 },
+              ],
+            },
+          },
+        },
+      ],
+    }],
+    macros: taps.map((tap, index) => macro(index + 1, tap)),
+  }
+  assert.deepEqual(classifyInputKeymap(raw), {
+    cacheStatus: 'available',
+    activeProfile: 'Ashlr Dual Plane (UNOFFICIAL)',
+    activeLayer: null,
+    encoderDirection: 'unavailable',
+    configuredLayers: [
+      { name: 'Codex Native Recovery (UNOFFICIAL)', mapping: 'codex_native', encoderDirection: 'unrecognized' },
+      { name: 'Ashlr Daily', mapping: 'ashlr_daily', encoderDirection: 'correct' },
+    ],
+  })
+})
+
+test('rejects near-match dual layers with changed native or joystick controls', () => {
+  const taps = ['KC_1', 'KC_2', 'KC_3', 'KC_4', 'KC_5', 'KC_6', 'KC_A', 'KC_B', 'KC_C', 'KC_D', 'KC_E', 'KC_F', 'KC_G', 'KC_UP', 'KC_RGHT', 'KC_DOWN', 'KC_LEFT', 'KC_Q', 'KC_W', 'KC_R']
+  const raw = {
+    activeProfileId: 1,
+    profiles: [{ id: 1, name: 'Ashlr Dual Plane (UNOFFICIAL)', layers: [
+      { name: 'Codex Native Recovery (UNOFFICIAL)', layout: { keymap: [
+        ['KV_OAI_AG00', 'KV_OAI_AG01'], ['KV_OAI_AG02', 'KV_OAI_AG03', 'KV_OAI_AG04', 'KV_OAI_AG05'],
+        ['KV_OAI_ACT06', 'KV_OAI_ACT07', 'KV_OAI_ACT08', 'KV_OAI_ACT09'], ['KV_OAI_ACT10', 'KV_OAI_ACT11', 'KV_OAI_ACT12'],
+      ], encoders: [['KV_OAI_ENC_CC', 'KV_OAI_ENC_CW', 'KC_ENTER']], joystick: { type: 'VENDOR', sectors: [] } } },
+      { name: 'Ashlr Daily', layout: { keymap: [['KA_A1', 'KA_A2'], ['KA_A3', 'KA_A4', 'KA_A5', 'KA_A6'], ['KA_A7', 'KA_A8', 'KA_A9', 'KA_A10'], ['KA_A11', 'KA_A12', 'KA_A13']], encoders: [['KA_A19', 'KA_A18', 'KA_A20']], joystick: { type: 'RADIAL', sectors: [] } } },
+    ] }],
+    macros: taps.map((tap, index) => macro(index + 1, tap)),
+  }
+  assert.deepEqual(classifyInputKeymap(raw).configuredLayers.map((layer) => layer.mapping), ['unknown', 'unknown'])
 })
 
 test('fails closed for unknown macros and malformed cache data', () => {
@@ -118,7 +194,7 @@ test('distinguishes a missing cache without exposing its path', () => {
   const home = mkdtempSync(path.join(tmpdir(), 'input-profile-diagnostics-'))
   try {
     assert.deepEqual(inspectInputProfile(home), {
-      cacheStatus: 'missing', activeProfile: null, activeLayer: null, encoderDirection: 'unavailable',
+      cacheStatus: 'missing', activeProfile: null, activeLayer: null, encoderDirection: 'unavailable', configuredLayers: [],
     })
   } finally {
     rmSync(home, { recursive: true, force: true })

@@ -29,6 +29,54 @@ test('validates the diagnostic profile independently', () => {
   assert.equal(result.ready, true)
 })
 
+test('admits a verified Ashlr layer inside the current dual-plane profile without inventing an active layer', () => {
+  const result = evaluateFlightGates({
+    ...ready,
+    dualPlaneAshlrLayerSelected: true,
+    inputProfile: {
+      cacheStatus: 'available',
+      activeProfile: 'Ashlr Dual Plane (UNOFFICIAL)',
+      activeLayer: null,
+      encoderDirection: 'unavailable',
+      configuredLayers: [
+        { name: 'Codex Native Recovery (UNOFFICIAL)', mapping: 'codex_native', encoderDirection: 'unrecognized' },
+        { name: 'Ashlr Daily', mapping: 'ashlr_daily', encoderDirection: 'correct' },
+      ],
+    },
+  })
+  assert.equal(result.ready, true)
+  assert.equal(result.evidence.inputProfile.activeLayer, null)
+})
+
+test('rejects a dual-plane profile whose Ashlr layer is changed or whose profile is not current', () => {
+  const inputProfile = {
+    cacheStatus: 'available',
+    activeProfile: 'Ashlr Dual Plane (UNOFFICIAL)',
+    activeLayer: null,
+    encoderDirection: 'unavailable',
+    configuredLayers: [
+      { name: 'Codex Native Recovery (UNOFFICIAL)', mapping: 'codex_native', encoderDirection: 'unrecognized' },
+      { name: 'Ashlr Daily', mapping: 'unknown', encoderDirection: 'correct' },
+    ],
+  }
+  assert.equal(evaluateFlightGates({ ...ready, dualPlaneAshlrLayerSelected: true, inputProfile }).gates.profile, false)
+  assert.equal(evaluateFlightGates({ ...ready, dualPlaneAshlrLayerSelected: true, inputProfile: { ...inputProfile, activeProfile: 'Other' } }).gates.profile, false)
+})
+
+test('rejects a configured dual-plane profile without a fresh layer-2 operator attestation', () => {
+  const inputProfile = {
+    cacheStatus: 'available',
+    activeProfile: 'Ashlr Dual Plane (UNOFFICIAL)',
+    activeLayer: null,
+    encoderDirection: 'unavailable',
+    configuredLayers: [
+      { name: 'Codex Native Recovery (UNOFFICIAL)', mapping: 'codex_native', encoderDirection: 'unrecognized' },
+      { name: 'Ashlr Daily', mapping: 'ashlr_daily', encoderDirection: 'correct' },
+    ],
+  }
+  assert.equal(evaluateFlightGates({ ...ready, inputProfile }).gates.profile, false)
+})
+
 for (const [name, mutation, failedGate] of [
   ['unknown variant', { variant: 'other' }, 'variant'],
   ['undeclared route', { boardRoute: 'unknown' }, 'route'],

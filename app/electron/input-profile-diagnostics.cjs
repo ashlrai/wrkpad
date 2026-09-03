@@ -15,7 +15,61 @@ function unavailable(cacheStatus) {
     activeProfile: null,
     activeLayer: null,
     encoderDirection: 'unavailable',
+    configuredLayers: [],
   }
+}
+
+const EXPECTED_DAILY_BASE_KEYS = Object.freeze([
+  'KC_1', 'KC_2', 'KC_3', 'KC_4', 'KC_5', 'KC_6',
+  'KC_A', 'KC_B', 'KC_C', 'KC_D', 'KC_E', 'KC_F', 'KC_G',
+])
+const EXPECTED_NATIVE_BASE_KEYS = Object.freeze([
+  'KV_OAI_AG00', 'KV_OAI_AG01', 'KV_OAI_AG02', 'KV_OAI_AG03', 'KV_OAI_AG04', 'KV_OAI_AG05',
+  'KV_OAI_ACT06', 'KV_OAI_ACT07', 'KV_OAI_ACT08', 'KV_OAI_ACT09', 'KV_OAI_ACT10', 'KV_OAI_ACT11', 'KV_OAI_ACT12',
+])
+const EXPECTED_NATIVE_ENCODER_KEYS = Object.freeze(['KV_OAI_ENC_CC', 'KV_OAI_ENC_CW', 'KV_OAI_ENC_CLK'])
+const EXPECTED_DAILY_JOYSTICK = Object.freeze([
+  Object.freeze({ key: 'KC_DOWN', a1: 0.1875, a2: 0.3125 }), Object.freeze({ key: 'KC_NONE', a1: 0.3125, a2: 0.4375 }),
+  Object.freeze({ key: 'KC_LEFT', a1: 0.4375, a2: 0.5625 }), Object.freeze({ key: 'KC_NONE', a1: 0.5625, a2: 0.6875 }),
+  Object.freeze({ key: 'KC_UP', a1: 0.6875, a2: 0.8125 }), Object.freeze({ key: 'KC_NONE', a1: 0.8125, a2: 0.9375 }),
+  Object.freeze({ key: 'KC_RGHT', a1: 0.9375, a2: 0.0625 }), Object.freeze({ key: 'KC_NONE', a1: 0.0625, a2: 0.1875 }),
+])
+
+function referencedKeycode(value) {
+  return typeof value === 'string' ? value : value?.keycode
+}
+
+function classifyLayer(layer, macros) {
+  const name = sanitizeLabel(layer?.name)
+  const rawBase = Array.isArray(layer?.layout?.base) ? layer.layout.base : layer?.layout?.keymap
+  const base = Array.isArray(rawBase) ? rawBase.flat() : []
+  const resolvedBase = base.map((cell) => {
+    const reference = referencedKeycode(cell)
+    if (typeof reference !== 'string') return null
+    if (reference.startsWith('KV_OAI_')) return reference
+    return macroTapKey(macroForReference(reference, macros))
+  })
+  const encoder = layer?.layout?.encoders?.[0]
+  const encoderDirection = classifyEncoderDirection(encoder, macros)
+  const encoderKeycodes = Array.isArray(encoder) ? encoder.map(referencedKeycode) : []
+  const joystick = layer?.layout?.joystick
+  const normalizedSectors = Array.isArray(joystick?.sectors) ? joystick.sectors.map((sector) => {
+    const reference = sector?.k
+    const key = reference === 'KC_NONE' ? reference : macroTapKey(macroForReference(reference, macros))
+    return { key, a1: sector?.a1, a2: sector?.a2 }
+  }) : []
+  const exactDailyJoystick = joystick?.type === 'RADIAL'
+    && JSON.stringify(normalizedSectors) === JSON.stringify(EXPECTED_DAILY_JOYSTICK)
+  const exactNativeControls = joystick?.type === 'VENDOR'
+    && Array.isArray(joystick.sectors)
+    && joystick.sectors.length === 0
+    && JSON.stringify(encoderKeycodes) === JSON.stringify(EXPECTED_NATIVE_ENCODER_KEYS)
+  const mapping = JSON.stringify(resolvedBase) === JSON.stringify(EXPECTED_DAILY_BASE_KEYS) && encoderDirection === 'correct' && exactDailyJoystick
+    ? 'ashlr_daily'
+    : JSON.stringify(resolvedBase) === JSON.stringify(EXPECTED_NATIVE_BASE_KEYS) && exactNativeControls
+      ? 'codex_native'
+      : 'unknown'
+  return { name, mapping, encoderDirection }
 }
 
 function sanitizeLabel(value) {
@@ -75,8 +129,9 @@ function classifyInputKeymap(raw) {
 
   // This cache does not persist an active-layer ID. A single-layer profile is
   // observable; a multi-layer profile must remain operator-verified.
+  const configuredLayers = profile.layers.map((layer) => classifyLayer(layer, raw.macros))
   if (profile.layers.length !== 1) {
-    return { cacheStatus: 'available', activeProfile, activeLayer: null, encoderDirection: 'unavailable' }
+    return { cacheStatus: 'available', activeProfile, activeLayer: null, encoderDirection: 'unavailable', configuredLayers }
   }
   const layer = profile.layers[0]
   const activeLayer = sanitizeLabel(layer?.name)
@@ -87,6 +142,7 @@ function classifyInputKeymap(raw) {
     activeProfile,
     activeLayer,
     encoderDirection: classifyEncoderDirection(encoder, raw.macros),
+    configuredLayers,
   }
 }
 
@@ -131,6 +187,7 @@ module.exports = {
   MAX_KEYMAP_BYTES,
   SUPPORTED_DEVICE_STORAGE_IDS,
   classifyEncoderDirection,
+  classifyLayer,
   classifyInputKeymap,
   inspectInputProfile,
   sanitizeLabel,

@@ -85,6 +85,10 @@ route-specific evidence using the shared repository contract. Append
 `-- --route codex_native` only for the separate native qualification route.
 
 Before pressing physical controls, follow [setup and Flight Check](docs/setup.md).
+For the recommended native-Codex plus cross-provider configuration, generate a
+new [Dual Plane profile](docs/dual-plane-profile.md): ChatGPT owns layer 1 and
+the provider-neutral Codex + Claude workflow owns layer 2, without keeping
+Work Louder Input open during daily use.
 For **Ashlr Layer**, Work Louder Input must emit the exact shortcuts expected by
 the app and macOS Input Monitoring must be granted by the user. Input's header
 is the edit target, not proof of the current keyboard profile; use **Set as

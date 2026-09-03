@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { actions, allControlIds, correctedInputProfileObserved, correctedInputProfileObservedForVariant, hardware, profileOrder, profiles } from './board'
+import { actions, allControlIds, correctedInputProfileObserved, correctedInputProfileObservedForVariant, dualPlaneInputProfileConfigured, hardware, profileOrder, profiles } from './board'
 
 describe('board contract', () => {
   it('maps every physical signal in every profile', () => {
@@ -60,5 +60,21 @@ describe('board contract', () => {
     expect(correctedInputProfileObservedForVariant(diagnostic, 'diagnostic')).toBe(true)
     expect(correctedInputProfileObservedForVariant(corrected, 'diagnostic')).toBe(false)
     expect(correctedInputProfileObservedForVariant(diagnostic, 'daily')).toBe(false)
+
+    const dual = {
+      cacheStatus: 'available' as const,
+      activeProfile: 'Ashlr Dual Plane (UNOFFICIAL)',
+      activeLayer: null,
+      encoderDirection: 'unavailable' as const,
+      configuredLayers: [
+        { name: 'Codex Native Recovery (UNOFFICIAL)', mapping: 'codex_native' as const, encoderDirection: 'unrecognized' as const },
+        { name: 'Ashlr Daily', mapping: 'ashlr_daily' as const, encoderDirection: 'correct' as const },
+      ],
+    }
+    expect(dualPlaneInputProfileConfigured(dual)).toBe(true)
+    expect(correctedInputProfileObservedForVariant(dual, 'daily')).toBe(false)
+    expect(correctedInputProfileObservedForVariant(dual, 'daily', true)).toBe(true)
+    expect(correctedInputProfileObservedForVariant({ ...dual, configuredLayers: [] }, 'daily', true)).toBe(false)
+    expect(correctedInputProfileObservedForVariant({ ...dual, configuredLayers: [...dual.configuredLayers].reverse() }, 'daily', true)).toBe(false)
   })
 })

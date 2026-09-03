@@ -38,6 +38,12 @@ The project is local-first and fail-closed. It preserves Codex and Claude's own
 permission systems, performs no HID writes, and contains no one-press push,
 merge, deploy, publish, delete, spend, credential, or permission-approval action.
 
+The recommended macOS configuration is a guarded
+[Dual Plane profile](app/docs/dual-plane-profile.md): Codex Native remains
+firmware layer 1, while layer 2 provides the stable mixed Codex + Claude Code
+workflow. Generation is offline; Input import, activation, and both physical
+acceptance checks remain explicit human operations.
+
 ## Two cooperating components
 
 | Component | Purpose | Current authority |

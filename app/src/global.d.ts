@@ -39,7 +39,7 @@ declare global {
       focusAttention(): Promise<ExecutionResult>
       showCompactDeck?(): Promise<{ ok: boolean }>
       setProfile(profile: ProfileId): Promise<void>
-      setFlightCheck(active: boolean, variant: 'daily' | 'diagnostic'): Promise<{ acknowledged: boolean; active: boolean; startedAt: string | null }>
+      setFlightCheck(active: boolean, variant: 'daily' | 'diagnostic', attestation?: { dualPlaneAshlrLayerSelected: boolean; attestedAt: string }): Promise<{ acknowledged: boolean; active: boolean; startedAt: string | null }>
       restartFlightCheck(variant: 'daily' | 'diagnostic'): Promise<{ acknowledged: boolean; active: boolean; startedAt: string | null }>
       requestAction(actionId: string): Promise<ExecutionResult>
       confirmAction(actionId: string, token: string): Promise<ExecutionResult>

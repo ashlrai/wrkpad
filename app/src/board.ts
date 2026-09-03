@@ -117,6 +117,11 @@ export interface InputProfileStatus {
   activeProfile: string | null
   activeLayer: string | null
   encoderDirection: 'correct' | 'reversed' | 'unrecognized' | 'unavailable'
+  configuredLayers?: Array<{
+    name: string | null
+    mapping: 'ashlr_daily' | 'codex_native' | 'unknown'
+    encoderDirection: 'correct' | 'reversed' | 'unrecognized' | 'unavailable'
+  }>
 }
 
 export interface InputRuntimeStatus {
@@ -138,10 +143,25 @@ export interface ReceiverIdentity {
   appAsarSha256?: string | null
 }
 
-export const correctedInputProfileObservedForVariant = (profile: InputProfileStatus, variant: 'daily' | 'diagnostic'): boolean =>
-  profile.activeProfile === (variant === 'daily' ? 'Ashlr Agent Board Corrected' : 'Ashlr Flight Check Corrected - diagnostic')
-  && profile.activeLayer === (variant === 'daily' ? 'Ashlr Daily' : 'Ashlr Diagnostic')
-  && profile.encoderDirection === 'correct'
+export const dualPlaneInputProfileConfigured = (profile: InputProfileStatus): boolean =>
+  profile.activeProfile === 'Ashlr Dual Plane (UNOFFICIAL)'
+  && profile.activeLayer === null
+  && profile.configuredLayers?.length === 2
+  && profile.configuredLayers[0]?.name === 'Codex Native Recovery (UNOFFICIAL)'
+  && profile.configuredLayers[0]?.mapping === 'codex_native'
+  && profile.configuredLayers[1]?.name === 'Ashlr Daily'
+  && profile.configuredLayers[1]?.mapping === 'ashlr_daily'
+  && profile.configuredLayers[1]?.encoderDirection === 'correct'
+
+export const correctedInputProfileObservedForVariant = (profile: InputProfileStatus, variant: 'daily' | 'diagnostic', dualPlaneAshlrLayerAttested = false): boolean =>
+  variant === 'daily'
+    ? (profile.activeProfile === 'Ashlr Agent Board Corrected'
+        && profile.activeLayer === 'Ashlr Daily'
+        && profile.encoderDirection === 'correct')
+      || (dualPlaneAshlrLayerAttested && dualPlaneInputProfileConfigured(profile))
+    : profile.activeProfile === 'Ashlr Flight Check Corrected - diagnostic'
+      && profile.activeLayer === 'Ashlr Diagnostic'
+      && profile.encoderDirection === 'correct'
 
 export const correctedInputProfileObserved = (profile: InputProfileStatus): boolean =>
   correctedInputProfileObservedForVariant(profile, 'daily')

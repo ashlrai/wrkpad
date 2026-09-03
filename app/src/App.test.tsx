@@ -12,6 +12,17 @@ const correctedInputProfile = {
   encoderDirection: 'correct' as const,
 }
 
+const dualPlaneInputProfile = {
+  cacheStatus: 'available' as const,
+  activeProfile: 'Ashlr Dual Plane (UNOFFICIAL)',
+  activeLayer: null,
+  encoderDirection: 'unavailable' as const,
+  configuredLayers: [
+    { name: 'Codex Native Recovery (UNOFFICIAL)', mapping: 'codex_native' as const, encoderDirection: 'unavailable' as const },
+    { name: 'Ashlr Daily', mapping: 'ashlr_daily' as const, encoderDirection: 'correct' as const },
+  ],
+}
+
 const trustedHardwareDiagnostics = {
   inputInstallation: { status: 'verified' as const, version: '0.18.4' },
   receiverRuntime: {
@@ -190,6 +201,8 @@ describe('operator interface', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Flight Check' }))
     expect(screen.getByRole('heading', { name: 'Flight Check belongs to Ashlr Layer.' })).toBeTruthy()
     expect(screen.getByText(/Keep Codex Native declared so Agent Board remains passive/i)).toBeTruthy()
+    expect(screen.getByText(/ASHLR ACTIONS DISABLED/i)).toBeTruthy()
+    expect(screen.getByText('Disabled')).toBeTruthy()
     expect(setFlightCheck).not.toHaveBeenCalled()
     expect(requestAction).not.toHaveBeenCalled()
   })
@@ -215,8 +228,8 @@ describe('operator interface', () => {
     } as unknown as NonNullable<typeof window.agentBoard>
 
     render(<App />)
-    expect(await screen.findByText('Native initialization observed')).toBeTruthy()
-    const inferredRibbon = screen.getByText('Native initialization inferred')
+    const inferredLabels = await screen.findAllByText('Native initialization inferred')
+    const inferredRibbon = inferredLabels.find((element) => element.classList.contains('check'))!
     expect(inferredRibbon.className).toContain('observed')
     expect(inferredRibbon.className).not.toContain('ready')
     fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
@@ -281,7 +294,7 @@ describe('operator interface', () => {
     const observationLabels = [
       'Codex Settings shows Connection: Connected and Input Monitoring: Granted', 'Dial left, right, and press observed',
       'Joystick up, right, down, and left observed', 'All six agent keys observed',
-      'All seven action keys observed', 'Microphone key observed', 'Black-cap lighting observed',
+      'ACT06–ACT09 and transparent ACT12 observed', 'ACT10 and ACT11 independently observed', 'Black-cap lighting observed',
     ]
     const acceptButton = screen.getByRole('button', { name: 'Accept operator attestation' }) as HTMLButtonElement
     expect(acceptButton.disabled).toBe(true)
@@ -1157,8 +1170,8 @@ describe('operator interface', () => {
     acknowledge?.({ acknowledged: true, active: true, startedAt: new Date().toISOString() })
     await waitFor(() => expect(screen.getByText('NEXT PHYSICAL GESTURE')).toBeTruthy())
     expect(screen.getByRole('heading', { name: 'Dial left' })).toBeTruthy()
-    expect(screen.getByText(/only after the app confirms Actions Suppressed/i)).toBeTruthy()
-    expect(screen.getByText('Suppressed')).toBeTruthy()
+    expect(screen.getByText(/only after the app confirms Ashlr Actions Suppressed/i)).toBeTruthy()
+    expect(screen.getByText('Suppressed · native path untouched')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /End check/i }))
     await waitFor(() => expect(screen.getByText('READY WHEN YOU ARE')).toBeTruthy())
     expect(screen.getByText('Not started')).toBeTruthy()
@@ -1409,6 +1422,39 @@ describe('operator interface', () => {
     expect((screen.getByRole('button', { name: /Daily profile/i }) as HTMLButtonElement).disabled).toBe(true)
   })
 
+  it('requires an explicit Ashlr layer-2 attestation for a dual-plane Flight Check', async () => {
+    const setFlightCheck = vi.fn().mockResolvedValue({ acknowledged: true, active: true, startedAt: new Date().toISOString() })
+    window.agentBoard = {
+      getStatus: vi.fn().mockResolvedValue({
+        boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
+        ...trustedHardwareDiagnostics,
+        inputProfile: dualPlaneInputProfile,
+        codex: true, claude: true, ashlr: true, boardRoute: 'ashlr_layer', workspace: '/tmp', shortcutCount: 20,
+        shortcutRegistrations: [], workspaceSnapshot: null,
+      }),
+      getMissionControl: vi.fn().mockResolvedValue(initialUnavailableMission()),
+      setBoardRoute: vi.fn(), focusAgentSlot: vi.fn(), setProfile: vi.fn(), setFlightCheck,
+      requestAction: vi.fn(), confirmAction: vi.fn(), beginHold: vi.fn(), cancelHold: vi.fn(),
+      chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(), onControl: vi.fn(() => () => {}),
+    } as unknown as NonNullable<typeof window.agentBoard>
+
+    render(<App />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
+    expect(await screen.findByText(/Cache observed · Dual Plane · selected layer unobservable/i)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Create corrected Input profile/i })).toBeNull()
+    fireEvent.click(screen.getByRole('tab', { name: 'Flight Check' }))
+    const daily = screen.getByRole('button', { name: /Daily profile/i })
+    const attestation = await screen.findByRole('checkbox', { name: /just proved native layer 1/i })
+    expect((daily as HTMLButtonElement).disabled).toBe(true)
+    expect(setFlightCheck).not.toHaveBeenCalled()
+
+    fireEvent.click(attestation)
+    await waitFor(() => expect((daily as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(daily)
+
+    await waitFor(() => expect(setFlightCheck).toHaveBeenCalledWith(true, 'daily', expect.objectContaining({ dualPlaneAshlrLayerSelected: true, attestedAt: expect.any(String) })))
+  })
+
   it('stops prompting after a misroute and offers a clean restart', async () => {
     let controlHandler: ((signal: { schemaVersion: 1; sequence: number; signalId: 'joyUp'; source: 'global-shortcut'; accelerator: string; receivedAt: string; monotonicNs: string }) => void) | undefined
     const setFlightCheck = vi.fn((active: boolean) => Promise.resolve({ acknowledged: true, active, startedAt: active ? new Date().toISOString() : null }))
@@ -1585,7 +1631,7 @@ describe('operator interface', () => {
     })
 
     expect(await screen.findByText('THIS RUN CANNOT PASS')).toBeTruthy()
-    expect(screen.getByText(/HARDWARE ACCEPTANCE \/ INTERLOCK UNVERIFIED/i)).toBeTruthy()
+    expect(screen.getByText(/HARDWARE ACCEPTANCE \/ ASHLR INTERLOCK UNVERIFIED/i)).toBeTruthy()
     expect(screen.getByRole('button', { name: /Restore safe state/i })).toBeTruthy()
     expect(screen.queryByText('ACCEPTANCE PASSED')).toBeNull()
     expect(screen.queryByRole('button', { name: /Export receipt/i })).toBeNull()
