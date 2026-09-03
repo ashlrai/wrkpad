@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('agentBoard', {
   saveNativeControlCheck: (report) => ipcRenderer.invoke('board:saveNativeControlCheck', report),
   setBoardRoute: (boardRoute) => ipcRenderer.invoke('board:setBoardRoute', boardRoute),
   focusAgentSlot: (slot) => ipcRenderer.invoke('board:focusAgentSlot', slot),
+  focusAttention: () => ipcRenderer.invoke('board:focusAttention'),
   showCompactDeck: () => ipcRenderer.invoke('board:showCompactDeck'),
   setProfile: (profile) => ipcRenderer.invoke('board:setProfile', profile),
   setFlightCheck: (active, variant) => ipcRenderer.invoke('board:setFlightCheck', active, variant),

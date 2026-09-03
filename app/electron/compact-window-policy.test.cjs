@@ -77,7 +77,9 @@ test('Compact Deck action receipts are projected and Attention resolves atomical
   assert.match(handlers, /focusHighestPriorityAgentResult\(\)/)
   assert.doesNotMatch(handlers, /agent\.title|attentionSlot\)/)
   const attention = main.match(/async function focusHighestPriorityAgentResult\(\) \{[\s\S]*?\n\}/)?.[0] ?? ''
-  assert.match(attention, /missionControl\(true\)/)
+  assert.match(attention, /collectMissionControl\(app\.getPath\('home'\)\)/)
+  assert.doesNotMatch(attention, /missionControl\(/)
+  assert.match(attention, /agentSource !== 'observer_online'/)
   assert.match(attention, /projectCompactSnapshot\(mission\)\.attentionSlot/)
   assert.match(attention, /focusAgentFromSnapshot\(slot, mission\)/)
 })

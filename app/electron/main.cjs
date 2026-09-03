@@ -459,9 +459,12 @@ async function focusAgentSlotResult(slot) {
 
 async function focusHighestPriorityAgentResult() {
   if (flightSession.isActive()) return focusAgentFromSnapshot(null, { agents: [] })
-  const mission = await missionControl(true)
+  // Attention must resolve and focus from the same new HASP read. Never reuse
+  // the renderer cache or an earlier in-flight refresh for this action.
+  const mission = await collectMissionControl(app.getPath('home'))
+  if (mission.agentSource !== 'observer_online') return { ok:false,title:'Attention unavailable',message:'A fresh valid six-slot agent snapshot is required before Attention can focus a provider.',timestamp:new Date().toISOString() }
   const slot = projectCompactSnapshot(mission).attentionSlot
-  if (slot === null) return { ok:false,title:'No agent needs attention',message:'No occupied agent slot is available to focus.',timestamp:new Date().toISOString() }
+  if (slot === null) return { ok:false,title:'No focusable agent needs attention',message:'No active Codex or Claude Code slot is available to focus.',timestamp:new Date().toISOString() }
   return focusAgentFromSnapshot(slot, mission)
 }
 
@@ -548,6 +551,7 @@ ipcMain.handle('board:setBoardRoute', trustedIpc((_event, boardRoute) => {
   })
 }))
 ipcMain.handle('board:focusAgentSlot', trustedIpc((_event, slot) => focusAgentSlotResult(slot)))
+ipcMain.handle('board:focusAttention', trustedIpc(() => focusHighestPriorityAgentResult()))
 ipcMain.handle('board:showCompactDeck', trustedIpc(() => {
   showCompactDeck()
   return { ok: true }

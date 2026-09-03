@@ -1,6 +1,7 @@
 const COMPACT_SNAPSHOT_SCHEMA = 'ai.ashlr.agent-board.compact-snapshot/v1'
 const AGENT_SOURCES = new Set(['observer_online', 'invalid', 'unavailable'])
 const PROVIDERS = new Set(['codex', 'claude', 'manual', 'unknown'])
+const FOCUSABLE_PROVIDERS = new Set(['codex', 'claude'])
 const STATES = new Set(['off', 'idle', 'unread', 'working', 'needs_input', 'error'])
 const STATE_PRIORITY = Object.freeze({
   error: 0,
@@ -42,7 +43,7 @@ function selectAttentionSlot(agents) {
   if (!Array.isArray(agents)) return null
   let selected = null
   for (const agent of agents) {
-    if (!agent || !Number.isInteger(agent.slot) || !Object.hasOwn(STATE_PRIORITY, agent.state) || agent.state === 'off') continue
+    if (!agent || !Number.isInteger(agent.slot) || !FOCUSABLE_PROVIDERS.has(agent.provider) || !Object.hasOwn(STATE_PRIORITY, agent.state) || agent.state === 'off') continue
     if (!selected
       || STATE_PRIORITY[agent.state] < STATE_PRIORITY[selected.state]
       || (STATE_PRIORITY[agent.state] === STATE_PRIORITY[selected.state] && agent.slot < selected.slot)) {

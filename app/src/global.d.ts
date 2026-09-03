@@ -36,6 +36,7 @@ declare global {
       saveNativeControlCheck?(report: NativeControlCheckReport): Promise<NativeControlCheckReceipt>
       setBoardRoute(boardRoute: BoardRoute): Promise<BoardRoute>
       focusAgentSlot(slot: number): Promise<ExecutionResult>
+      focusAttention(): Promise<ExecutionResult>
       showCompactDeck?(): Promise<{ ok: boolean }>
       setProfile(profile: ProfileId): Promise<void>
       setFlightCheck(active: boolean, variant: 'daily' | 'diagnostic'): Promise<{ acknowledged: boolean; active: boolean; startedAt: string | null }>

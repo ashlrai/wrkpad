@@ -76,17 +76,30 @@ test('uses the exact deterministic attention priority and the lowest slot as tie
     off: 5,
   })
   assert.equal(selectAttentionSlot([
-    { slot: 1, state: 'idle' },
-    { slot: 2, state: 'unread' },
-    { slot: 3, state: 'working' },
-    { slot: 4, state: 'needs_input' },
-    { slot: 5, state: 'error' },
+    { slot: 1, provider: 'codex', state: 'idle' },
+    { slot: 2, provider: 'claude', state: 'unread' },
+    { slot: 3, provider: 'codex', state: 'working' },
+    { slot: 4, provider: 'claude', state: 'needs_input' },
+    { slot: 5, provider: 'codex', state: 'error' },
   ]), 5)
   assert.equal(selectAttentionSlot([
-    { slot: 4, state: 'needs_input' },
-    { slot: 2, state: 'needs_input' },
+    { slot: 4, provider: 'claude', state: 'needs_input' },
+    { slot: 2, provider: 'codex', state: 'needs_input' },
   ]), 2)
-  assert.equal(selectAttentionSlot(Array.from({ length: 6 }, (_, index) => ({ slot: index + 1, state: 'off' }))), null)
+  assert.equal(selectAttentionSlot(Array.from({ length: 6 }, (_, index) => ({ slot: index + 1, provider: null, state: 'off' }))), null)
+})
+
+test('attention excludes manual, unknown, and malformed provider targets', () => {
+  assert.equal(selectAttentionSlot([
+    { slot: 1, provider: 'manual', state: 'error' },
+    { slot: 2, provider: 'unknown', state: 'needs_input' },
+    { slot: 3, provider: 'claude', state: 'working' },
+    { slot: 4, provider: 'codex', state: 'unread' },
+  ]), 3)
+  assert.equal(selectAttentionSlot([
+    { slot: 1, provider: 'manual', state: 'error' },
+    { slot: 2, provider: 'unknown', state: 'needs_input' },
+  ]), null)
 })
 
 test('fails invalid provider, state, source, and time fields closed', () => {
@@ -103,5 +116,5 @@ test('fails invalid provider, state, source, and time fields closed', () => {
   assert.equal(snapshot.agentSource, 'unavailable')
   assert.deepEqual(snapshot.agents[0], { slot: 1, provider: null, state: 'off' })
   assert.deepEqual(snapshot.agents[1], { slot: 2, provider: null, state: 'working' })
-  assert.equal(snapshot.attentionSlot, 2)
+  assert.equal(snapshot.attentionSlot, null)
 })
