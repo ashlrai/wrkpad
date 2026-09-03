@@ -19,7 +19,9 @@ test('native acceptance handlers stay behind trusted renderer IPC', () => {
 })
 
 test('native preparation requires declared route, USB identity, and bounded Desktop metadata', () => {
-  assert.match(mainSource, /settings\.boardRoute === 'codex_native' && board && chatgpt\.status === 'installed'/)
+  assert.match(mainSource, /if \(settings\.boardRoute === 'codex_native'\) \{[\s\S]*shortcutState = synchronizeShortcutOwnership\(settings\.boardRoute\)[\s\S]*passiveRouteVerified = shortcutState\.released === true && shortcutsAreReleased\(\)/)
+  assert.match(mainSource, /shortcutsAreReleased\(\)[\s\S]*globalShortcut\.isRegistered\(accelerator\)/)
+  assert.match(mainSource, /currentContext = passiveRouteVerified && board && chatgpt\.status === 'installed'/)
   assert.match(mainSource, /device: \{ vidPid: board\.vidPid \}/)
   assert.match(mainSource, /codex: \{ version: chatgpt\.version, build: chatgpt\.build \}/)
 })

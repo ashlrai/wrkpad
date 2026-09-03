@@ -114,6 +114,7 @@ const hardwareIds: Partial<Record<ControlId, string>> = {
 }
 
 const STATUS_REFRESH_TIMEOUT_MS = 13_000
+const NATIVE_ACCEPTANCE_POLL_MS = 5_000
 
 const flightLiveGatesReady = (status: SystemStatus, variant: FlightVariant) =>
   status.boardRoute === 'ashlr_layer'
@@ -407,12 +408,13 @@ function App() {
     try {
       const saved = await bridge.setBoardRoute(boardRoute)
       setStatus((current) => ({ ...current, boardRoute: saved }))
+      setApproval(null)
       internalResult(
         'Expected board route saved',
-        'This declaration changed only Agent Board’s local preference. No board, firmware, Input, Codex, shortcut, or process setting changed.',
+        'This declaration changed Agent Board’s local preference and runtime global-shortcut ownership. It did not change the board, firmware, Input, Codex configuration, or another process.',
       )
     } catch {
-      const message = 'The local route preference could not be saved. No device or app setting changed.'
+      const message = 'The route update could not be confirmed. Agent Board may have changed its local preference or runtime shortcut ownership; refresh Setup before acting. No board, firmware, Input, Codex configuration, or another process changed.'
       setRouteError(message)
       setResult({ ok: false, title: 'Route not saved', message, timestamp: new Date().toISOString() })
     } finally {
@@ -423,7 +425,7 @@ function App() {
   const startFlightCheck = async (variant: 'daily' | 'diagnostic' = 'daily') => {
     if (status.boardRoute === 'codex_native') {
       setView('setup')
-      internalResult('Native verification is separate', 'The Ashlr Flight Check validates only the Work Louder Input shortcut layer. Quit Work Louder Input and quit this Agent Board app. Open Codex alone, then verify Settings → Creator Micro.')
+      internalResult('Native verification is separate', 'The Ashlr Flight Check validates only the Work Louder Input shortcut layer. Keep Codex Native declared so Agent Board remains passive, quit Work Louder Input, restart ChatGPT Desktop, then verify Settings → Creator Micro.')
       return
     }
     if (!verifiedInputInstallation(status.inputInstallation ?? initialStatus.inputInstallation)
@@ -980,7 +982,7 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
   const showNoSignalRecovery = noSignalRecoveryNeeded(active, startedAt, events, clock)
   return <section className="flight-view">
     <div className="flight-hero">
-      <div><span className="eyebrow">HARDWARE ACCEPTANCE / {phaseLabel}</span><h2>{nativeRoute ? 'Flight Check belongs to Ashlr Layer.' : complete ? 'Every signal is accounted for.' : blockedCompletion ? 'Acceptance is blocked by evidence.' : active ? 'Prove the physical path.' : phase === 'arming' ? 'Establishing the safety barrier…' : 'Run a safe Flight Check.'}</h2><p>{nativeRoute ? 'This receipt validates Work Louder Input shortcuts, not Codex’s native keys or lighting. Quit Work Louder Input and quit this Agent Board app. Open Codex alone, then verify Settings → Creator Micro.' : 'Press the real board controls only after the app confirms Actions Suppressed. The board twin and mouse clicks do not count; ordinary keyboard use can generate the same shortcuts, so keep your hands on the board during acceptance.'}</p></div>
+      <div><span className="eyebrow">HARDWARE ACCEPTANCE / {phaseLabel}</span><h2>{nativeRoute ? 'Flight Check belongs to Ashlr Layer.' : complete ? 'Every signal is accounted for.' : blockedCompletion ? 'Acceptance is blocked by evidence.' : active ? 'Prove the physical path.' : phase === 'arming' ? 'Establishing the safety barrier…' : 'Run a safe Flight Check.'}</h2><p>{nativeRoute ? 'This receipt validates Work Louder Input shortcuts, not Codex’s native keys or lighting. Keep Codex Native declared so Agent Board remains passive, quit Work Louder Input, restart ChatGPT Desktop, then verify Settings → Creator Micro.' : 'Press the real board controls only after the app confirms Actions Suppressed. The board twin and mouse clicks do not count; ordinary keyboard use can generate the same shortcuts, so keep your hands on the board during acceptance.'}</p></div>
       <div className={complete ? 'flight-score complete' : 'flight-score'} role="progressbar" aria-label="Physical Flight Check progress" aria-valuemin={0} aria-valuemax={expectedSignals} aria-valuenow={completedSignals} aria-valuetext={`${completedSignals} of ${expectedSignals} routed signals; ${completedGestures} of 19 gestures complete`}><strong>{completedSignals}<small>/{expectedSignals}</small></strong><span>{completedGestures}/19 gestures</span><i aria-hidden="true" style={{ '--flight-progress': `${progress}%` } as React.CSSProperties} /></div>
     </div>
 
@@ -1187,6 +1189,33 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
     void load()
     return () => { current = false }
   }, [nativeEvidenceKey, status.boardRoute])
+  useEffect(() => {
+    const read = window.agentBoard?.getNativeAcceptance
+    if (
+      status.boardRoute !== 'codex_native'
+      || !nativeHandoffPrepared
+      || handoffInitializationObserved
+      || nativeBusy
+      || !read
+    ) return
+    let current = true
+    let inFlight = false
+    const poll = async () => {
+      if (inFlight) return
+      inFlight = true
+      try {
+        const snapshot = await read()
+        if (!current) return
+        setNativeAcceptanceRecord({ evidenceKey: nativeEvidenceKey, snapshot })
+      } catch {
+        // The manual refresh remains available; a transient watcher failure never changes evidence.
+      } finally {
+        inFlight = false
+      }
+    }
+    const interval = window.setInterval(() => { void poll() }, NATIVE_ACCEPTANCE_POLL_MS)
+    return () => { current = false; window.clearInterval(interval) }
+  }, [handoffInitializationObserved, nativeBusy, nativeEvidenceKey, nativeHandoffPrepared, status.boardRoute])
   const changeBoardRoute = (route: BoardRoute) => {
     if (route !== status.boardRoute) {
       setNativeAcceptanceRecord(null)
@@ -1211,7 +1240,7 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
       applyNativeSnapshot(result.snapshot)
       if (result.ok) setNativePrepareConfirm(false)
       setNativeActionResult(result.ok
-        ? { ok: true, message: 'Handoff prepared locally. Command-Q ChatGPT Desktop, Work Louder Input, and Agent Board; then reopen ChatGPT Desktop alone.' }
+        ? { ok: true, message: 'Handoff prepared locally. Leave Agent Board open in passive Codex Native mode, quit Work Louder Input, then Command-Q and reopen ChatGPT Desktop.' }
         : { ok: false, message: 'The native handoff could not be prepared. No acceptance was recorded.' })
     } catch {
       setNativeActionResult({ ok: false, message: 'The native handoff could not be prepared. No acceptance was recorded.' })
@@ -1336,7 +1365,7 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
           <div className="native-acceptance-heading">
             <span className="eyebrow">RESTART-SAFE NATIVE HANDOFF</span>
             <h3 id="native-acceptance-title">Carry the physical check across the restart.</h3>
-            <p>Prepare a private local handoff, Command-Q ChatGPT Desktop, Work Louder Input, and Agent Board, then reopen ChatGPT Desktop alone. Return here after that isolated retry to refresh and record your observations.</p>
+            <p>Prepare a private local handoff, leave Agent Board open in passive Codex Native mode, quit Work Louder Input, then Command-Q and reopen ChatGPT Desktop. Agent Board watches bounded native evidence without owning shortcuts.</p>
           </div>
           <div className="native-evidence-ladder" role="list" aria-label="Native evidence ladder">
             <div role="listitem" className={status.boardConnected ? 'native-evidence-node observed' : 'native-evidence-node'}><span>1</span><strong>USB</strong><small>{status.boardConnected ? 'Observed' : 'Not observed'}</small></div>
@@ -1346,11 +1375,11 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
           </div>
           <div className="native-handoff-status" role="status" aria-live="polite">
             <ShieldCheck size={16} />
-            <span><strong>{nativeAcceptanceChecking ? 'Checking current handoff' : nativeAccepted ? 'Operator attestation saved' : nativeAcceptanceInterrupted ? 'Acceptance interrupted before completion' : acceptedReceiptRevoked ? 'Prior acceptance is no longer current' : nativeHandoffPrepared ? nativeAcceptance?.evaluation.status === 'initialization_observed' ? 'Initialization observed after preparation' : 'Handoff prepared' : nativeAcceptance?.evaluation.status === 'invalid' ? 'Fresh handoff required' : 'Handoff not prepared'}</strong>{nativeAcceptanceChecking ? ' Accepted state stays hidden until the live USB, Desktop metadata, and initialization evidence are re-evaluated.' : nativeAccepted ? ' This receipt belongs only to the recorded VID:PID class and fixed-path Desktop metadata.' : nativeAcceptanceInterrupted ? ' The two-phase save stopped before final promotion, so no acceptance was recorded. Start a fresh handoff to discard the staged observations safely, or clear it.' : acceptedReceiptRevoked ? ' Current evidence no longer matches the accepted receipt. Start a fresh handoff and repeat every observation.' : nativeHandoffPrepared ? ' Resume here after the Agent Board restart; the prepared receipt preserves no prompt, task title, or workspace path.' : ' Preparation records bounded model identity and Desktop metadata needed to reject stale acceptance; it does not identify a unique board or running process.'}</span>
+            <span><strong>{nativeAcceptanceChecking ? 'Checking current handoff' : nativeAccepted ? 'Operator attestation saved' : nativeAcceptanceInterrupted ? 'Acceptance interrupted before completion' : acceptedReceiptRevoked ? 'Prior acceptance is no longer current' : nativeHandoffPrepared ? nativeAcceptance?.evaluation.status === 'initialization_observed' ? 'Initialization observed after preparation' : 'Handoff prepared' : nativeAcceptance?.evaluation.status === 'invalid' ? 'Fresh handoff required' : 'Handoff not prepared'}</strong>{nativeAcceptanceChecking ? ' Accepted state stays hidden until the live USB, Desktop metadata, and initialization evidence are re-evaluated.' : nativeAccepted ? ' This receipt belongs only to the recorded VID:PID class and fixed-path Desktop metadata.' : nativeAcceptanceInterrupted ? ' The two-phase save stopped before final promotion, so no acceptance was recorded. Start a fresh handoff to discard the staged observations safely, or clear it.' : acceptedReceiptRevoked ? ' Current evidence no longer matches the accepted receipt. Start a fresh handoff and repeat every observation.' : nativeHandoffPrepared ? nativeAcceptance?.evaluation.status === 'initialization_observed' ? ' The passive watcher found bounded post-prepare evidence. Record only observations you personally perform.' : ' The passive watcher checks bounded native evidence periodically, targeting five-second intervals while Agent Board is active. Refresh now is the authoritative manual check; neither path runs Input integrity work, owns shortcuts, or records operator observations.' : ' Preparation records bounded model identity and Desktop metadata needed to reject stale acceptance; it does not identify a unique board or running process.'}</span>
           </div>
           <div className="native-handoff-actions">
             <button type="button" onClick={() => void prepareNativeHandoff()} disabled={nativeBusy || nativeAcceptanceChecking}>{nativeOperation === 'prepare' ? 'Preparing handoff…' : nativeAcceptanceInterrupted ? 'Start fresh handoff' : nativeAcceptance?.receipt ? nativePrepareConfirm ? 'Confirm fresh handoff' : 'Prepare fresh handoff' : 'Prepare handoff'}</button>
-            <button type="button" onClick={() => void refreshNativeHandoff()} disabled={nativeBusy || nativeAcceptanceChecking || !nativeHandoffPrepared}>{nativeOperation === 'refresh' ? 'Refreshing evidence…' : 'Refresh after isolated retry'}</button>
+            <button type="button" onClick={() => void refreshNativeHandoff()} disabled={nativeBusy || nativeAcceptanceChecking || !nativeHandoffPrepared}>{nativeOperation === 'refresh' ? 'Refreshing evidence…' : 'Refresh now'}</button>
             {!nativeAcceptanceChecking && nativePrepareConfirm && <button type="button" className="quiet" onClick={() => { setNativePrepareConfirm(false); setNativeActionResult(null) }} disabled={nativeBusy}>Cancel fresh handoff</button>}
             {nativeAcceptance?.receipt && <button type="button" className="quiet" onClick={() => void clearNativeHandoff()} disabled={nativeBusy}>{nativeOperation === 'clear' ? 'Clearing handoff…' : 'Clear handoff'}</button>}
           </div>
@@ -1419,7 +1448,7 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
         <div className="rgb-legend" aria-label="Black-opaque state language"><span className="eyebrow">BLACK-OPAQUE STATE LANGUAGE</span><div>{agentStateLegendOrder.map((state) => <span key={state}><i className={agentStateClassName(state)} />{agentStateLabels[state]}{' '}</span>)}</div><small>The screen is the complete legend. Black caps use edge and underglow only after lighting transport is qualified; a frosted hero cap is optional.</small></div>
         {status.boardRoute !== 'codex_native' && status.receiverIdentity && <div className="receiver-identity"><span className="eyebrow">CURRENT RECEIVER BUILD</span><strong>{status.receiverIdentity.packaged ? 'Packaged' : 'Development'} · v{status.receiverIdentity.appVersion}</strong>{status.receiverIdentity.appAsarSha256 && <code title={status.receiverIdentity.appAsarSha256}>app.asar {status.receiverIdentity.appAsarSha256.slice(0, 12)}</code>}<p>{receiverExclusive ? 'This is the only observed Agent Board receiver.' : `${receiverRuntime?.instanceCount ?? 0} receivers across ${receiverRuntime?.distinctBuildCount ?? 0} builds are contending. Fully quit every copy manually, then reopen one exact build. No process was quit automatically.`} Build identity does not prove macOS permission, shortcut receipt, signing, or physical acceptance.</p></div>}
         {status.boardRoute === 'codex_native'
-          ? <div className="native-manual-gate"><ShieldCheck size={16} /><span><strong>Operator acceptance handoff</strong> Prepare the handoff at left, Command-Q ChatGPT Desktop, Work Louder Input, and Agent Board, then reopen ChatGPT Desktop alone. Reopen Agent Board, refresh, and record the checks you personally perform. The local receipt is an operator attestation, not proof of a restart or unique device.</span></div>
+          ? <div className="native-manual-gate"><ShieldCheck size={16} /><span><strong>Operator acceptance handoff</strong> Prepare the handoff at left. Agent Board unregisters its shortcuts and may remain open in passive Codex Native mode; quit Work Louder Input, Command-Q and reopen ChatGPT Desktop, then record the checks you personally perform. Automatic evidence watching never checks a box or accepts for you.</span></div>
           : <button type="button" className="operate-button" onClick={onFlightCheck}>Run Ashlr Flight Check <ChevronRight size={16} /></button>}
         <button type="button" className="operate-button secondary" onClick={onOperate}>Return to board</button>
       </aside>

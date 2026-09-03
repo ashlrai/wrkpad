@@ -19,10 +19,13 @@ wrkpad exposes no write transport. See the canonical
 
 Application ownership is a separate contract from wrkpad occupancy. Declaring
 Ashlr Layer does not disable Codex's native client. Native qualification requires
-Input and Agent Board quit with Codex as the sole intended controller; Input
-profile or firmware work requires Codex and Agent Board quit with signed Input
-as the sole intended controller. These process checks narrow contention but do
-not prove exclusive ownership.
+Input quit and a successfully prepared Agent Board Codex Native handoff, which
+verifies all Ashlr shortcuts are unregistered and observes USB and bounded logs
+without opening the device;
+Codex remains the sole intended HID controller. Input profile or firmware work
+requires Codex and Agent Board quit with signed Input as the sole intended
+controller. These process checks narrow contention but do not prove exclusive
+ownership.
 
 ## Why process checks are insufficient
 

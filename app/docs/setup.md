@@ -53,9 +53,12 @@ Agent Board stores one local expectation:
   shortcuts for Codex, Claude Code/cmux, and Ashlr Fleet.
 - **Not selected:** no physical route is inferred.
 
-This is labeled **Declared here — not detected**. Changing it writes only the
-private Agent Board settings file. It does not change firmware, Input, Codex,
-shortcuts, processes, hooks, or `wrkpad` occupancy.
+This is labeled **Declared here — not detected**. Changing it writes the private
+Agent Board settings file and changes only Agent Board's runtime global-shortcut
+ownership: Codex Native and Not selected release the known shortcuts, while
+Ashlr Layer may register them after its ownership checks pass. It does not
+change the board, firmware, Input or Codex configuration, another process,
+hooks, or `wrkpad` occupancy.
 
 ### Codex Native restart-safe handoff
 
@@ -70,13 +73,22 @@ Use **Prepare handoff** before the controller-isolation restart:
    verify its signature, publisher, Gatekeeper result, or the running process.
 2. Select **Prepare handoff**. Agent Board saves a private mode-`0600` receipt
    containing only the route, board VID:PID, ChatGPT Desktop version/build,
-   preparation time, and seven false observation flags.
-3. Quit ChatGPT Desktop, Work Louder Input, and Agent Board with Command-Q.
-   Reopen ChatGPT Desktop alone and wait for native initialization. In Codex
-   Settings, open **Creator Micro** and inspect the connection and displayed
-   Input Monitoring states.
-4. Reopen Agent Board, return to Setup, and select **Refresh after isolated
-   retry**.
+   preparation time, and seven false observation flags. Preparation also fails
+   closed unless Electron confirms that none of Agent Board's 20 known shortcut
+   accelerators remains registered.
+3. Leave Agent Board open with **Codex Native** declared. In this route it
+   unregisters all 20 Ashlr shortcuts, clears Flight Check and pending approval
+   state, and its device path performs only bounded read-only observation; it
+   does not open a board HID handle or write the device. Agent Board may remain
+   open only after **Prepare handoff** succeeds. Otherwise, quit it before the
+   retry. Quit Work Louder Input with Command-Q.
+4. Command-Q ChatGPT Desktop, reopen it, and wait for native initialization. In
+   Codex Settings, open **Creator Micro** and inspect the connection and displayed
+   Input Monitoring states. Agent Board checks its bounded native evidence
+   periodically, targeting five-second intervals while the app is active and
+   the prepared handoff is waiting. macOS or Electron may throttle background
+   timers, so **Refresh now** is the authoritative manual check; neither path
+   records an operator observation.
    A fresh ordered `v.oai.rgbcfg` → `v.oai.thstatus` → HID notification →
    radial notification sequence may advance the ladder to **Initialization
    inferred**. It does not complete the Settings or physical checks.
@@ -184,8 +196,9 @@ rather than treating this pinned candidate as perpetually current.
    channel.
 6. Reconnect, confirm Input reports the intended version, and verify the saved
    profile.
-7. Quit Input, launch Codex alone, and verify `v.oai.rgbcfg` followed by
-   `v.oai.thstatus` succeeds.
+7. Quit Input, declare **Codex Native** in Agent Board, and relaunch Codex. Agent
+   Board may remain open as the passive evidence watcher; verify `v.oai.rgbcfg`
+   followed by `v.oai.thstatus` succeeds.
 8. Re-run the appropriate physical acceptance afterward. Restore the exported
    profile if the mapping or device sync changed.
 
@@ -295,13 +308,14 @@ or activate the result, send HID packets, or write firmware.
 | Mode | Apps that may remain open | What owns the board route | Evidence boundary |
 | --- | --- | --- | --- |
 | Ashlr Layer daily | Input, Agent Board, ChatGPT/Codex, Claude Code, Claude Desktop, and cmux | Input emits shortcuts; Agent Board receives them | Cross-provider shortcuts and hook state; no native Codex RGB claim |
-| Codex Native qualification | Initialization: Codex alone with Input and Agent Board quit. Verification: reopen Agent Board while Input remains quit. | Codex vendor protocol; Agent Board only reads bounded evidence after restart | Inferred initialization plus explicit operator attestation; not cryptographic device proof |
+| Codex Native qualification | ChatGPT Desktop plus Agent Board in passive Codex Native mode; Input remains quit | Codex vendor protocol; Agent Board unregisters all shortcuts and reads bounded evidence without opening the device | Inferred initialization plus explicit operator attestation; not cryptographic device proof |
 | Firmware qualification | Signed Input app only after all other board/HID controllers quit | Input updater | Download, install, restored profile, and post-update acceptance remain separate |
 
 Declaring `ashlr_layer` does not disable Codex's native device client. Daily
 co-presence supports shortcut operation only and is not native ownership or RGB
-evidence. For native qualification, fully quit Input and Agent Board and leave
-Codex as the sole intended controller. For Input profile or firmware mutation,
+evidence. For native qualification, fully quit Input and keep Agent Board on its
+passive Codex Native route while ChatGPT Desktop is the sole intended HID
+controller. For Input profile or firmware mutation,
 fully quit Codex and Agent Board and leave signed Input as the sole intended
 controller. Process absence is still not cryptographic proof of exclusivity.
 

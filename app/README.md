@@ -32,14 +32,17 @@ Every slot combines provider, task title, icon, text state, and color. The exper
 - Shows six stable, provider-neutral agent slots sourced from `wrkpad status --json`.
 - Foregrounds ChatGPT for Codex slots and cmux for Claude Code slots without sending input.
 - Summarizes `ashlr fleet status --json` into an exception-first operator brief.
-- Maps 20 desktop shortcuts to the board's dial, joystick, Agent keys, and action switches.
+- Maps 20 desktop shortcuts to the board's dial, joystick, Agent keys, and action switches only while the Ashlr Layer route is declared. Codex Native and unknown routes unregister every shortcut.
 - Provides Attention, Pair, Fleet, Proof, and Recovery software lenses while keeping Agent keys fixed.
 - Separates immediate, confirm, and press-and-hold actions in the Electron main process.
 - Runs an interlocked Flight Check for all physical routes and exports a hashed local receipt.
 - Presents separate Codex Native and Ashlr Layer setup flight plans, with a
   private restart-safe native handoff that rejects stale VID:PID/Desktop-metadata
-  context and records only explicit operator observations. Restart-safe means
-  the handoff survives quitting Agent Board; it does not prove a new Codex process.
+  context and records only explicit operator observations. In Codex Native mode,
+  a successful **Prepare handoff** verifies that Agent Board has no registered
+  shortcuts, so it may stay open as a passive evidence watcher while ChatGPT
+  Desktop restarts. Restart-safe means the
+  handoff also survives quitting Agent Board; it does not prove a new Codex process.
 - Keeps session IDs, provider working directories, prompts, transcripts, tool arguments, and raw Fleet payloads out of mission snapshots. Workspace Pulse separately shows the working directory the user selected.
 
 See [controls and state](docs/controls.md) for the complete map and [architecture and trust](docs/architecture.md) for the security model.
