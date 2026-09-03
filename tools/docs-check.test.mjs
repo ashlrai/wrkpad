@@ -108,6 +108,40 @@ test('README commissions native Codex without treating connection as acceptance'
   assert.match(readme, /Reset settings[\s\S]*deletes all profiles, layers, and actions/)
 })
 
+test('native recovery preserves the working layer and gates activation', () => {
+  const root = join(import.meta.dirname, '..')
+  const recovery = readFileSync(join(root, 'app', 'docs', 'codex-native-layer-recovery.md'), 'utf8')
+
+  const orderedSteps = [
+    'fresh direct signature check',
+    'pristine copy',
+    'new candidate profile',
+    'Import layer',
+    'appended',
+    'first visible position',
+    'profile:check-native',
+    'set the candidate profile current',
+    'Physically verify Codex',
+  ]
+  let cursor = -1
+  for (const phrase of orderedSteps) {
+    const next = recovery.indexOf(phrase, cursor + 1)
+    assert.ok(next > cursor, `${phrase} should follow the prior native recovery gate`)
+    cursor = next
+  }
+
+  assert.match(recovery, /black numeric badge is a one-based editor\s+position/)
+  assert.match(recovery, /black \*\*1\*\*[\s\S]*does not identify the layer's bindings/)
+  assert.match(recovery, /replaces the artifact's provisional `layer\.id`[\s\S]*next available ID[\s\S]*appends the layer/)
+  assert.match(recovery, /does not replace the existing layer whose ID\s+is `0`/)
+  assert.match(recovery, /`window-info-retriever\.scpt`[\s\S]*earlier renderer status[\s\S]*fresh direct result governs/)
+  assert.match(recovery, /launch-time self-mutation as possible[\s\S]*causality is not proven/)
+  assert.match(recovery, /`match` result[\s\S]*does not prove layer order/)
+  assert.match(recovery, /`profile\.layers\[0\]`[\s\S]*exact `KV_OAI_\*` layout/)
+  assert.match(recovery, /Do not choose \*\*Import\s+profile\*\* or \*\*Reset Settings\*\*/)
+  assert.match(recovery, /Rollback does not require deleting the candidate/)
+})
+
 test('architecture keeps one mixed queue and scopes only the provider view', () => {
   const root = join(import.meta.dirname, '..')
   const architecture = readFileSync(join(root, 'docs', 'architecture.md'), 'utf8')

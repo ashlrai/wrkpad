@@ -84,6 +84,12 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 
 ### Changed
 
+- Correct the unofficial native-layer recovery runbook for Input 0.18.4's
+  observed append-and-renumber import behavior: use a separate candidate
+  profile, retain the ordinary layer, move native bindings to the first visible
+  position, verify the exported content and order offline, and block activation
+  whenever fresh direct Input integrity differs from an earlier renderer result
+  or changes after launch.
 - After a successful native handoff preparation, Agent Board may remain open as
   a passive watcher with no registered shortcuts; its bounded refresh updates
   inferred initialization evidence only and never records operator observations.
