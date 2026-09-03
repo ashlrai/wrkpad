@@ -148,8 +148,9 @@ provider trusted or invoked it.
 
 ## Quick start: Agent Board
 
-Prerequisites: macOS, Node.js 22 or newer, npm, and Work Louder Input for real
-hardware shortcut routing.
+Prerequisites: macOS, Node.js 22 or newer, and npm. Work Louder Input is needed
+for the cross-provider **Ashlr Layer**, but the official Codex integration does
+not require it.
 
 ```bash
 cd app
@@ -162,15 +163,34 @@ npm run dev
 Follow the [desktop setup and Flight Check](app/docs/setup.md) before using the
 physical controls. `npm run package:mac` creates an unsigned, architecture-specific
 local directory build; it does not install, sign, notarize, or publish anything.
-For a Creator Micro 2 Pro, commission in wired mode: the current
-[Codex Micro guide](https://learn.chatgpt.com/docs/features/codex-micro) says a
-USB cable only charges while Bluetooth remains selected, so open the connection
-selector and choose the fourth channel until the underglow is white. The general
-[Creator Micro 2 setup](https://worklouder.cc/micro-setup) documents that fourth
-channel but conflicts about automatic USB switching; use the explicit selector
-for Codex commissioning. White underglow confirms only the board's
-firmware-selected wired mode. It does not prove macOS enumeration, Input
-integrity, receiver exclusivity, native Codex connection, or a physical receipt.
+
+For a first native Codex test:
+
+1. Turn on the Creator Micro 2 Pro and connect a data-capable USB-C cable.
+2. Hold the bottom-left touch control for three seconds, then tap it until the
+   underglow is white. The current
+   [Codex Micro guide](https://learn.chatgpt.com/docs/features/codex-micro)
+   warns that a cable can charge while Bluetooth remains selected.
+3. Use a short touch-control tap to select layer 1. ChatGPT owns layer 1;
+   [Work Louder documents](https://worklouder.cc/micro-setup) the touch control
+   as the layer selector.
+4. In ChatGPT's device settings, confirm **Connected** and **Input Monitoring:
+   Granted**. If the permission or layer changed, fully quit and reopen ChatGPT.
+   These indicators prove discovery and permission state, not that a physical
+   key navigated a task.
+5. Open a normal task and double-tap a different assigned Agent Key within 350
+   milliseconds. The documented behavior is to switch tasks and foreground
+   ChatGPT; a single tap can switch without bringing ChatGPT forward.
+6. If the board is still silent, quit competing keyboard utilities, reconnect,
+   and run `npm run doctor`. Follow the
+   [native-layer recovery guide](app/docs/codex-native-layer-recovery.md) before
+   considering a reset. Work Louder states that Input's **Reset settings**
+   deletes all profiles, layers, and actions, so back up first and make that
+   deletion an explicit operator decision.
+
+White underglow confirms only the firmware-selected wired transport. It does
+not prove macOS enumeration, receiver exclusivity, native Codex key routing, or
+a physical receipt.
 
 ## Development
 

@@ -83,3 +83,26 @@ test('README uses the canonical matrix without a stale renderer screenshot', () 
   assert.match(readme, /clearly synthetic[\s\S]*not vendor artwork/)
   assert.doesNotMatch(readme, /agent-board-public-demo\.png|accurate Creator Micro 2 control geometry/i)
 })
+
+test('README commissions native Codex without treating connection as acceptance', () => {
+  const root = join(import.meta.dirname, '..')
+  const readme = readFileSync(join(root, 'README.md'), 'utf8')
+
+  const steps = [
+    'data-capable USB-C cable',
+    'underglow is white',
+    'select layer 1',
+    'Input Monitoring:',
+    'within 350',
+    'npm run doctor',
+  ]
+  let cursor = -1
+  for (const phrase of steps) {
+    const next = readme.indexOf(phrase, cursor + 1)
+    assert.ok(next > cursor, `${phrase} should follow the prior commissioning step`)
+    cursor = next
+  }
+
+  assert.match(readme, /indicators prove discovery and permission state, not that a physical\s+key navigated a task/)
+  assert.match(readme, /Reset settings[\s\S]*deletes all profiles, layers, and actions/)
+})
