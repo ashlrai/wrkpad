@@ -31,6 +31,7 @@ jobs:
           set -euo pipefail
           bundle="$(find release -type d -name 'Ashlr Agent Board.app' -print -quit)"
           test -n "$bundle"
+          node scripts/verify-packaged-requires.cjs "$bundle/Contents/Resources/app.asar"
           plist="$bundle/Contents/Info.plist"
           executable="$bundle/Contents/MacOS/Ashlr Agent Board"
           expected_version="$(node -p "require('./package.json').version")"

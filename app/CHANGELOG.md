@@ -6,10 +6,29 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 
 ### Fixed
 
+- Keep both Codex Native and an unselected board route fail-closed for mapped
+  actions while preserving software-only Agent-slot focus.
+- Read Codex Desktop's current and previous UTC log folders so native evidence
+  is not lost during the local/UTC date rollover.
+- Keep ChatGPT metadata inspection off Electron's main thread and bound both
+  fixed-path reads to one aggregate timeout.
 - Recognize Work Louder's official lowercase `input.app` installation name
   without weakening fixed-path, canonical-path, or bundle-integrity checks.
 
 ### Added
+
+- Route-specific Setup flight plans that keep Codex Native prerequisites and
+  evidence separate from Work Louder Input, Input Monitoring, and the Ashlr
+  shortcut receiver path.
+- A private restart-safe Codex Native handoff with an evidence ladder, strict
+  VID:PID/fixed-path Desktop-metadata context binding, fresh ordered
+  initialization checks, and
+  seven explicit operator observations. The receipt contains no prompts,
+  titles, session IDs, raw logs, diagnostic details, or local paths.
+- A fixed-path, mutation-aware ChatGPT Desktop metadata probe that exposes only
+  sanitized version/build observation without claiming signing or process identity.
+- A package-smoke require-closure check for the main, preload, worker, and every
+  transitive local runtime module.
 
 - Route-aware doctor metadata for agents, including a stable schema, timestamp,
   declared route, read-only marker, and separate prerequisite, native, and
@@ -62,6 +81,9 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 
 ### Changed
 
+- After a successful native handoff preparation, Agent Board may remain open as
+  a passive watcher with no registered shortcuts; its bounded refresh updates
+  inferred initialization evidence only and never records operator observations.
 - Replace stale pre-flash setup, troubleshooting, ownership, and readiness
   claims with a canonical September 2 evidence record that keeps firmware RPC
   success separate from native Codex and physical acceptance.
@@ -94,6 +116,9 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 
 ### Security
 
+- Serialize native handoff reads, writes, clears, and route mutations; re-read
+  the receipt and recollect current evidence before persistence, then return a
+  fresh post-write projection so superseded acceptance cannot revive.
 - Bind Input metadata, publisher, signature, and Gatekeeper probes to one
   canonical unchanged bundle fingerprint; reject direct or ancestor symlinks
   and reconfirm publisher identity after strict verification.
@@ -109,5 +134,7 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 - Exact provider task or terminal pane focus.
 - Signed, notarized, or published macOS artifacts.
 - Provider activation or physical user acceptance.
+- Cryptographic proof of native device ownership; the new native receipt is
+  explicitly an operator attestation and still requires real hardware testing.
 
 [Unreleased]: https://github.com/ashlrai/wrkpad/commits/main/app

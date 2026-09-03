@@ -71,12 +71,14 @@ export interface WorkspaceSnapshot {
 
 export interface SystemStatus {
   boardConnected: boolean
+  boardVidPid: string | null
   inputInstalled: boolean
   inputInstallation: InputInstallationStatus
   inputProfile: InputProfileStatus
   inputRuntime: InputRuntimeStatus
   inputMonitoring: 'unverified'
   codex: boolean
+  chatgptDesktop: ChatGPTDesktopStatus
   nativeCodexMicro: CodexNativeMicroStatus
   claude: boolean
   ashlr: boolean
@@ -87,6 +89,12 @@ export interface SystemStatus {
   workspaceSnapshot: WorkspaceSnapshot | null
   receiverIdentity: ReceiverIdentity | null
   receiverRuntime: ReceiverRuntimeStatus
+}
+
+export interface ChatGPTDesktopStatus {
+  status: 'metadata_observed' | 'missing' | 'unavailable'
+  version: string | null
+  build: string | null
 }
 
 export interface InputInstallationStatus {
@@ -151,6 +159,59 @@ export interface CodexNativeMicroStatus {
   observedAt: string | null
   detail: string
   fresh?: boolean
+}
+
+export type NativeAcceptanceStatus = 'not_prepared' | 'invalid' | 'pending' | 'initialization_observed' | 'accepted'
+
+export interface NativeAcceptanceAttestations {
+  settingsConnected: boolean
+  dial: boolean
+  joystick: boolean
+  agentKeys: boolean
+  actionKeys: boolean
+  microphone: boolean
+  lighting: boolean
+}
+
+export interface NativeAcceptanceContext {
+  route: 'codex_native'
+  device: {
+    vidPid: string
+  }
+  codex: {
+    version: string
+    build: string
+  }
+}
+
+export interface NativeAcceptanceReceipt {
+  schema: 'ai.ashlr.agent-board.native-acceptance/v1'
+  state: 'prepared' | 'accepting' | 'accepted'
+  preparedAt: string
+  initializationObservedAt: string | null
+  acceptedAt: string | null
+  context: NativeAcceptanceContext
+  attestations: NativeAcceptanceAttestations
+}
+
+export interface NativeAcceptanceEvaluation {
+  status: NativeAcceptanceStatus
+  reason: string
+  preparedAt?: string
+  initializationObservedAt?: string | null
+  acceptedAt?: string | null
+  attestations?: NativeAcceptanceAttestations
+}
+
+export interface NativeAcceptanceSnapshot {
+  receipt: NativeAcceptanceReceipt | null
+  evaluation: NativeAcceptanceEvaluation
+}
+
+export interface NativeAcceptanceActionResult {
+  ok: boolean
+  message: string
+  snapshot: NativeAcceptanceSnapshot
 }
 
 export type BoardRoute = 'unknown' | 'codex_native' | 'ashlr_layer'

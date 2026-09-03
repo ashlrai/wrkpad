@@ -67,7 +67,7 @@ const NATIVE_MANUAL_CHECKS = [
   {
     id: 'native-owner-isolation',
     name: 'Native controller isolation',
-    detail: 'Keep Work Louder Input and Agent Board fully quit while Codex owns the board.',
+    detail: 'Keep Work Louder Input fully quit. Agent Board may remain open only after its Codex Native handoff prepares successfully; Codex stays the sole intended HID controller.',
   },
   {
     id: 'native-settings',
@@ -331,9 +331,9 @@ export function evaluateDoctor(probes, options = {}) {
             ? 'For the declared Codex Native route, back up the Input profile and plan a guarded vendor firmware qualification with Codex fully quit.'
             : `${inputRecoveryAction(inputInstallation.status)} This is required before another firmware qualification, not before a read-only native connection retry.`
           : nativeFirmwareMissing && nativeRouteSelected
-            ? 'Fully quit Work Louder Input and Agent Board, open Codex alone, then re-run the explicit native connection check. Historical RPC evidence is advisory and does not authorize firmware work.'
+            ? 'Keep Work Louder Input quit, prepare Agent Board’s passive Codex Native handoff successfully, restart Codex, then re-run the explicit native connection check. Historical RPC evidence is advisory and does not authorize firmware work.'
             : nativeRouteSelected
-              ? 'Keep Work Louder Input and Agent Board fully quit, open Codex alone, then verify Settings → Creator Micro and the physical controls.'
+              ? 'Keep Work Louder Input quit, prepare Agent Board’s passive Codex Native handoff successfully, restart Codex, then verify Settings → Creator Micro and the physical controls.'
           : route === 'ashlr_layer' && receiverBlocked
             ? receiverRecoveryAction
             : route === 'ashlr_layer' && receiverRuntime.status === 'not_running'

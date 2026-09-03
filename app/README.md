@@ -32,10 +32,17 @@ Every slot combines provider, task title, icon, text state, and color. The exper
 - Shows six stable, provider-neutral agent slots sourced from `wrkpad status --json`.
 - Foregrounds ChatGPT for Codex slots and cmux for Claude Code slots without sending input.
 - Summarizes `ashlr fleet status --json` into an exception-first operator brief.
-- Maps 20 desktop shortcuts to the board's dial, joystick, Agent keys, and action switches.
+- Maps 20 desktop shortcuts to the board's dial, joystick, Agent keys, and action switches only while the Ashlr Layer route is declared. Codex Native and unknown routes unregister every shortcut.
 - Provides Attention, Pair, Fleet, Proof, and Recovery software lenses while keeping Agent keys fixed.
 - Separates immediate, confirm, and press-and-hold actions in the Electron main process.
-- Runs an interlocked Flight Check for all physical routes and exports a hashed local receipt.
+- Runs an interlocked Ashlr Layer Flight Check and exports a hashed local receipt.
+- Presents separate Codex Native and Ashlr Layer setup flight plans, with a
+  private restart-safe native handoff that rejects stale VID:PID/Desktop-metadata
+  context and records only explicit operator observations. In Codex Native mode,
+  a successful **Prepare handoff** verifies that Agent Board has no registered
+  shortcuts, so it may stay open as a passive evidence watcher while ChatGPT
+  Desktop restarts. Restart-safe means the
+  handoff also survives quitting Agent Board; it does not prove a new Codex process.
 - Keeps session IDs, provider working directories, prompts, transcripts, tool arguments, and raw Fleet payloads out of mission snapshots. Workspace Pulse separately shows the working directory the user selected.
 
 See [controls and state](docs/controls.md) for the complete map and [architecture and trust](docs/architecture.md) for the security model.
@@ -43,9 +50,10 @@ See [controls and state](docs/controls.md) for the complete map and [architectur
 ## Requirements
 
 - macOS and a Work Louder Creator Micro 2
-- [Work Louder Input](https://worklouder.cc/input/) for board profiles and shortcut mapping
 - Node.js 22 or newer and npm for development
-- Optional local integrations: Codex CLI and ChatGPT Desktop; Claude Code, Claude Desktop, and cmux; `wrkpad`; and Ashlr Hub.
+- **Codex Native:** ChatGPT Desktop is required for the native board route.
+- **Ashlr Layer, profile repair, or firmware qualification:** [Work Louder Input](https://worklouder.cc/input/) is required for board profiles and shortcut mapping.
+- Optional local integrations: Codex CLI; Claude Code, Claude Desktop, and cmux; `wrkpad`; and Ashlr Hub.
 
 Runtime CLI discovery checks `~/.local/bin`, `~/.npm-global/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, and `/usr/bin` in that order. It intentionally does not trust the inherited `PATH`. Missing optional tools appear as unavailable rather than being installed automatically.
 
@@ -66,7 +74,16 @@ npm run dev
 route-specific evidence using the shared repository contract. Append
 `-- --route codex_native` only for the separate native qualification route.
 
-Before pressing physical controls, follow [setup and Flight Check](docs/setup.md). Work Louder Input must emit the exact shortcuts expected by the app, and macOS Input Monitoring must be granted by the user. Input's header is the edit target, not proof of the current keyboard profile; use **Set as current profile**, then require the read-only receipt and physical Flight Check.
+Before pressing physical controls, follow [setup and Flight Check](docs/setup.md).
+For **Ashlr Layer**, Work Louder Input must emit the exact shortcuts expected by
+the app and macOS Input Monitoring must be granted by the user. Input's header
+is the edit target, not proof of the current keyboard profile; use **Set as
+current profile**, then require the read-only receipt and physical Flight Check.
+For **Codex Native**, prepare the restart-safe handoff, keep Agent Board open in
+passive mode or quit it, leave Work Louder Input quit, restart ChatGPT Desktop,
+then use the bounded watcher or **Refresh now** to update inferred initialization
+evidence and record each physical observation manually. Neither path proves the
+other.
 
 To populate the six slots with live Codex and Claude Code state, also complete
 the guarded [`wrkpad` service and hook setup](../docs/hook-setup.md). A configured

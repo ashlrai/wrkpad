@@ -157,7 +157,7 @@ test('Codex Native treats Input integrity as advisory during a connection retry'
     name: 'Work Louder Input', ok: false, detail: 'Input.app has the known modified signed resource v0.18.4',
     category: 'optional', severity: 'warning', blocking: false, code: 'known_resource_mutation',
   })
-  assert.match(result.nextAction, /Fully quit Work Louder Input and Agent Board/)
+  assert.match(result.nextAction, /prepare Agent Board’s passive Codex Native handoff successfully/)
   assert.doesNotMatch(result.nextAction, /replace|repair|re-sign/)
   assert.doesNotMatch(JSON.stringify(result), /Users|private|secret|window-info-retriever/)
 })
