@@ -1,8 +1,8 @@
 const { spawnSync } = require('node:child_process')
 
-const INPUT_PROCESS_PATTERN = '/[Ii]nput\\.app/Contents/MacOS/Input([[:space:]]|$)'
+const INPUT_PROCESS_PATTERN = '/[Ii]nput\\.app/Contents/MacOS/[Ii]nput([[:space:]]|$)'
 const MAX_PROCESS_OUTPUT_BYTES = 64 * 1024
-const INPUT_PROCESS_ROW = /^\d{1,10}\s+\/(?:Applications|Users\/[^/\r\n]{1,255}\/Applications)\/[Ii]nput\.app\/Contents\/MacOS\/Input(?:\s[^\r\n]{0,4095})?$/u
+const INPUT_PROCESS_ROW = /^\d{1,10}\s+\/(?:Applications|Users\/[^/\r\n]{1,255}\/Applications)\/[Ii]nput\.app\/Contents\/MacOS\/[Ii]nput(?:\s[^\r\n]{0,4095})?$/u
 
 function inspectInputApplicationRuntime(options = {}) {
   const run = typeof options.run === 'function' ? options.run : spawnSync

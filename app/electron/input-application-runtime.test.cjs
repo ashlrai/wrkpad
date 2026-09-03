@@ -23,13 +23,18 @@ test('accepts exact uppercase and lowercase bundle paths but rejects near matche
   for (const stdout of [
     '123 /Applications/Input.app/Contents/MacOS/Input\n',
     '456 /Applications/input.app/Contents/MacOS/Input\n',
+    '59185 /Applications/input.app/Contents/MacOS/input\n',
+    '654 /Applications/Input.app/Contents/MacOS/input\n',
     '789 /Users/example/Applications/input.app/Contents/MacOS/Input --hidden\n',
+    '790 /Users/example/Applications/input.app/Contents/MacOS/input --hidden\n',
   ]) {
     assert.deepEqual(inspectInputApplicationRuntime({ run: () => result(0, stdout) }), { status: 'running' })
   }
   for (const stdout of [
     '123 /Applications/InputBeta.app/Contents/MacOS/Input\n',
     '123 /Applications/input.app/Contents/MacOS/InputHelper\n',
+    '123 /Applications/input.app/Contents/MacOS/inputHelper\n',
+    '123 /Applications/input.app/Contents/MacOS/input-beta\n',
     '123 /tmp/input.app/Contents/MacOS/Input\n',
     '123 /Applications/INPUT.app/Contents/MacOS/Input\n',
   ]) {
