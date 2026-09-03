@@ -7,13 +7,13 @@ const { ACTION_SPECS, executeSpec } = require('./action-registry.cjs')
 const { detectCreatorMicro2 } = require('./creator-micro-identity.cjs')
 const { inspectCodexMicroLogs } = require('./codex-micro-diagnostics.cjs')
 const { inspectChatGptInstallationAsync } = require('./chatgpt-installation.cjs')
+const { createInputInstallationInspector } = require('./input-installation-async.cjs')
 const { inspectInputProfile } = require('./input-profile-diagnostics.cjs')
 const { inspectInputRuntime } = require('./input-runtime-diagnostics.cjs')
-const { inspectInputInstallation } = require('./input-installation-diagnostics.cjs')
 const { createCachedAsarHasher, inspectPackagedReceiverPeers, inspectReceiverRuntime, shouldRegisterShortcuts } = require('./receiver-runtime-diagnostics.cjs')
 const { writeGeneratedProfile } = require('./input-profile-generator.cjs')
 const { buildRecoveryChecklist, observeRecoveryArtifact, readRecoveryReceipt, recoveryChecklistText, recoveryReceiptPath, removeRecoveryReceipt, writeRecoveryReceipt } = require('./recovery-receipt.cjs')
-const { acceptNativeAcceptance, evaluateNativeAcceptance, prepareNativeAcceptance, readNativeAcceptanceReceipt, removeNativeAcceptanceReceipt, writeNativeAcceptanceReceipt } = require('./native-acceptance-receipt.cjs')
+const { acceptNativeAcceptance, evaluateNativeAcceptance, prepareNativeAcceptance, readNativeAcceptanceReceipt, removeNativeAcceptanceReceipt, stageNativeAcceptance, writeNativeAcceptanceReceipt } = require('./native-acceptance-receipt.cjs')
 const { createNativeAcceptanceOperationCoordinator } = require('./native-acceptance-operations.cjs')
 const { holdSatisfied } = require('./approval-guard.cjs')
 const { evaluateFlightSignals } = require('./flight-receipt.cjs')
@@ -36,11 +36,11 @@ const HOTKEYS = {
 let mainWindow; let rendererUrl; let currentProfile = 'codex'; let signalSequence = 0; let shortcutRegistrations = []
 let receiverRuntime = { status: 'unavailable', instanceCount: 0, distinctBuildCount: 0, currentAsarSha256: null, candidateAsarSha256: null, candidateMatchesCurrent: null }
 let missionCache = null; let missionCacheAt = 0; let missionInFlight = null
-let inputInstallationCache = null; let inputInstallationCacheAt = 0
 const approvals = new Map()
 const flightSession = createFlightSession()
 const flightOperations = createFlightOperationCoordinator(flightSession)
 const cachedReceiverAsarHash = createCachedAsarHasher({ ttlMs: 30_000, maxEntries: 32 })
+const inspectInputInstallationAsync = createInputInstallationInspector()
 
 function settingsPath() { return appSettingsPath(app.getPath('appData')) }
 function handoffPath() { return recoveryReceiptPath(settingsPath()) }
@@ -87,8 +87,9 @@ const nativeAcceptanceOperations = createNativeAcceptanceOperationCoordinator({
   evaluateReceipt: evaluateNativeAcceptance,
   prepareReceipt: prepareNativeAcceptance,
   readReceipt: () => readNativeAcceptanceReceipt(settingsPath()),
-  removeReceipt: () => removeNativeAcceptanceReceipt(settingsPath()),
-  writeReceipt: (receipt) => writeNativeAcceptanceReceipt(settingsPath(), receipt),
+  removeReceipt: (expectedReceipt) => removeNativeAcceptanceReceipt(settingsPath(), expectedReceipt),
+  stageReceipt: stageNativeAcceptance,
+  writeReceipt: (receipt, expectedReceipt) => writeNativeAcceptanceReceipt(settingsPath(), receipt, expectedReceipt),
 })
 
 function createWindow() {
@@ -196,18 +197,18 @@ async function boardConnected() {
 }
 
 function inspectCurrentInputInstallation(force = false) {
-  if (!force && inputInstallationCache && Date.now() - inputInstallationCacheAt < 30_000) return inputInstallationCache
-  inputInstallationCache = inspectInputInstallation({ home: app.getPath('home') })
-  inputInstallationCacheAt = Date.now()
-  return inputInstallationCache
+  return inspectInputInstallationAsync({ home: app.getPath('home'), force })
 }
 
 async function verifyFlightGates(variant, forceInput = true) {
-  const settings = readSettings()
   const home = app.getPath('home')
-  const inputInstallation = inspectCurrentInputInstallation(forceInput)
-  const currentReceiverRuntime = synchronizeShortcutOwnership()
+  const inputInstallation = await inspectCurrentInputInstallation(forceInput)
   const board = await boardConnected()
+  // Admission evidence is intentionally sampled after both bounded hardware
+  // probes, so a route mutation or newly competing receiver cannot be admitted
+  // from state captured while either probe was still pending.
+  const settings = readSettings()
+  const currentReceiverRuntime = synchronizeShortcutOwnership()
   return evaluateFlightGates({
     variant,
     boardRoute: settings.boardRoute,
@@ -248,10 +249,12 @@ ipcMain.handle('board:getStatus', trustedIpc(async () => {
   const codexExecutable = resolveTool('codex', { home })
   const claudeExecutable = resolveTool('claude', { home })
   const ashlrExecutable = resolveTool('ashlr', { home })
-  const inputInstallation = inspectCurrentInputInstallation()
+  // Start the longest bounded probe before the synchronous receiver check so
+  // the renderer's outer deadline covers the complete status operation.
+  const inputInstallationPending = inspectCurrentInputInstallation()
   const currentReceiverRuntime = synchronizeShortcutOwnership()
-  const [board, codex, claude, ashlr, workspaceSnapshot, chatgptInspection] = await Promise.all([
-    boardConnected(), codexExecutable ? commandExists(codexExecutable) : false,
+  const [inputInstallation, board, codex, claude, ashlr, workspaceSnapshot, chatgptInspection] = await Promise.all([
+    inputInstallationPending, boardConnected(), codexExecutable ? commandExists(codexExecutable) : false,
     claudeExecutable ? commandExists(claudeExecutable) : false,
     ashlrExecutable ? commandExists(ashlrExecutable) : false,
     inspectWorkspace(settings.workspace),
@@ -259,6 +262,7 @@ ipcMain.handle('board:getStatus', trustedIpc(async () => {
   ])
   return {
     boardConnected: Boolean(board),
+    boardVidPid: board?.vidPid ?? null,
     inputInstalled: inputInstallation.status !== 'missing',
     inputInstallation,
     inputProfile: inspectInputProfile(home, board?.storageId),

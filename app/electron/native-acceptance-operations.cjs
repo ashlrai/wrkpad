@@ -19,6 +19,7 @@ function assertDependencies(options) {
     'prepareReceipt',
     'readReceipt',
     'removeReceipt',
+    'stageReceipt',
     'writeReceipt',
   ]) {
     if (typeof options?.[name] !== 'function') throw new TypeError(`${name} must be a function`)
@@ -36,8 +37,9 @@ function createNativeAcceptanceOperationCoordinator(options) {
   }
 
   async function captureInputs() {
-    const receipt = await options.readReceipt()
     const evidence = await options.collectEvidence()
+    const receipt = options.readReceipt()
+    if (receipt && typeof receipt.then === 'function') throw new TypeError('readReceipt must be synchronous')
     return { receipt, evidence }
   }
 
@@ -83,7 +85,7 @@ function createNativeAcceptanceOperationCoordinator(options) {
       if (changed) return changedResult(PREPARE_CHANGED_MESSAGE)
       if (!current.evidence?.currentContext) return changedResult(PREPARE_CONTEXT_MESSAGE)
 
-      const written = await options.writeReceipt(options.prepareReceipt(current.evidence.currentContext))
+      const written = await options.writeReceipt(options.prepareReceipt(current.evidence.currentContext), current.receipt)
       const snapshot = await currentSnapshot()
       const persisted = isDeepStrictEqual(snapshot.receipt, written)
       const contextCurrent = isDeepStrictEqual(snapshot.receipt?.context ?? null, current.evidence.currentContext)
@@ -101,18 +103,35 @@ function createNativeAcceptanceOperationCoordinator(options) {
       if (changed) return changedResult(ACCEPT_CHANGED_MESSAGE)
       if (!current.receipt || !current.evidence?.currentContext) return changedResult(ACCEPT_CONTEXT_MESSAGE)
 
-      const accepted = options.acceptReceipt(current.receipt, {
+      const staged = options.stageReceipt(current.receipt, {
         attestations,
         currentContext: current.evidence.currentContext,
         nativeInitialization: current.evidence.nativeInitialization,
       })
-      const written = await options.writeReceipt(accepted)
-      const snapshot = await currentSnapshot()
-      const persisted = isDeepStrictEqual(snapshot.receipt, written)
-      if (!persisted || snapshot.evaluation?.status !== 'accepted') {
-        return { ok: false, message: ACCEPT_CHANGED_MESSAGE, snapshot }
+      const stagedWritten = await options.writeReceipt(staged, current.receipt)
+      const promotion = await captureInputs()
+      const promotionSnapshot = {
+        receipt: promotion.receipt,
+        evaluation: evaluate(promotion.receipt, promotion.evidence),
       }
-      return { ok: true, message: ACCEPT_SUCCESS_MESSAGE, snapshot }
+      if (!isDeepStrictEqual(promotion.receipt, stagedWritten)) {
+        return { ok: false, message: ACCEPT_CHANGED_MESSAGE, snapshot: promotionSnapshot }
+      }
+
+      const accepted = options.acceptReceipt(promotion.receipt, {
+        currentContext: promotion.evidence?.currentContext ?? null,
+        nativeInitialization: promotion.evidence?.nativeInitialization,
+      })
+      const acceptedEvaluation = evaluate(accepted, promotion.evidence)
+      if (acceptedEvaluation?.status !== 'accepted') {
+        return { ok: false, message: ACCEPT_CHANGED_MESSAGE, snapshot: promotionSnapshot }
+      }
+      const written = await options.writeReceipt(accepted, promotion.receipt)
+      return {
+        ok: true,
+        message: ACCEPT_SUCCESS_MESSAGE,
+        snapshot: { receipt: written, evaluation: acceptedEvaluation },
+      }
     } catch {
       return changedResult(ACCEPT_FAILED_MESSAGE)
     }
@@ -120,7 +139,9 @@ function createNativeAcceptanceOperationCoordinator(options) {
 
   async function clearOperation() {
     try {
-      const removed = await options.removeReceipt()
+      const expected = options.readReceipt()
+      if (expected && typeof expected.then === 'function') throw new TypeError('readReceipt must be synchronous')
+      const removed = await options.removeReceipt(expected)
       const snapshot = await currentSnapshot()
       const cleared = removed === true && snapshot.receipt === null
       return {

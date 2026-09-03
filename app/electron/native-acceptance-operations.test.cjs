@@ -1,9 +1,11 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
+const { isDeepStrictEqual } = require('node:util')
 const {
   acceptNativeAcceptance,
   evaluateNativeAcceptance,
   prepareNativeAcceptance,
+  stageNativeAcceptance,
 } = require('./native-acceptance-receipt.cjs')
 const { createNativeAcceptanceOperationCoordinator } = require('./native-acceptance-operations.cjs')
 
@@ -52,15 +54,19 @@ function fixture(overrides = {}) {
   let evidence = overrides.evidence ?? { currentContext: context, nativeInitialization: connected }
   const calls = []
   const coordinator = createNativeAcceptanceOperationCoordinator({
-    readReceipt: async () => {
+    readReceipt: () => {
       calls.push('read')
       return overrides.readReceipt ? overrides.readReceipt({ receipt, evidence, calls }) : clone(receipt)
     },
     collectEvidence: async () => {
       calls.push('collect')
-      return overrides.collectEvidence ? overrides.collectEvidence({ receipt, evidence, calls }) : clone(evidence)
+      return overrides.collectEvidence ? overrides.collectEvidence({ receipt, evidence, calls, setReceipt(value) { receipt = value }, setEvidence(value) { evidence = value } }) : clone(evidence)
     },
     prepareReceipt: (value) => prepareNativeAcceptance(value, '2026-09-03T00:00:00.000Z'),
+    stageReceipt: (value, options) => stageNativeAcceptance(value, {
+      ...options,
+      stagedAt: '2026-09-03T00:02:00.000Z',
+    }),
     acceptReceipt: (value, options) => acceptNativeAcceptance(value, {
       ...options,
       acceptedAt: '2026-09-03T00:02:00.000Z',
@@ -69,15 +75,19 @@ function fixture(overrides = {}) {
       ...options,
       now: '2026-09-03T00:03:00.000Z',
     }),
-    writeReceipt: async (value) => {
+    writeReceipt: async (value, expected) => {
       calls.push('write')
-      if (overrides.writeReceipt) return overrides.writeReceipt(value, { get receipt() { return receipt }, setReceipt(value) { receipt = value }, setEvidence(value) { evidence = value }, calls })
+      const controls = { get receipt() { return receipt }, setReceipt(value) { receipt = value }, setEvidence(value) { evidence = value }, calls }
+      if (overrides.writeReceipt) return overrides.writeReceipt(value, expected, controls)
+      if (!isDeepStrictEqual(receipt, expected)) throw new TypeError('conditional receipt mismatch')
       receipt = clone(value)
       return clone(receipt)
     },
-    removeReceipt: async () => {
+    removeReceipt: async (expected) => {
       calls.push('remove')
-      if (overrides.removeReceipt) return overrides.removeReceipt({ get receipt() { return receipt }, setReceipt(value) { receipt = value }, calls })
+      const controls = { get receipt() { return receipt }, setReceipt(value) { receipt = value }, calls }
+      if (overrides.removeReceipt) return overrides.removeReceipt(expected, controls)
+      if (!isDeepStrictEqual(receipt, expected)) return false
       receipt = null
       return true
     },
@@ -97,7 +107,7 @@ test('preparation double-checks receipt and context before writing, then returns
   assert.equal(result.ok, true)
   assert.equal(result.snapshot.receipt.state, 'prepared')
   assert.equal(result.snapshot.evaluation.status, 'initialization_observed')
-  assert.deepEqual(state.calls, ['read', 'collect', 'read', 'collect', 'write', 'read', 'collect'])
+  assert.deepEqual(state.calls, ['collect', 'read', 'collect', 'read', 'write', 'collect', 'read'])
 })
 
 test('preparation rejects a receipt changed during its validation window', async () => {
@@ -147,21 +157,177 @@ test('acceptance evaluates the final initialization evidence immediately before 
   assert.equal(result.snapshot.evaluation.reason, 'initialization_disconnected')
 })
 
-test('acceptance cannot return stale success when context changes after persistence', async () => {
+test('acceptance promotes from one final evidence sample without a post-promotion probe', async () => {
   const prepared = prepareNativeAcceptance(context, '2026-09-03T00:00:00.000Z')
+  const state = fixture({ receipt: prepared })
+  const result = await state.coordinator.accept(attestations)
+
+  assert.equal(result.ok, true)
+  assert.equal(result.snapshot.receipt.state, 'accepted')
+  assert.equal(result.snapshot.evaluation.status, 'accepted')
+  assert.deepEqual(state.calls, ['collect', 'read', 'collect', 'read', 'write', 'collect', 'read', 'write'])
+})
+
+test('acceptance detects a receipt replacement during final pre-write evidence collection', async () => {
+  const prepared = prepareNativeAcceptance(context, '2026-09-03T00:00:00.000Z')
+  const replacement = prepareNativeAcceptance(context, '2026-09-03T00:00:30.000Z')
+  let collections = 0
   const state = fixture({
     receipt: prepared,
-    writeReceipt: (value, controls) => {
-      controls.setReceipt(clone(value))
-      controls.setEvidence({ currentContext: replacementContext, nativeInitialization: connected })
-      return clone(value)
+    collectEvidence: (controls) => {
+      collections += 1
+      if (collections === 2) controls.setReceipt(clone(replacement))
+      return { currentContext: context, nativeInitialization: connected }
     },
   })
   const result = await state.coordinator.accept(attestations)
   assert.equal(result.ok, false)
   assert.match(result.message, /changed while acceptance/)
-  assert.equal(result.snapshot.receipt.state, 'accepted')
+  assert.equal(state.calls.includes('write'), false)
+  assert.deepEqual(state.getReceipt(), replacement)
+})
+
+test('post-write snapshot detects a receipt replacement during evidence collection', async () => {
+  const prepared = prepareNativeAcceptance(context, '2026-09-03T00:00:00.000Z')
+  const replacement = prepareNativeAcceptance(context, '2026-09-03T00:00:30.000Z')
+  let collections = 0
+  const state = fixture({
+    receipt: prepared,
+    collectEvidence: (controls) => {
+      collections += 1
+      if (collections === 3) controls.setReceipt(clone(replacement))
+      return { currentContext: context, nativeInitialization: connected }
+    },
+  })
+  const result = await state.coordinator.accept(attestations)
+  assert.equal(result.ok, false)
+  assert.match(result.message, /changed while acceptance/)
+  assert.deepEqual(result.snapshot.receipt, replacement)
+  assert.deepEqual(state.getReceipt(), replacement)
+})
+
+test('conditional acceptance does not overwrite a competing writer after validation', async () => {
+  const prepared = prepareNativeAcceptance(context, '2026-09-03T00:00:00.000Z')
+  const competing = prepareNativeAcceptance(context, '2026-09-03T00:00:30.000Z')
+  const state = fixture({
+    receipt: prepared,
+    writeReceipt: (value, expected, controls) => {
+      controls.setReceipt(clone(competing))
+      if (!isDeepStrictEqual(controls.receipt, expected)) throw new TypeError('conditional receipt mismatch')
+      controls.setReceipt(clone(value))
+      return clone(value)
+    },
+  })
+  const result = await state.coordinator.accept(attestations)
+  assert.equal(result.ok, false)
+  assert.deepEqual(state.getReceipt(), competing)
+  assert.deepEqual(result.snapshot.receipt, competing)
+})
+
+test('context drift after staging leaves a durable non-accepted receipt that cannot resurrect', async () => {
+  const prepared = prepareNativeAcceptance(context, '2026-09-03T00:00:00.000Z')
+  let collections = 0
+  const state = fixture({
+    receipt: prepared,
+    collectEvidence: (controls) => {
+      collections += 1
+      if (collections === 3) {
+        const changed = { currentContext: replacementContext, nativeInitialization: connected }
+        controls.setEvidence(changed)
+        return changed
+      }
+      return clone(controls.evidence)
+    },
+  })
+  const result = await state.coordinator.accept(attestations)
+  assert.equal(result.ok, false)
+  assert.match(result.message, /changed while acceptance|Fresh ordered initialization/)
+  assert.equal(result.snapshot.receipt.state, 'accepting')
   assert.equal(result.snapshot.evaluation.reason, 'context_mismatch')
+
+  state.setEvidence({ currentContext: context, nativeInitialization: connected })
+  const restored = await state.coordinator.get()
+  assert.equal(restored.receipt.state, 'accepting')
+  assert.equal(restored.evaluation.status, 'pending')
+  assert.notEqual(restored.evaluation.status, 'accepted')
+})
+
+test('a throwing promotion leaves only the non-accepted staged receipt', async () => {
+  const prepared = prepareNativeAcceptance(context, '2026-09-03T00:00:00.000Z')
+  let writes = 0
+  const state = fixture({
+    receipt: prepared,
+    writeReceipt: (value, expected, controls) => {
+      writes += 1
+      if (!isDeepStrictEqual(controls.receipt, expected)) throw new TypeError('conditional receipt mismatch')
+      if (writes === 2) throw new TypeError('promotion storage unavailable')
+      controls.setReceipt(clone(value))
+      return clone(value)
+    },
+  })
+  const result = await state.coordinator.accept(attestations)
+  assert.equal(result.ok, false)
+  assert.equal(state.getReceipt().state, 'accepting')
+  assert.equal(result.snapshot.receipt.state, 'accepting')
+  assert.equal(result.snapshot.evaluation.status, 'pending')
+
+  state.setEvidence({ currentContext: context, nativeInitialization: connected })
+  const restored = await state.coordinator.get()
+  assert.equal(restored.receipt.state, 'accepting')
+  assert.notEqual(restored.evaluation.status, 'accepted')
+})
+
+test('a never-settling promotion exposes only the non-accepted staged receipt', async () => {
+  const prepared = prepareNativeAcceptance(context, '2026-09-03T00:00:00.000Z')
+  let writes = 0
+  const never = new Promise(() => {})
+  const state = fixture({
+    receipt: prepared,
+    writeReceipt: (value, expected, controls) => {
+      writes += 1
+      if (!isDeepStrictEqual(controls.receipt, expected)) throw new TypeError('conditional receipt mismatch')
+      if (writes === 2) return never
+      controls.setReceipt(clone(value))
+      return clone(value)
+    },
+  })
+
+  void state.coordinator.accept(attestations)
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(writes, 2)
+  assert.equal(state.getReceipt().state, 'accepting')
+  assert.equal(evaluateNativeAcceptance(state.getReceipt(), {
+    currentContext: context,
+    nativeInitialization: connected,
+    now: '2026-09-03T00:03:00.000Z',
+  }).status, 'pending')
+})
+
+test('promotion CAS never overwrites a competing receipt', async () => {
+  const prepared = prepareNativeAcceptance(context, '2026-09-03T00:00:00.000Z')
+  const competing = prepareNativeAcceptance(context, '2026-09-03T00:00:30.000Z')
+  let writes = 0
+  const state = fixture({
+    receipt: prepared,
+    writeReceipt: (value, expected, controls) => {
+      writes += 1
+      if (writes === 1) {
+        assert.deepEqual(expected, prepared)
+        controls.setReceipt(clone(value))
+        return clone(value)
+      }
+      controls.setReceipt(clone(competing))
+      if (!isDeepStrictEqual(controls.receipt, expected)) throw new TypeError('conditional receipt mismatch')
+      controls.setReceipt(clone(value))
+      return clone(value)
+    },
+  })
+
+  const result = await state.coordinator.accept(attestations)
+  assert.equal(result.ok, false)
+  assert.match(result.message, /No acceptance was recorded/)
+  assert.deepEqual(state.getReceipt(), competing)
+  assert.deepEqual(result.snapshot.receipt, competing)
 })
 
 test('acceptance and route mutation share one queue', async () => {
@@ -169,7 +335,7 @@ test('acceptance and route mutation share one queue', async () => {
   const prepared = prepareNativeAcceptance(context, '2026-09-03T00:00:00.000Z')
   const state = fixture({
     receipt: prepared,
-    writeReceipt: async (value, controls) => {
+    writeReceipt: async (value, _expected, controls) => {
       controls.calls.push('write-wait')
       await gate.promise
       controls.setReceipt(clone(value))
@@ -192,7 +358,7 @@ test('acceptance and route mutation share one queue', async () => {
 test('clear is serialized after preparation and verifies the post-removal snapshot', async () => {
   const gate = deferred()
   const state = fixture({
-    writeReceipt: async (value, controls) => {
+    writeReceipt: async (value, _expected, controls) => {
       await gate.promise
       controls.setReceipt(clone(value))
       return clone(value)
@@ -213,7 +379,7 @@ test('clear does not claim success if a receipt exists in the fresh snapshot', a
   const prepared = prepareNativeAcceptance(context, '2026-09-03T00:00:00.000Z')
   const state = fixture({
     receipt: prepared,
-    removeReceipt: (controls) => {
+    removeReceipt: (_expected, controls) => {
       controls.setReceipt(prepared)
       return true
     },
@@ -222,6 +388,22 @@ test('clear does not claim success if a receipt exists in the fresh snapshot', a
   assert.equal(result.ok, false)
   assert.deepEqual(result.snapshot.receipt, prepared)
   assert.match(result.message, /could not be cleared safely/)
+})
+
+test('conditional clear does not remove a competing writer', async () => {
+  const prepared = prepareNativeAcceptance(context, '2026-09-03T00:00:00.000Z')
+  const competing = prepareNativeAcceptance(context, '2026-09-03T00:00:30.000Z')
+  const state = fixture({
+    receipt: prepared,
+    removeReceipt: (expected, controls) => {
+      controls.setReceipt(clone(competing))
+      return isDeepStrictEqual(controls.receipt, expected)
+    },
+  })
+  const result = await state.coordinator.clear()
+  assert.equal(result.ok, false)
+  assert.deepEqual(state.getReceipt(), competing)
+  assert.deepEqual(result.snapshot.receipt, competing)
 })
 
 test('dependency failures are sanitized and do not expose raw local content', async () => {
@@ -237,4 +419,8 @@ test('coordinator validates dependencies and context mutation callbacks', async 
   assert.throws(() => createNativeAcceptanceOperationCoordinator({}), /must be a function/)
   const state = fixture()
   await assert.rejects(state.coordinator.mutateContext(null), /context mutation must be a function/)
+  const asyncRead = fixture({ readReceipt: () => Promise.resolve(null) })
+  const failed = await asyncRead.coordinator.get()
+  assert.equal(failed.receipt, null)
+  assert.equal(failed.evaluation.status, 'not_prepared')
 })

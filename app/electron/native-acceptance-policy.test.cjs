@@ -24,8 +24,8 @@ test('native preparation requires declared route, USB identity, and bounded Desk
   assert.match(mainSource, /codex: \{ version: chatgpt\.version, build: chatgpt\.build \}/)
 })
 
-test('native acceptance is re-evaluated from current evidence before persistence', () => {
-  assert.match(mainSource, /createNativeAcceptanceOperationCoordinator\(\{[\s\S]*collectEvidence: collectNativeAcceptanceEvidence,[\s\S]*readReceipt: \(\) => readNativeAcceptanceReceipt\(settingsPath\(\)\),[\s\S]*writeReceipt: \(receipt\) => writeNativeAcceptanceReceipt\(settingsPath\(\), receipt\)/)
+test('native acceptance is staged and re-evaluated from current evidence before persistence', () => {
+  assert.match(mainSource, /createNativeAcceptanceOperationCoordinator\(\{[\s\S]*collectEvidence: collectNativeAcceptanceEvidence,[\s\S]*readReceipt: \(\) => readNativeAcceptanceReceipt\(settingsPath\(\)\),[\s\S]*removeReceipt: \(expectedReceipt\) => removeNativeAcceptanceReceipt\(settingsPath\(\), expectedReceipt\),[\s\S]*stageReceipt: stageNativeAcceptance,[\s\S]*writeReceipt: \(receipt, expectedReceipt\) => writeNativeAcceptanceReceipt\(settingsPath\(\), receipt, expectedReceipt\)/)
   assert.match(mainSource, /nativeAcceptanceOperations\.accept\(attestations\)/)
 })
 

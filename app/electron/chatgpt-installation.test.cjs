@@ -11,6 +11,7 @@ const {
 const fs = require('node:fs')
 const { tmpdir } = require('node:os')
 const path = require('node:path')
+const { performance } = require('node:perf_hooks')
 const {
   CHATGPT_INFO_PLIST_PATH,
   MAX_COMMAND_OUTPUT_BYTES,
@@ -107,6 +108,99 @@ test('async inspection preserves the fixed contract under one aggregate deadline
     assert.equal(calls.length, 2)
     assert.ok(calls.every(({ options }) => options.timeout > 0 && options.timeout <= PROBE_TIMEOUT_MS))
     assert.ok(calls[1].options.timeout <= calls[0].options.timeout)
+  } finally {
+    rmSync(files.root, { recursive: true, force: true })
+  }
+})
+
+test('async inspection rejects a runner result returned after the monotonic aggregate deadline', async () => {
+  const files = fixture()
+  const calls = []
+  let monotonicMs = 100
+  try {
+    const inspected = await inspectChatGptInstallationAsync({
+      filesystem: files.filesystem,
+      clock: () => monotonicMs,
+      runner: async (executable, args, options) => {
+        calls.push({ executable, args, options })
+        // Deliberately ignore the supplied timeout and return apparently valid
+        // output after the aggregate deadline.
+        monotonicMs += PROBE_TIMEOUT_MS + 1
+        return { status: 0, stdout: '26.818.61809\n', stderr: '' }
+      },
+    })
+    assert.deepEqual(inspected, {
+      installed: true,
+      version: null,
+      build: null,
+      status: 'probe_unavailable',
+    })
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].options.timeout, PROBE_TIMEOUT_MS)
+  } finally {
+    rmSync(files.root, { recursive: true, force: true })
+  }
+})
+
+test('async inspection fails closed when its injected monotonic clock regresses', async () => {
+  const files = fixture()
+  let monotonicMs = 100
+  try {
+    const inspected = await inspectChatGptInstallationAsync({
+      filesystem: files.filesystem,
+      clock: () => monotonicMs,
+      runner: async () => {
+        monotonicMs = 99
+        return { status: 0, stdout: '26.818.61809\n', stderr: '' }
+      },
+    })
+    assert.equal(inspected.status, 'probe_unavailable')
+  } finally {
+    rmSync(files.root, { recursive: true, force: true })
+  }
+})
+
+test('async inspection settles on its hard deadline when an injected runner never resolves', async () => {
+  const files = fixture()
+  try {
+    const startedAt = performance.now()
+    const inspected = await inspectChatGptInstallationAsync({
+      filesystem: files.filesystem,
+      probeTimeoutMs: 10,
+      runner: () => new Promise(() => {}),
+    })
+    assert.deepEqual(inspected, {
+      installed: true,
+      version: null,
+      build: null,
+      status: 'probe_unavailable',
+    })
+    assert.ok(performance.now() - startedAt < 1_000)
+  } finally {
+    rmSync(files.root, { recursive: true, force: true })
+  }
+})
+
+test('async inspection reports timing failure separately from a bundle mutation', async () => {
+  const files = fixture()
+  let monotonicMs = 0
+  let calls = 0
+  try {
+    const inspected = await inspectChatGptInstallationAsync({
+      filesystem: files.filesystem,
+      clock: () => monotonicMs,
+      runner: async (_executable, args) => {
+        calls += 1
+        if (args[1] === 'CFBundleVersion') monotonicMs = PROBE_TIMEOUT_MS
+        return {
+          status: 0,
+          stdout: args[1] === 'CFBundleShortVersionString' ? '26.818.61809\n' : '17600\n',
+          stderr: '',
+        }
+      },
+    })
+    assert.equal(calls, 2)
+    assert.equal(inspected.status, 'probe_unavailable')
   } finally {
     rmSync(files.root, { recursive: true, force: true })
   }

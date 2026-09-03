@@ -1,7 +1,10 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
+const { spawn } = require('node:child_process')
+const { once } = require('node:events')
 const {
   chmodSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -17,6 +20,8 @@ const {
   MAX_INITIALIZATION_AGE_MS,
   MAX_NATIVE_ACCEPTANCE_RECEIPT_BYTES,
   NATIVE_ACCEPTANCE_FILENAME,
+  NATIVE_ACCEPTANCE_LOCK_FILENAME,
+  NATIVE_ACCEPTANCE_LOCK_SCHEMA,
   NATIVE_ACCEPTANCE_SCHEMA,
   acceptNativeAcceptance,
   evaluateNativeAcceptance,
@@ -25,8 +30,10 @@ const {
   readNativeAcceptanceReceipt,
   removeNativeAcceptanceReceipt,
   sanitizeNativeAcceptanceReceipt,
+  stageNativeAcceptance,
   writeNativeAcceptanceReceipt,
 } = require('./native-acceptance-receipt.cjs')
+const { createNativeAcceptanceOperationCoordinator } = require('./native-acceptance-operations.cjs')
 
 const context = {
   route: 'codex_native',
@@ -65,22 +72,191 @@ test('writes and replaces one atomic private receipt beside settings', () => {
     const receiptPath = nativeAcceptanceReceiptPath(settingsFilePath)
     assert.equal(receiptPath, path.join(root, 'settings', NATIVE_ACCEPTANCE_FILENAME))
     const prepared = prepareNativeAcceptance(context, preparedAt)
-    assert.deepEqual(writeNativeAcceptanceReceipt(settingsFilePath, prepared), prepared)
+    assert.deepEqual(writeNativeAcceptanceReceipt(settingsFilePath, prepared, null), prepared)
     assert.equal(statSync(receiptPath).mode & 0o777, 0o600)
     assert.deepEqual(readNativeAcceptanceReceipt(settingsFilePath), prepared)
 
-    const accepted = acceptNativeAcceptance(prepared, {
+    const accepting = stageNativeAcceptance(prepared, {
       currentContext: context,
       nativeInitialization: initialization,
       attestations: allAccepted,
+      stagedAt: acceptedAt,
+    })
+    assert.deepEqual(writeNativeAcceptanceReceipt(settingsFilePath, accepting, prepared), accepting)
+    const accepted = acceptNativeAcceptance(accepting, {
+      currentContext: context,
+      nativeInitialization: initialization,
       acceptedAt,
     })
-    assert.deepEqual(writeNativeAcceptanceReceipt(settingsFilePath, accepted), accepted)
+    assert.deepEqual(writeNativeAcceptanceReceipt(settingsFilePath, accepted, accepting), accepted)
     assert.deepEqual(readNativeAcceptanceReceipt(settingsFilePath), accepted)
-    assert.equal(removeNativeAcceptanceReceipt(settingsFilePath), true)
+    assert.equal(removeNativeAcceptanceReceipt(settingsFilePath, accepted), true)
     assert.equal(readNativeAcceptanceReceipt(settingsFilePath), null)
-    assert.equal(removeNativeAcceptanceReceipt(settingsFilePath), true)
+    assert.equal(removeNativeAcceptanceReceipt(settingsFilePath, null), true)
+    assert.equal(existsSync(path.join(path.dirname(receiptPath), NATIVE_ACCEPTANCE_LOCK_FILENAME)), false)
   } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('conditional persistence rejects competing receipts and a held private lock', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'native-acceptance-cas-'))
+  try {
+    const settingsFilePath = path.join(root, 'settings', 'settings.json')
+    const receiptPath = nativeAcceptanceReceiptPath(settingsFilePath)
+    const lockPath = path.join(path.dirname(receiptPath), NATIVE_ACCEPTANCE_LOCK_FILENAME)
+    const first = prepareNativeAcceptance(context, preparedAt)
+    const competing = prepareNativeAcceptance(context, '2026-09-03T00:00:30.000Z')
+    const accepting = stageNativeAcceptance(first, {
+      currentContext: context,
+      nativeInitialization: initialization,
+      attestations: allAccepted,
+      stagedAt: acceptedAt,
+    })
+    const accepted = acceptNativeAcceptance(accepting, {
+      currentContext: context,
+      nativeInitialization: initialization,
+      acceptedAt,
+    })
+
+    assert.throws(() => writeNativeAcceptanceReceipt(settingsFilePath, first), /expected native acceptance receipt is required/)
+    assert.deepEqual(writeNativeAcceptanceReceipt(settingsFilePath, first, null), first)
+    assert.deepEqual(writeNativeAcceptanceReceipt(settingsFilePath, competing, first), competing)
+    assert.throws(() => writeNativeAcceptanceReceipt(settingsFilePath, accepted, first), /busy or unsafe/)
+    assert.deepEqual(readNativeAcceptanceReceipt(settingsFilePath), competing)
+    assert.equal(removeNativeAcceptanceReceipt(settingsFilePath, first), false)
+    assert.deepEqual(readNativeAcceptanceReceipt(settingsFilePath), competing)
+
+    writeFileSync(lockPath, '', { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+    assert.equal(statSync(lockPath).mode & 0o777, 0o600)
+    assert.throws(() => writeNativeAcceptanceReceipt(settingsFilePath, accepted, competing), /busy or unsafe/)
+    assert.throws(() => removeNativeAcceptanceReceipt(settingsFilePath, competing), /busy or unsafe/)
+    assert.deepEqual(readNativeAcceptanceReceipt(settingsFilePath), competing)
+    rmSync(lockPath)
+
+    assert.equal(removeNativeAcceptanceReceipt(settingsFilePath, competing), true)
+    assert.equal(readNativeAcceptanceReceipt(settingsFilePath), null)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('a restarted coordinator excludes a live owner and reclaims SIGKILL, PID-reuse, and reboot locks', async (t) => {
+  if (process.platform === 'win32') return t.skip('SIGKILL ownership probing is POSIX-specific')
+  const root = mkdtempSync(path.join(tmpdir(), 'native-acceptance-crash-lock-'))
+  const settingsFilePath = path.join(root, 'settings', 'settings.json')
+  const receiptPath = nativeAcceptanceReceiptPath(settingsFilePath)
+  const lockPath = path.join(path.dirname(receiptPath), NATIVE_ACCEPTANCE_LOCK_FILENAME)
+  mkdirSync(path.dirname(receiptPath), { recursive: true, mode: 0o700 })
+  const now = Date.now()
+  const dynamicPreparedAt = new Date(now - 60_000).toISOString()
+  const dynamicInitialization = {
+    status: 'connected',
+    observedAt: new Date(now - 30_000).toISOString(),
+    fresh: true,
+  }
+  const childSource = `
+    const fs = require('node:fs')
+    fs.renameSync = () => {
+      process.stdout.write('LOCKED\\n')
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0)
+    }
+    const receipt = require(process.argv[1])
+    const prepared = receipt.prepareNativeAcceptance(JSON.parse(process.argv[4]), process.argv[3])
+    receipt.writeNativeAcceptanceReceipt(process.argv[2], prepared, null)
+  `
+  const child = spawn(process.execPath, [
+    '-e',
+    childSource,
+    require.resolve('./native-acceptance-receipt.cjs'),
+    settingsFilePath,
+    dynamicPreparedAt,
+    JSON.stringify(context),
+  ], { stdio: ['ignore', 'pipe', 'pipe'] })
+
+  try {
+    await new Promise((resolve, reject) => {
+      let stdout = ''
+      let stderr = ''
+      const timeout = setTimeout(() => reject(new Error(`child did not acquire lock: ${stderr}`)), 5_000)
+      child.stdout.setEncoding('utf8')
+      child.stderr.setEncoding('utf8')
+      child.stdout.on('data', (chunk) => {
+        stdout += chunk
+        if (stdout.includes('LOCKED\n')) {
+          clearTimeout(timeout)
+          resolve()
+        }
+      })
+      child.stderr.on('data', (chunk) => { stderr += chunk })
+      child.once('exit', (code, signal) => {
+        clearTimeout(timeout)
+        reject(new Error(`child exited before acquiring lock: ${code ?? signal}`))
+      })
+    })
+    assert.equal(statSync(lockPath).mode & 0o777, 0o600)
+    const lockOwner = JSON.parse(readFileSync(lockPath, 'utf8'))
+    assert.deepEqual(Object.keys(lockOwner).sort(), ['bootId', 'nonce', 'pid', 'processBirthId', 'schema'])
+    assert.equal(lockOwner.schema, NATIVE_ACCEPTANCE_LOCK_SCHEMA)
+    assert.equal(lockOwner.pid, child.pid)
+    assert.match(lockOwner.bootId, /^[0-9a-f]{64}$/)
+    assert.match(lockOwner.processBirthId, /^[0-9a-f]{64}$/)
+    assert.doesNotMatch(JSON.stringify(lockOwner), /Users|session|prompt|title|workspace/)
+
+    const createCoordinator = () => createNativeAcceptanceOperationCoordinator({
+      acceptReceipt: acceptNativeAcceptance,
+      collectEvidence: async () => ({ currentContext: context, nativeInitialization: dynamicInitialization }),
+      evaluateReceipt: evaluateNativeAcceptance,
+      prepareReceipt: (value) => prepareNativeAcceptance(value, dynamicPreparedAt),
+      readReceipt: () => readNativeAcceptanceReceipt(settingsFilePath),
+      removeReceipt: (expected) => removeNativeAcceptanceReceipt(settingsFilePath, expected),
+      stageReceipt: stageNativeAcceptance,
+      writeReceipt: (value, expected) => writeNativeAcceptanceReceipt(settingsFilePath, value, expected),
+    })
+    const liveOwnerAttempt = await createCoordinator().prepare()
+    assert.equal(liveOwnerAttempt.ok, false)
+    assert.equal(readNativeAcceptanceReceipt(settingsFilePath), null)
+
+    const closed = once(child, 'close')
+    assert.equal(child.kill('SIGKILL'), true)
+    await closed
+
+    const restarted = createCoordinator()
+    const prepared = await restarted.prepare()
+    assert.equal(prepared.ok, true)
+    assert.equal(prepared.snapshot.receipt.state, 'prepared')
+    const cleared = await restarted.clear()
+    assert.equal(cleared.ok, true)
+    assert.equal(cleared.snapshot.receipt, null)
+    assert.equal(existsSync(lockPath), false)
+
+    const zeroIdentity = '0'.repeat(64)
+    writeFileSync(lockPath, `${JSON.stringify({
+      ...lockOwner,
+      pid: process.pid,
+      nonce: '00000000-0000-4000-8000-000000000001',
+      processBirthId: zeroIdentity,
+    })}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+    const pidReused = createCoordinator()
+    assert.equal((await pidReused.prepare()).ok, true)
+    assert.equal((await pidReused.clear()).ok, true)
+
+    writeFileSync(lockPath, `${JSON.stringify({
+      ...lockOwner,
+      pid: process.pid,
+      nonce: '00000000-0000-4000-8000-000000000002',
+      bootId: zeroIdentity,
+      processBirthId: zeroIdentity,
+    })}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+    const afterReboot = createCoordinator()
+    assert.equal((await afterReboot.prepare()).ok, true)
+    assert.equal((await afterReboot.clear()).ok, true)
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) {
+      const closed = once(child, 'close')
+      child.kill('SIGKILL')
+      await closed
+    }
     rmSync(root, { recursive: true, force: true })
   }
 })
@@ -93,22 +269,24 @@ test('rejects oversized, public, symlinked, and non-regular receipt files', (t) 
     const receiptPath = nativeAcceptanceReceiptPath(settingsFilePath)
     writeFileSync(receiptPath, 'x'.repeat(MAX_NATIVE_ACCEPTANCE_RECEIPT_BYTES + 1), { mode: 0o600 })
     assert.equal(readNativeAcceptanceReceipt(settingsFilePath), null)
+    assert.throws(() => writeNativeAcceptanceReceipt(settingsFilePath, prepareNativeAcceptance(context, preparedAt), null), /busy or unsafe/)
 
     writeFileSync(receiptPath, `${JSON.stringify(prepareNativeAcceptance(context, preparedAt))}\n`, { mode: 0o644 })
     chmodSync(receiptPath, 0o644)
     assert.equal(readNativeAcceptanceReceipt(settingsFilePath), null)
+    assert.throws(() => writeNativeAcceptanceReceipt(settingsFilePath, prepareNativeAcceptance(context, preparedAt), null), /busy or unsafe/)
 
     const target = path.join(root, 'target.json')
     writeFileSync(target, `${JSON.stringify(prepareNativeAcceptance(context, preparedAt))}\n`, { mode: 0o600 })
     rmSync(receiptPath)
     symlinkSync(target, receiptPath)
     assert.equal(readNativeAcceptanceReceipt(settingsFilePath), null)
-    assert.throws(() => writeNativeAcceptanceReceipt(settingsFilePath, prepareNativeAcceptance(context, preparedAt)), /unsafe/)
+    assert.throws(() => writeNativeAcceptanceReceipt(settingsFilePath, prepareNativeAcceptance(context, preparedAt), null), /busy or unsafe/)
 
     rmSync(receiptPath)
     mkdirSync(receiptPath)
     assert.equal(readNativeAcceptanceReceipt(settingsFilePath), null)
-    assert.equal(removeNativeAcceptanceReceipt(settingsFilePath), false)
+    assert.equal(removeNativeAcceptanceReceipt(settingsFilePath, null), false)
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
@@ -123,7 +301,7 @@ test('rejects a symlinked settings directory for writes', (t) => {
     mkdirSync(target)
     symlinkSync(target, linked)
     assert.throws(
-      () => writeNativeAcceptanceReceipt(path.join(linked, 'settings.json'), prepareNativeAcceptance(context, preparedAt)),
+      () => writeNativeAcceptanceReceipt(path.join(linked, 'settings.json'), prepareNativeAcceptance(context, preparedAt), null),
       /unsafe/,
     )
   } finally {
@@ -139,6 +317,7 @@ test('fails closed on extra privacy fields and malformed receipt shapes', () => 
     { ...prepared, context: { ...context, localPath: '/Users/example' } },
     { ...prepared, context: { ...context, device: { ...context.device, serial: 'private-serial' } } },
     { ...prepared, preparedAt: '2026-09-03' },
+    { ...prepared, state: 'accepting' },
     { ...prepared, state: 'accepted' },
     { ...prepared, attestations: { ...prepared.attestations, dial: 'yes' } },
     { ...prepared, attestations: { ...prepared.attestations, extra: false } },
@@ -203,27 +382,48 @@ test('requires a fresh ordered initialization newer than preparation', () => {
   })
 })
 
-test('accepts only all seven control groups against the same live context', () => {
+test('stages all seven control groups, remains non-accepted, then promotes against fresh evidence', () => {
   const prepared = prepareNativeAcceptance(context, preparedAt)
   for (const key of ATTESTATION_KEYS) {
-    assert.throws(() => acceptNativeAcceptance(prepared, {
+    assert.throws(() => stageNativeAcceptance(prepared, {
       currentContext: context,
       nativeInitialization: initialization,
       attestations: { ...allAccepted, [key]: false },
-      acceptedAt,
+      stagedAt: acceptedAt,
     }), /every native acceptance attestation/)
   }
-  assert.throws(() => acceptNativeAcceptance(prepared, {
+  assert.throws(() => stageNativeAcceptance(prepared, {
     currentContext: { ...context, device: { vidPid: '303A:8297' } },
     nativeInitialization: initialization,
     attestations: allAccepted,
-    acceptedAt,
+    stagedAt: acceptedAt,
   }), /context_mismatch/)
 
-  const accepted = acceptNativeAcceptance(prepared, {
+  const accepting = stageNativeAcceptance(prepared, {
     currentContext: context,
     nativeInitialization: initialization,
     attestations: allAccepted,
+    stagedAt: acceptedAt,
+  })
+  assert.equal(accepting.state, 'accepting')
+  assert.equal(evaluateNativeAcceptance(accepting, {
+    currentContext: context,
+    nativeInitialization: initialization,
+    now: acceptedAt,
+  }).status, 'pending')
+  assert.throws(() => acceptNativeAcceptance(accepting, {
+    currentContext: { ...context, device: { vidPid: '303A:8297' } },
+    nativeInitialization: initialization,
+    acceptedAt,
+  }), /context_mismatch/)
+  assert.throws(() => acceptNativeAcceptance(accepting, {
+    currentContext: context,
+    nativeInitialization: { ...initialization, observedAt: '2026-09-03T00:00:30.000Z' },
+    acceptedAt,
+  }), /initialization is stale/)
+  const accepted = acceptNativeAcceptance(accepting, {
+    currentContext: context,
+    nativeInitialization: initialization,
     acceptedAt,
   })
   assert.equal(accepted.state, 'accepted')
@@ -243,10 +443,15 @@ test('accepts only all seven control groups against the same live context', () =
 })
 
 test('revokes an accepted projection when live evidence or context no longer matches', () => {
-  const accepted = acceptNativeAcceptance(prepareNativeAcceptance(context, preparedAt), {
+  const accepting = stageNativeAcceptance(prepareNativeAcceptance(context, preparedAt), {
     currentContext: context,
     nativeInitialization: initialization,
     attestations: allAccepted,
+    stagedAt: acceptedAt,
+  })
+  const accepted = acceptNativeAcceptance(accepting, {
+    currentContext: context,
+    nativeInitialization: initialization,
     acceptedAt,
   })
   const evaluate = (currentContext, nativeInitialization, now = acceptedAt) => evaluateNativeAcceptance(accepted, {
@@ -262,10 +467,18 @@ test('revokes an accepted projection when live evidence or context no longer mat
 })
 
 test('accepted schema rejects partial attestations and impossible timestamp order', () => {
-  const accepted = acceptNativeAcceptance(prepareNativeAcceptance(context, preparedAt), {
+  const accepting = stageNativeAcceptance(prepareNativeAcceptance(context, preparedAt), {
     currentContext: context,
     nativeInitialization: initialization,
     attestations: allAccepted,
+    stagedAt: acceptedAt,
+  })
+  assert.equal(sanitizeNativeAcceptanceReceipt({ ...accepting, attestations: { ...allAccepted, lighting: false } }), null)
+  assert.equal(sanitizeNativeAcceptanceReceipt({ ...accepting, initializationObservedAt: preparedAt }), null)
+  assert.equal(sanitizeNativeAcceptanceReceipt({ ...accepting, acceptedAt }), null)
+  const accepted = acceptNativeAcceptance(accepting, {
+    currentContext: context,
+    nativeInitialization: initialization,
     acceptedAt,
   })
   assert.equal(sanitizeNativeAcceptanceReceipt({ ...accepted, attestations: { ...allAccepted, lighting: false } }), null)
@@ -275,7 +488,7 @@ test('accepted schema rejects partial attestations and impossible timestamp orde
   const root = mkdtempSync(path.join(tmpdir(), 'native-acceptance-privacy-'))
   try {
     const settingsFilePath = path.join(root, 'settings.json')
-    writeNativeAcceptanceReceipt(settingsFilePath, accepted)
+    writeNativeAcceptanceReceipt(settingsFilePath, accepted, null)
     const serialized = readFileSync(nativeAcceptanceReceiptPath(settingsFilePath), 'utf8')
     assert.doesNotMatch(serialized, /Users|session|prompt|title|raw|detail/)
   } finally {

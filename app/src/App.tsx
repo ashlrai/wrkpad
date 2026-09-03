@@ -15,7 +15,7 @@ import { expectedSignalsAfter, flightAcceptance, flightStepComplete, noSignalRec
 import './App.css'
 
 const initialStatus: SystemStatus = {
-  boardConnected: false, inputInstalled: false, inputMonitoring: 'unverified',
+  boardConnected: false, boardVidPid: null, inputInstalled: false, inputMonitoring: 'unverified',
   inputInstallation: { status: 'probe_unavailable', version: null },
   inputProfile: { cacheStatus: 'missing', activeProfile: null, activeLayer: null, encoderDirection: 'unavailable' },
   inputRuntime: { status: 'not_observed', profileIndex: null, layerIndex: null, observedAt: null, fresh: false },
@@ -113,7 +113,7 @@ const hardwareIds: Partial<Record<ControlId, string>> = {
   joyUp: 'JOY_UP', joyRight: 'JOY_RIGHT', joyDown: 'JOY_DOWN', joyLeft: 'JOY_LEFT',
 }
 
-const STATUS_REFRESH_TIMEOUT_MS = 8_000
+const STATUS_REFRESH_TIMEOUT_MS = 13_000
 
 const flightLiveGatesReady = (status: SystemStatus, variant: FlightVariant) =>
   status.boardRoute === 'ashlr_layer'
@@ -1045,14 +1045,33 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
   const [repairResult, setRepairResult] = useState<ProfileRepairResult | null>(null)
   const [recoveryAction, setRecoveryAction] = useState<AgentBoardRecoveryActionResult | null>(null)
   const [dismissConfirm, setDismissConfirm] = useState(false)
-  const [nativeAcceptance, setNativeAcceptance] = useState<NativeAcceptanceSnapshot | null>(null)
+  const [nativeAcceptanceRecord, setNativeAcceptanceRecord] = useState<{ evidenceKey: string; snapshot: NativeAcceptanceSnapshot | null } | null>(null)
   const [nativeAttestations, setNativeAttestations] = useState<NativeAcceptanceAttestations>(emptyNativeAttestations)
-  const [nativeBusy, setNativeBusy] = useState(false)
+  const [nativeOperation, setNativeOperation] = useState<'prepare' | 'refresh' | 'accept' | 'clear' | null>(null)
   const [nativePrepareConfirm, setNativePrepareConfirm] = useState(false)
-  const [nativeActionResult, setNativeActionResult] = useState<{ ok: boolean; message: string } | null>(null)
+  const [nativeActionResult, setNativeActionResult] = useState<{ ok: boolean; neutral?: boolean; message: string } | null>(null)
   const recoveryFocus = useRef<HTMLElement | null>(null)
   const nativeCodexMicro = status.nativeCodexMicro ?? initialStatus.nativeCodexMicro
   const chatgptDesktop = status.chatgptDesktop ?? initialStatus.chatgptDesktop
+  const nativeEvidenceKey = JSON.stringify([
+    status.boardRoute,
+    status.boardConnected,
+    status.boardVidPid,
+    chatgptDesktop.status,
+    chatgptDesktop.version,
+    chatgptDesktop.build,
+    nativeCodexMicro.status,
+    nativeCodexMicro.observedAt,
+    nativeCodexMicro.fresh,
+  ])
+  const nativeAcceptance = nativeAcceptanceRecord?.evidenceKey === nativeEvidenceKey
+    ? nativeAcceptanceRecord.snapshot
+    : null
+  const nativeAcceptanceChecking = status.boardRoute === 'codex_native'
+    && nativeAcceptanceRecord?.evidenceKey !== nativeEvidenceKey
+  const displayedNativeAttestations = nativeAcceptanceChecking
+    ? emptyNativeAttestations
+    : nativeAttestations
   const inputProfile = status.inputProfile ?? initialStatus.inputProfile
   const inputRuntime = status.inputRuntime ?? initialStatus.inputRuntime
   const inputInstallation = status.inputInstallation ?? initialStatus.inputInstallation
@@ -1092,22 +1111,23 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
   const handoffInitializationObserved = nativeAcceptance?.evaluation.status === 'initialization_observed'
     || nativeAcceptance?.evaluation.status === 'accepted'
   const nativeAccepted = nativeAcceptance?.evaluation.status === 'accepted'
+  const nativeAcceptanceInterrupted = nativeAcceptance?.receipt?.state === 'accepting'
   const acceptedReceiptRevoked = nativeAcceptance?.receipt?.state === 'accepted' && !nativeAccepted
-  const attestationState = (key: keyof NativeAcceptanceAttestations) => nativeAttestations[key]
+  const attestationState = (key: keyof NativeAcceptanceAttestations) => displayedNativeAttestations[key]
     ? 'Operator attestation recorded'
     : 'Operator observation pending'
   const nativeSteps: Array<{ number: string; title: string; detail: string; state: string; ready: boolean; observed?: boolean }> = [
     { number: '01', title: 'Observe USB presence', detail: 'Use a direct USB-C data connection for commissioning. Bluetooth keyboard and trackpad can remain connected.', state: status.boardConnected ? 'Creator Micro 2 present on USB' : 'USB device not observed', ready: false, observed: status.boardConnected },
-    { number: '02', title: 'Observe ChatGPT Desktop metadata', detail: 'The native route belongs to ChatGPT Desktop. Agent Board reads only fixed-path version/build metadata; it does not prove bundle identity, signature, Gatekeeper status, or the running process. Work Louder Input, its profile, Input Monitoring, and Agent Board shortcut ownership are not native-route prerequisites.', state: chatgptDesktop.status === 'metadata_observed' ? `ChatGPT Desktop${chatgptDesktop.version ? ` ${chatgptDesktop.version}` : ''}${chatgptDesktop.build ? ` · build ${chatgptDesktop.build}` : ''} metadata observed` : chatgptDesktop.status === 'missing' ? 'ChatGPT Desktop not found' : 'ChatGPT Desktop metadata unavailable', ready: false, observed: chatgptDesktop.status === 'metadata_observed' },
+    { number: '02', title: 'Observe ChatGPT Desktop metadata', detail: 'The native route belongs to ChatGPT Desktop. Agent Board reads only fixed-path version/build metadata; it does not prove bundle identity, signature, Gatekeeper status, or the running process. Work Louder Input, its profile, Input Monitoring for Agent Board, and Agent Board shortcut ownership are not native-route prerequisites. ChatGPT Desktop’s displayed Input Monitoring state remains part of the Codex Settings observation.', state: chatgptDesktop.status === 'metadata_observed' ? `ChatGPT Desktop${chatgptDesktop.version ? ` ${chatgptDesktop.version}` : ''}${chatgptDesktop.build ? ` · build ${chatgptDesktop.build}` : ''} metadata observed` : chatgptDesktop.status === 'missing' ? 'ChatGPT Desktop not found' : 'ChatGPT Desktop metadata unavailable', ready: false, observed: chatgptDesktop.status === 'metadata_observed' },
     { number: '03', title: 'Declare Codex Native', detail: 'This local declaration changes only the expected verification route; it does not configure or claim the board.', state: status.boardRoute === 'codex_native' ? 'Codex Native declared' : 'Codex Native not declared', ready: false, observed: status.boardRoute === 'codex_native' },
     { number: '04', title: 'Infer native initialization', detail: 'Agent Board may infer an ordered native initialization from fresh, bounded ChatGPT Desktop diagnostics. This observation is not a Settings result, physical-control result, or readiness decision.', state: nativeInitializationObserved ? 'Ordered native initialization inferred' : nativeCodexMicro.status === 'firmware_rpc_missing' ? `Native RPC qualification required${nativeCodexMicro.fresh ? '' : ' · historical evidence only'}` : 'Fresh native initialization not observed', ready: false, observed: nativeInitializationObserved },
-    { number: '05', title: 'Observe Creator Micro in Codex Settings', detail: 'After the isolated Codex retry, open Settings → Creator Micro and personally observe the status. Record only what you see; Agent Board does not prove a new process generation.', state: attestationState('settingsConnected'), ready: false, observed: nativeAttestations.settingsConnected },
-    { number: '06', title: 'Exercise the dial', detail: 'Turn the top-right dial left and right, then press it. Confirm each configured Codex response yourself.', state: attestationState('dial'), ready: false, observed: nativeAttestations.dial },
-    { number: '07', title: 'Exercise the joystick', detail: 'Move the planar stick up, right, down, and left. The bottom-left circle is not the joystick.', state: attestationState('joystick'), ready: false, observed: nativeAttestations.joystick },
-    { number: '08', title: 'Exercise all six agent keys', detail: 'Press each top-row agent key once and observe its configured Codex behavior.', state: attestationState('agentKeys'), ready: false, observed: nativeAttestations.agentKeys },
-    { number: '09', title: 'Exercise all seven action keys', detail: 'Press each action switch once. Do not treat a mouse click or ordinary keyboard shortcut as board evidence.', state: attestationState('actionKeys'), ready: false, observed: nativeAttestations.actionKeys },
-    { number: '10', title: 'Exercise the microphone key', detail: 'Press the wide Mic cap and observe the configured push-to-talk response. The cap spans two physical switches.', state: attestationState('microphone'), ready: false, observed: nativeAttestations.microphone },
-    { number: '11', title: 'Observe lighting', detail: 'Inspect the black-opaque caps and edge glow in the room lighting you normally use. The on-screen legend remains authoritative.', state: attestationState('lighting'), ready: false, observed: nativeAttestations.lighting },
+    { number: '05', title: 'Observe Creator Micro in Codex Settings', detail: 'After the isolated Codex retry, open Settings → Creator Micro and personally observe both Connection: Connected and Input Monitoring: Granted. Detected-only or Connection failed does not count. Record only what you see; Agent Board does not prove a new process generation or permission grant.', state: attestationState('settingsConnected'), ready: false, observed: displayedNativeAttestations.settingsConnected },
+    { number: '06', title: 'Exercise the dial', detail: 'Turn the top-right dial left and right, then press it. Confirm each configured Codex response yourself.', state: attestationState('dial'), ready: false, observed: displayedNativeAttestations.dial },
+    { number: '07', title: 'Exercise the joystick', detail: 'Move the planar stick up, right, down, and left. The bottom-left circle is not the joystick.', state: attestationState('joystick'), ready: false, observed: displayedNativeAttestations.joystick },
+    { number: '08', title: 'Exercise all six agent keys', detail: 'Press each top-row agent key once and observe its configured Codex behavior.', state: attestationState('agentKeys'), ready: false, observed: displayedNativeAttestations.agentKeys },
+    { number: '09', title: 'Exercise all seven action keys', detail: 'Press each action switch once. Do not treat a mouse click or ordinary keyboard shortcut as board evidence.', state: attestationState('actionKeys'), ready: false, observed: displayedNativeAttestations.actionKeys },
+    { number: '10', title: 'Exercise the microphone key', detail: 'Press the wide Mic cap and observe the configured push-to-talk response. The cap spans two physical switches.', state: attestationState('microphone'), ready: false, observed: displayedNativeAttestations.microphone },
+    { number: '11', title: 'Observe lighting', detail: 'Inspect the black-opaque caps and edge glow in the room lighting you normally use. The on-screen legend remains authoritative.', state: attestationState('lighting'), ready: false, observed: displayedNativeAttestations.lighting },
   ]
   const steps = status.boardRoute === 'codex_native' ? nativeSteps : ashlrSteps
   const repairNeeded = inputInstallationReady && inputRecoveryState === 'profile_repair'
@@ -1118,39 +1138,73 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
   const showRecoveryGuide = inputInstallationReady && (status.boardRoute === 'ashlr_layer' || Boolean(recoveryHandoff))
   const nativeHandoffPrepared = nativeAcceptance?.receipt?.state === 'prepared'
     && ['pending', 'initialization_observed'].includes(nativeAcceptance.evaluation.status)
-  const allNativeAttested = Object.values(nativeAttestations).every(Boolean)
+  const nativeBusy = nativeOperation !== null
+  const nativeOperationMessage = nativeOperation === 'prepare'
+    ? 'Preparing a new private handoff…'
+    : nativeOperation === 'refresh'
+      ? 'Refreshing current USB, Desktop, and initialization evidence…'
+      : nativeOperation === 'accept'
+        ? 'Validating and saving the operator attestation…'
+        : nativeOperation === 'clear'
+          ? 'Clearing the local native handoff…'
+          : null
+  const allNativeAttested = Object.values(displayedNativeAttestations).every(Boolean)
   const applyNativeSnapshot = (snapshot: NativeAcceptanceSnapshot) => {
-    setNativeAcceptance(snapshot)
+    setNativeAcceptanceRecord({ evidenceKey: nativeEvidenceKey, snapshot })
     setNativePrepareConfirm(false)
     const attestations = snapshot.evaluation.attestations ?? snapshot.receipt?.attestations
     setNativeAttestations(attestations ? { ...emptyNativeAttestations, ...attestations } : emptyNativeAttestations)
   }
   useEffect(() => {
-    if (recoveryHandoff) recoveryFocus.current?.focus()
-  }, [recoveryHandoff])
+    if (recoveryHandoff && showRecoveryGuide) recoveryFocus.current?.focus()
+  }, [recoveryHandoff, showRecoveryGuide])
   useEffect(() => {
     let current = true
     if (status.boardRoute !== 'codex_native') return () => { current = false }
     const load = async () => {
       try {
         const snapshot = await window.agentBoard?.getNativeAcceptance?.()
-        if (current && snapshot) applyNativeSnapshot(snapshot)
+        if (current && snapshot) {
+          setNativeAcceptanceRecord({ evidenceKey: nativeEvidenceKey, snapshot })
+          setNativePrepareConfirm(false)
+          const attestations = snapshot.evaluation.attestations ?? snapshot.receipt?.attestations
+          setNativeAttestations(attestations ? { ...emptyNativeAttestations, ...attestations } : emptyNativeAttestations)
+          setNativeActionResult(null)
+        } else if (current) {
+          setNativeAcceptanceRecord({ evidenceKey: nativeEvidenceKey, snapshot: null })
+          setNativeAttestations(emptyNativeAttestations)
+          setNativePrepareConfirm(false)
+        }
       } catch {
-        if (current) setNativeActionResult({ ok: false, message: 'The local native handoff could not be read. No acceptance was recorded.' })
+        if (current) {
+          setNativeAcceptanceRecord({ evidenceKey: nativeEvidenceKey, snapshot: null })
+          setNativeAttestations(emptyNativeAttestations)
+          setNativePrepareConfirm(false)
+          setNativeActionResult({ ok: false, message: 'The local native handoff could not be read. No acceptance was recorded.' })
+        }
       }
     }
     void load()
     return () => { current = false }
-  }, [status.boardRoute])
+  }, [nativeEvidenceKey, status.boardRoute])
+  const changeBoardRoute = (route: BoardRoute) => {
+    if (route !== status.boardRoute) {
+      setNativeAcceptanceRecord(null)
+      setNativeAttestations(emptyNativeAttestations)
+      setNativePrepareConfirm(false)
+      setNativeActionResult(null)
+    }
+    onRouteChange(route)
+  }
   const prepareNativeHandoff = async () => {
     const prepare = window.agentBoard?.prepareNativeAcceptance
     if (!prepare) return setNativeActionResult({ ok: false, message: 'This build does not include the native handoff bridge. No acceptance was recorded.' })
-    if (nativeAcceptance?.receipt && !nativePrepareConfirm) {
+    if (nativeAcceptance?.receipt && !nativeAcceptanceInterrupted && !nativePrepareConfirm) {
       setNativePrepareConfirm(true)
-      setNativeActionResult({ ok: false, message: 'Confirm once more to start a fresh handoff. This replaces only the local receipt and clears its recorded observations.' })
+      setNativeActionResult({ ok: false, neutral: true, message: 'Confirm once more to start a fresh handoff. This replaces only the local receipt and clears its recorded observations.' })
       return
     }
-    setNativeBusy(true)
+    setNativeOperation('prepare')
     setNativeActionResult(null)
     try {
       const result = await prepare()
@@ -1162,13 +1216,13 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
     } catch {
       setNativeActionResult({ ok: false, message: 'The native handoff could not be prepared. No acceptance was recorded.' })
     } finally {
-      setNativeBusy(false)
+      setNativeOperation(null)
     }
   }
   const refreshNativeHandoff = async () => {
     const read = window.agentBoard?.getNativeAcceptance
     if (!read) return setNativeActionResult({ ok: false, message: 'This build does not include the native handoff bridge. No acceptance was recorded.' })
-    setNativeBusy(true)
+    setNativeOperation('refresh')
     setNativeActionResult(null)
     try {
       await onRefreshStatus()
@@ -1178,14 +1232,14 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
     } catch {
       setNativeActionResult({ ok: false, message: 'The native handoff could not be refreshed. Existing local state was left unchanged.' })
     } finally {
-      setNativeBusy(false)
+      setNativeOperation(null)
     }
   }
   const acceptNativeHandoff = async () => {
     if (!allNativeAttested || nativeBusy) return
     const accept = window.agentBoard?.acceptNativeAcceptance
     if (!accept) return setNativeActionResult({ ok: false, message: 'This build does not include the native handoff bridge. No acceptance was recorded.' })
-    setNativeBusy(true)
+    setNativeOperation('accept')
     setNativeActionResult(null)
     try {
       const result = await accept({ ...nativeAttestations })
@@ -1196,13 +1250,13 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
     } catch {
       setNativeActionResult({ ok: false, message: 'The operator attestation was not accepted. Existing local state was left unchanged.' })
     } finally {
-      setNativeBusy(false)
+      setNativeOperation(null)
     }
   }
   const clearNativeHandoff = async () => {
     const clear = window.agentBoard?.clearNativeAcceptance
     if (!clear) return setNativeActionResult({ ok: false, message: 'This build does not include the native handoff bridge. Existing local state was left unchanged.' })
-    setNativeBusy(true)
+    setNativeOperation('clear')
     setNativeActionResult(null)
     try {
       const result = await clear()
@@ -1214,7 +1268,7 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
     } catch {
       setNativeActionResult({ ok: false, message: 'The local native handoff could not be cleared. Existing local state was left unchanged.' })
     } finally {
-      setNativeBusy(false)
+      setNativeOperation(null)
     }
   }
   const createRepairProfile = async () => {
@@ -1272,13 +1326,13 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
   }
   return <section className="setup-view">
     <div className="setup-intro"><span className="eyebrow">COMMISSIONING / TRUTHFUL READINESS</span><h2>Make every layer observable.</h2><p>USB presence, macOS authority, Input configuration, and native Codex integration are separate states. This checklist keeps them separate so “connected” never means more than we proved.</p></div>
-    <BoardRouteRail route={status.boardRoute} saving={routeSaving} error={routeError} onChange={onRouteChange} />
+    <BoardRouteRail route={status.boardRoute} saving={routeSaving} error={routeError} onChange={changeBoardRoute} />
     <div className="setup-grid">
       <div className="setup-steps">
         {steps.map((step) => <article key={step.number} className={step.ready ? 'setup-step ready' : step.observed ? 'setup-step observed' : 'setup-step'}>
           <span className="step-number">{step.number}</span><div><h3>{step.title}</h3><p>{step.detail}</p><strong><i />{step.state}</strong></div>
         </article>)}
-        {status.boardRoute === 'codex_native' && <section className="native-acceptance" aria-labelledby="native-acceptance-title">
+        {status.boardRoute === 'codex_native' && <section className="native-acceptance" aria-labelledby="native-acceptance-title" aria-busy={nativeBusy}>
           <div className="native-acceptance-heading">
             <span className="eyebrow">RESTART-SAFE NATIVE HANDOFF</span>
             <h3 id="native-acceptance-title">Carry the physical check across the restart.</h3>
@@ -1292,17 +1346,18 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
           </div>
           <div className="native-handoff-status" role="status" aria-live="polite">
             <ShieldCheck size={16} />
-            <span><strong>{nativeAccepted ? 'Operator attestation saved' : acceptedReceiptRevoked ? 'Prior acceptance is no longer current' : nativeHandoffPrepared ? nativeAcceptance?.evaluation.status === 'initialization_observed' ? 'Initialization observed after preparation' : 'Handoff prepared' : nativeAcceptance?.evaluation.status === 'invalid' ? 'Fresh handoff required' : 'Handoff not prepared'}</strong>{nativeAccepted ? ' This receipt belongs only to the recorded VID:PID class and fixed-path Desktop metadata.' : acceptedReceiptRevoked ? ' Current evidence no longer matches the accepted receipt. Start a fresh handoff and repeat every observation.' : nativeHandoffPrepared ? ' Resume here after the Agent Board restart; the prepared receipt preserves no prompt, task title, or workspace path.' : ' Preparation records bounded model identity and Desktop metadata needed to reject stale acceptance; it does not identify a unique board or running process.'}</span>
+            <span><strong>{nativeAcceptanceChecking ? 'Checking current handoff' : nativeAccepted ? 'Operator attestation saved' : nativeAcceptanceInterrupted ? 'Acceptance interrupted before completion' : acceptedReceiptRevoked ? 'Prior acceptance is no longer current' : nativeHandoffPrepared ? nativeAcceptance?.evaluation.status === 'initialization_observed' ? 'Initialization observed after preparation' : 'Handoff prepared' : nativeAcceptance?.evaluation.status === 'invalid' ? 'Fresh handoff required' : 'Handoff not prepared'}</strong>{nativeAcceptanceChecking ? ' Accepted state stays hidden until the live USB, Desktop metadata, and initialization evidence are re-evaluated.' : nativeAccepted ? ' This receipt belongs only to the recorded VID:PID class and fixed-path Desktop metadata.' : nativeAcceptanceInterrupted ? ' The two-phase save stopped before final promotion, so no acceptance was recorded. Start a fresh handoff to discard the staged observations safely, or clear it.' : acceptedReceiptRevoked ? ' Current evidence no longer matches the accepted receipt. Start a fresh handoff and repeat every observation.' : nativeHandoffPrepared ? ' Resume here after the Agent Board restart; the prepared receipt preserves no prompt, task title, or workspace path.' : ' Preparation records bounded model identity and Desktop metadata needed to reject stale acceptance; it does not identify a unique board or running process.'}</span>
           </div>
           <div className="native-handoff-actions">
-            <button type="button" onClick={() => void prepareNativeHandoff()} disabled={nativeBusy}>{nativeBusy ? 'Working…' : nativeAcceptance?.receipt ? nativePrepareConfirm ? 'Confirm fresh handoff' : 'Prepare fresh handoff' : 'Prepare handoff'}</button>
-            <button type="button" onClick={() => void refreshNativeHandoff()} disabled={nativeBusy || !nativeHandoffPrepared}>Refresh after isolated retry</button>
-            {nativeAcceptance?.receipt && <button type="button" className="quiet" onClick={() => void clearNativeHandoff()} disabled={nativeBusy}>Clear handoff</button>}
+            <button type="button" onClick={() => void prepareNativeHandoff()} disabled={nativeBusy || nativeAcceptanceChecking}>{nativeOperation === 'prepare' ? 'Preparing handoff…' : nativeAcceptanceInterrupted ? 'Start fresh handoff' : nativeAcceptance?.receipt ? nativePrepareConfirm ? 'Confirm fresh handoff' : 'Prepare fresh handoff' : 'Prepare handoff'}</button>
+            <button type="button" onClick={() => void refreshNativeHandoff()} disabled={nativeBusy || nativeAcceptanceChecking || !nativeHandoffPrepared}>{nativeOperation === 'refresh' ? 'Refreshing evidence…' : 'Refresh after isolated retry'}</button>
+            {!nativeAcceptanceChecking && nativePrepareConfirm && <button type="button" className="quiet" onClick={() => { setNativePrepareConfirm(false); setNativeActionResult(null) }} disabled={nativeBusy}>Cancel fresh handoff</button>}
+            {nativeAcceptance?.receipt && <button type="button" className="quiet" onClick={() => void clearNativeHandoff()} disabled={nativeBusy}>{nativeOperation === 'clear' ? 'Clearing handoff…' : 'Clear handoff'}</button>}
           </div>
           {(nativeHandoffPrepared || nativeAccepted) && <fieldset className="native-attestations" disabled={nativeBusy || nativeAccepted || !handoffInitializationObserved}>
             <legend>Operator observations</legend>
             {([
-              ['settingsConnected', 'Creator Micro shown in Codex Settings'],
+              ['settingsConnected', 'Codex Settings shows Connection: Connected and Input Monitoring: Granted'],
               ['dial', 'Dial left, right, and press observed'],
               ['joystick', 'Joystick up, right, down, and left observed'],
               ['agentKeys', 'All six agent keys observed'],
@@ -1310,12 +1365,13 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
               ['microphone', 'Microphone key observed'],
               ['lighting', 'Black-cap lighting observed'],
             ] as Array<[keyof NativeAcceptanceAttestations, string]>).map(([key, label]) => <label key={key}>
-              <input type="checkbox" checked={nativeAttestations[key]} disabled={nativeBusy || nativeAccepted || !handoffInitializationObserved} onChange={(event) => setNativeAttestations((current) => ({ ...current, [key]: event.target.checked }))} />
+              <input type="checkbox" checked={displayedNativeAttestations[key]} disabled={nativeBusy || nativeAccepted || !handoffInitializationObserved} onChange={(event) => setNativeAttestations((current) => ({ ...current, [key]: event.target.checked }))} />
               <span><Check size={12} />{label}</span>
             </label>)}
           </fieldset>}
-          {nativeHandoffPrepared && <button type="button" className="native-accept-button" onClick={() => void acceptNativeHandoff()} disabled={nativeBusy || !handoffInitializationObserved || !allNativeAttested}>Accept operator attestation</button>}
-          {nativeActionResult && <p className={nativeActionResult.ok ? 'native-action-result' : 'native-action-result failed'} role={nativeActionResult.ok ? 'status' : 'alert'}>{nativeActionResult.message}</p>}
+          {nativeHandoffPrepared && <button type="button" className="native-accept-button" onClick={() => void acceptNativeHandoff()} disabled={nativeBusy || !handoffInitializationObserved || !allNativeAttested}>{nativeOperation === 'accept' ? 'Saving attestation…' : 'Accept operator attestation'}</button>}
+          {nativeOperationMessage && <p className="native-action-result" role="status" aria-live="polite">{nativeOperationMessage}</p>}
+          {!nativeAcceptanceChecking && nativeActionResult && <p className={nativeActionResult.ok || nativeActionResult.neutral ? 'native-action-result' : 'native-action-result failed'} role={nativeActionResult.ok || nativeActionResult.neutral ? 'status' : 'alert'}>{nativeActionResult.message}</p>}
           <p className="native-proof-boundary"><ShieldCheck size={14} /><span><strong>Operator attestation—not device proof.</strong> Checked items mean the operator reports seeing those outcomes. They do not prove native thread ownership, RGB transport, firmware safety, or authorization for consequential actions.</span></p>
         </section>}
         {repairNeeded && <section className="profile-repair" aria-labelledby="profile-repair-title">

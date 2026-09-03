@@ -47,9 +47,10 @@ See [controls and state](docs/controls.md) for the complete map and [architectur
 ## Requirements
 
 - macOS and a Work Louder Creator Micro 2
-- [Work Louder Input](https://worklouder.cc/input/) for board profiles and shortcut mapping
 - Node.js 22 or newer and npm for development
-- Optional local integrations: Codex CLI and ChatGPT Desktop; Claude Code, Claude Desktop, and cmux; `wrkpad`; and Ashlr Hub.
+- **Codex Native:** ChatGPT Desktop is required for the native board route.
+- **Ashlr Layer, profile repair, or firmware qualification:** [Work Louder Input](https://worklouder.cc/input/) is required for board profiles and shortcut mapping.
+- Optional local integrations: Codex CLI; Claude Code, Claude Desktop, and cmux; `wrkpad`; and Ashlr Hub.
 
 Runtime CLI discovery checks `~/.local/bin`, `~/.npm-global/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, and `/usr/bin` in that order. It intentionally does not trust the inherited `PATH`. Missing optional tools appear as unavailable rather than being installed automatically.
 

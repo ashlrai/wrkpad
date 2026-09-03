@@ -71,9 +71,10 @@ Use **Prepare handoff** before the controller-isolation restart:
 2. Select **Prepare handoff**. Agent Board saves a private mode-`0600` receipt
    containing only the route, board VID:PID, ChatGPT Desktop version/build,
    preparation time, and seven false observation flags.
-3. Quit Work Louder Input and Agent Board with Command-Q. Open ChatGPT Desktop
-   alone and wait for native initialization. In Codex Settings, open
-   **Creator Micro** and inspect the connection state.
+3. Quit ChatGPT Desktop, Work Louder Input, and Agent Board with Command-Q.
+   Reopen ChatGPT Desktop alone and wait for native initialization. In Codex
+   Settings, open **Creator Micro** and inspect the connection and displayed
+   Input Monitoring states.
 4. Reopen Agent Board, return to Setup, and select **Refresh after isolated
    retry**.
    A fresh ordered `v.oai.rgbcfg` → `v.oai.thstatus` → HID notification →
@@ -86,6 +87,15 @@ Use **Prepare handoff** before the controller-isolation restart:
    are checked and the initialization is fresh, ordered, newer than the
    preparation, and bound to the same VID:PID class and fixed-path ChatGPT
    metadata.
+
+Acceptance is saved in two fail-closed phases. If Agent Board closes or local
+storage stops between staging and final promotion, Setup shows **Acceptance
+interrupted before completion**. That durable intermediate receipt is explicitly
+not accepted and cannot become accepted merely because the prior context later
+returns. Select **Start fresh handoff** once to replace it with a clean
+preparation, or select **Clear handoff** to remove it. While preparing,
+refreshing, accepting, or clearing, the initiating control and a visible live
+status name that exact operation; the other handoff controls remain disabled.
 
 The saved result is an operator attestation, not a cryptographic device proof.
 It contains no prompt, task title, session identifier, raw log, diagnostic

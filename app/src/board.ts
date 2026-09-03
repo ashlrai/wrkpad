@@ -71,6 +71,7 @@ export interface WorkspaceSnapshot {
 
 export interface SystemStatus {
   boardConnected: boolean
+  boardVidPid: string | null
   inputInstalled: boolean
   inputInstallation: InputInstallationStatus
   inputProfile: InputProfileStatus
@@ -185,7 +186,7 @@ export interface NativeAcceptanceContext {
 
 export interface NativeAcceptanceReceipt {
   schema: 'ai.ashlr.agent-board.native-acceptance/v1'
-  state: 'prepared' | 'accepted'
+  state: 'prepared' | 'accepting' | 'accepted'
   preparedAt: string
   initializationObservedAt: string | null
   acceptedAt: string | null

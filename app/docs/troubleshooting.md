@@ -181,15 +181,18 @@ connected. On the tested desk, the updated firmware accepted both methods, but
 Codex consumption and physical behavior remain unproven; see the
 [post-flash evidence](../../docs/creator-micro-2-post-flash-2026-09-02.md).
 
-If those calls succeed but Codex still fails, verify Input Monitoring and test
-Codex as the only open board controller. Codex and Input can hold nonexclusive
-HID handles, but they do not share a cross-process RPC or lighting lease.
+If those calls succeed but Codex still fails, require Codex Settings → Creator
+Micro to show both **Connection: Connected** and **Input Monitoring: Granted**,
+then test Codex as the only open board controller. Detected-only or Connection
+failed does not count. Codex and Input can hold nonexclusive HID handles, but
+they do not share a cross-process RPC or lighting lease.
 
 After a firmware update, fully quit and reopen ChatGPT Desktop before drawing a
 new conclusion. An app process that started before the update may have only the
 historical failed attempt in its current log session. In Agent Board, select
-**Codex Native**, choose **Prepare handoff**, quit Input and Agent Board, and
-restart ChatGPT Desktop alone. Then reopen Agent Board and choose **Refresh
+**Codex Native**, choose **Prepare handoff**, Command-Q ChatGPT Desktop, Work
+Louder Input, and Agent Board, then reopen ChatGPT Desktop alone. Reopen Agent
+Board and choose **Refresh
 after isolated retry**. The evidence ladder intentionally stops at **Initialization
 inferred** until you separately observe Codex Settings and every physical
 control group. The fresh initialization timestamp supports the retry sequence;
@@ -206,6 +209,14 @@ If preparation is unavailable, resolve the exact prerequisite shown in Setup:
 - **Initialization not observed:** restart ChatGPT Desktop after preparation
   with Input and Agent Board quit, then refresh. Do not check physical outcomes
   that you did not see.
+
+If Setup reports **Acceptance interrupted before completion**, the two-phase
+save stopped before its final promotion. It is a durable non-accepted state,
+not a partial success. Select **Start fresh handoff** once to replace the staged
+observations with a clean preparation, then repeat the isolated retry and every
+manual observation. **Clear handoff** is the alternative when you do not want
+to resume. The card announces the exact prepare, refresh, accept, or clear
+operation while it is running; do not infer success from a disabled button.
 
 Clearing the handoff is safe recovery for a stale or mismatched receipt. It
 does not clear Codex settings, disconnect USB, revert firmware, or change Input.
