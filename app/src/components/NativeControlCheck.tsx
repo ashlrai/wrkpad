@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Activity, Check, CircleAlert, ShieldCheck } from 'lucide-react'
+import { nativeControlReportFresh } from '../native-control-report'
 
 export type NativeSettingsOutcome = 'connected_granted' | 'failed_or_ungranted' | 'not_checked'
 export type NativeControlOutcome = 'observed_response' | 'no_response' | 'unexpected_target' | 'not_configured' | 'skipped'
@@ -73,10 +74,13 @@ export default function NativeControlCheck({ receipt, busy, error, onSave }: { r
     setOutcomes((current) => ({ ...current, actionKeys: { ...current.actionKeys, [key]: value } }))
     setDirty(true)
   }
-  const savedState = receipt?.overall === 'operator_accepted'
+  const receiptFresh = receipt ? nativeControlReportFresh(receipt) : false
+  const savedState = receipt?.overall === 'operator_accepted' && receiptFresh
     ? { label: 'Operator accepted', tone: 'accepted', icon: <Check size={14} /> }
       : receipt?.overall === 'reported_failure'
       ? { label: 'Response needs recovery', tone: 'failed', icon: <CircleAlert size={14} /> }
+      : receipt && !receiptFresh
+        ? { label: 'Saved report expired · retest', tone: 'failed', icon: <CircleAlert size={14} /> }
       : { label: receipt ? 'Partial check saved' : 'No control report yet', tone: 'pending', icon: <Activity size={14} /> }
   const save = async () => {
     try {
@@ -91,6 +95,16 @@ export default function NativeControlCheck({ receipt, busy, error, onSave }: { r
     <div className="native-control-check-head">
       <div><span className="eyebrow">CONTROL RECOVERY / OPERATOR-OBSERVED</span><h3 id="native-control-check-title">Prove what the key actually did.</h3><p>Agent Board stays passive and will not animate for Codex Native presses. Watch Codex: one tap selects the assigned task without forcing Codex forward; a double-tap within 350 ms selects and foregrounds it.</p></div>
       <span className={`native-control-check-state ${savedState.tone}`}>{savedState.icon}{savedState.label}</span>
+    </div>
+
+    <div className="native-route-preflight">
+      <b>Put the board on the native wired route first</b>
+      <ol>
+        <li>On Creator Micro 2 Pro, hold the bottom-left touch sensor for three seconds, then tap through the channels to the fourth <strong>WIRED</strong> mode. Its underglow is white; let the selector exit after five seconds without touching it.</li>
+        <li>Only after the communication selector exits, confirm firmware <strong>Layer 1</strong>. Short taps on that same sensor cycle layers; stop when the layer LEDs indicate Layer 1, then do not touch it during this test.</li>
+        <li>If transport or layer changed, Command-Q and reopen ChatGPT Desktop before checking Settings again. Do not reset settings, import a profile, or automate a device write for this check.</li>
+      </ol>
+      <p><ShieldCheck size={13} /> White underglow proves only firmware-selected wired mode. Layer 1 and Connected + Granted still do not prove that Codex consumed a press.</p>
     </div>
 
     <div className="native-test-card">
@@ -121,7 +135,7 @@ export default function NativeControlCheck({ receipt, busy, error, onSave }: { r
       <button type="button" disabled={busy || !dirty || settings === 'not_checked'} onClick={() => void save()}>{busy ? 'Saving report…' : 'Save operator report'}</button>
     </div>
     {error && <p className="native-control-error" role="alert">{error}</p>}
-    {receipt && !dirty && <p className="native-control-receipt">Saved {outcomeLabel(receipt.outcomes.agentKeys.AG00) === 'No response' ? 'with AG00 reporting no response' : new Date(receipt.reportedAt).toLocaleString()} · {receipt.context.device.vidPid} · Codex {receipt.context.codex.version}</p>}
+    {receipt && !dirty && <p className={`native-control-receipt${receiptFresh ? '' : ' stale'}`}>Saved {outcomeLabel(receipt.outcomes.agentKeys.AG00) === 'No response' ? 'with AG00 reporting no response' : new Date(receipt.reportedAt).toLocaleString()} · {receipt.context.device.vidPid} · Codex {receipt.context.codex.version} · {receiptFresh ? 'fresh for this diagnosis' : 'older than 30 minutes; retest now'}</p>}
     <p className="native-proof-boundary"><ShieldCheck size={14} /><span><strong>Operator report—not HID proof.</strong> This receipt stores only bounded enums, timestamps, model VID:PID, and Codex version/build. It contains no task title, ID, prompt, transcript, path, or raw log.</span></p>
   </section>
 }

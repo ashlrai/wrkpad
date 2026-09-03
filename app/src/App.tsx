@@ -13,6 +13,7 @@ import AttentionDeck from './components/AttentionDeck'
 import FleetBrief from './components/FleetBrief'
 import NativeControlCheck, { type NativeControlCheckReceipt, type NativeControlCheckReport } from './components/NativeControlCheck'
 import { expectedSignalsAfter, flightAcceptance, flightStepComplete, noSignalRecoveryNeeded, stepsForVariant, type FlightEvent, type FlightVariant } from './flight-check'
+import { nativeControlReportFresh } from './native-control-report'
 import './App.css'
 
 const initialStatus: SystemStatus = {
@@ -839,7 +840,7 @@ function App() {
         liveGateInvalidated={flightInvalidatedRun === flightRequest.current} onStart={startFlightCheck}
         onStop={() => void stopFlightCheck()} onRestart={() => void restartFlightCheck()} onExport={exportFlightReceipt}
         onSetup={() => void changeView('setup')} onOperate={() => void changeView('operate')}
-      /> : <SetupView status={status} recoveryGuide={recoveryGuide} onRefreshRecoveryGuide={refreshRecoveryGuide} onRefreshStatus={refreshStatus} routeSaving={routeSaving} routeError={routeError} onRouteChange={(route) => void declareBoardRoute(route)} onOperate={() => changeView('operate')} onFlightCheck={() => void changeView('flight')} />}
+      /> : <SetupView status={status} recoveryGuide={recoveryGuide} onRefreshRecoveryGuide={refreshRecoveryGuide} onRefreshStatus={refreshStatus} onNativeControlReceipt={setNativeControlReceipt} routeSaving={routeSaving} routeError={routeError} onRouteChange={(route) => void declareBoardRoute(route)} onOperate={() => changeView('operate')} onFlightCheck={() => void changeView('flight')} />}
 
       <footer className="footer-bar">
         <div><span className={status.boardConnected ? 'footer-led observed' : 'footer-led'} /> {status.boardConnected ? 'USB IDENTITY OBSERVED · CONTROLS UNPROVEN' : 'USB IDENTITY NOT OBSERVED'} · {hardware.mechanicalSwitches} SWITCHES · 1 TOUCH · 1 DIAL · 1 PLANAR STICK</div>
@@ -861,14 +862,17 @@ function NativeRouteTruth({ status, receipt, onOpenSetup }: { status: SystemStat
   const nativeCodexMicro = status.nativeCodexMicro ?? initialStatus.nativeCodexMicro
   const initializationObserved = nativeCodexMicro.status === 'connected' && nativeCodexMicro.fresh === true
   const possibleLayerMismatch = correctedInputProfileObserved(status.inputProfile ?? initialStatus.inputProfile)
-  const physicalState = receipt?.overall === 'operator_accepted'
+  const receiptFresh = receipt ? nativeControlReportFresh(receipt) : false
+  const physicalState = receipt?.overall === 'operator_accepted' && receiptFresh
     ? { label: 'Operator accepted · report, not HID proof', tone: 'accepted' }
     : receipt?.overall === 'reported_failure'
       ? { label: 'No response reported · recovery needed', tone: 'problem' }
+      : receipt && !receiptFresh
+        ? { label: 'Saved report expired · retest now', tone: 'problem' }
       : receipt
         ? { label: 'Partial operator report · acceptance incomplete', tone: 'pending' }
         : { label: 'No current physical-control report', tone: 'pending' }
-  const hasProblem = possibleLayerMismatch || receipt?.overall === 'reported_failure'
+  const hasProblem = possibleLayerMismatch || receipt?.overall === 'reported_failure' || Boolean(receipt && !receiptFresh)
 
   return <section
     className={`native-route-truth${hasProblem ? ' problem' : ''}`}
@@ -897,12 +901,12 @@ function NativeRouteTruth({ status, receipt, onOpenSetup }: { status: SystemStat
       <li className={possibleLayerMismatch ? 'problem' : 'pending'}>
         <span>03 · Active layer</span>
         <strong>{possibleLayerMismatch ? 'Possible native-layer mismatch' : 'Native layer still needs verification'}</strong>
-        <small>{possibleLayerMismatch ? 'Input cache names Ashlr Agent Board Corrected · Ashlr Daily; device state is unproven.' : 'Verify the board is on native firmware Layer 1; Agent Board cannot read the active device layer.'}</small>
+        <small>{possibleLayerMismatch ? 'Cached Ashlr Daily is not device proof. Select white WIRED mode; after its selector exits, short-tap the bottom-left sensor until the layer LEDs indicate Layer 1.' : 'Select white WIRED mode; after its selector exits, short-tap the bottom-left sensor until the layer LEDs indicate Layer 1. Agent Board cannot read the device layer.'}</small>
       </li>
       <li className={physicalState.tone}>
         <span>04 · Physical acceptance</span>
         <strong>{physicalState.label}</strong>
-        <small>{receipt?.overall === 'operator_accepted' ? 'Saved for this exact device and Codex version/build context.' : 'Test two assigned keys while watching Codex, then record what actually happened.'}</small>
+        <small>{receipt?.overall === 'operator_accepted' && receiptFresh ? 'Saved within 30 minutes for this exact device and Codex version/build context.' : 'Test two assigned keys while watching Codex, then record what actually happened.'}</small>
       </li>
     </ol>
   </section>
@@ -1184,7 +1188,7 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
   </section>
 }
 
-function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshStatus, routeSaving, routeError, onRouteChange, onOperate, onFlightCheck }: { status: SystemStatus; recoveryGuide: AgentBoardRecoveryGuide; onRefreshRecoveryGuide: () => Promise<AgentBoardRecoveryGuide | null>; onRefreshStatus: () => Promise<SystemStatus | null>; routeSaving: boolean; routeError: string | null; onRouteChange: (route: BoardRoute) => void; onOperate: () => void; onFlightCheck: () => void }) {
+function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshStatus, onNativeControlReceipt, routeSaving, routeError, onRouteChange, onOperate, onFlightCheck }: { status: SystemStatus; recoveryGuide: AgentBoardRecoveryGuide; onRefreshRecoveryGuide: () => Promise<AgentBoardRecoveryGuide | null>; onRefreshStatus: () => Promise<SystemStatus | null>; onNativeControlReceipt: (receipt: NativeControlCheckReceipt | null) => void; routeSaving: boolean; routeError: string | null; onRouteChange: (route: BoardRoute) => void; onOperate: () => void; onFlightCheck: () => void }) {
   const [repairBusy, setRepairBusy] = useState(false)
   const [repairResult, setRepairResult] = useState<ProfileRepairResult | null>(null)
   const [recoveryAction, setRecoveryAction] = useState<AgentBoardRecoveryActionResult | null>(null)
@@ -1265,7 +1269,7 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
     ? 'Operator attestation recorded'
     : 'Operator observation pending'
   const nativeSteps: Array<{ number: string; title: string; detail: string; state: string; ready: boolean; observed?: boolean }> = [
-    { number: '01', title: 'Observe the USB identity', detail: 'Use a direct USB-C data connection for commissioning. Bluetooth keyboard and trackpad can remain connected. This does not prove native HID access or working controls.', state: status.boardConnected ? 'Creator Micro 2 identity observed · controls unproven' : 'USB identity not observed', ready: false, observed: status.boardConnected },
+    { number: '01', title: 'Observe the USB identity', detail: 'Use a direct USB-C data connection for commissioning. On Creator Micro 2 Pro, hold the bottom-left sensor for three seconds and select the fourth communication channel until the underglow is white for WIRED mode. Let that selector exit before using short taps to cycle layers. Bluetooth keyboard and trackpad can remain connected. White underglow and USB identity still do not prove native HID access or working controls.', state: status.boardConnected ? 'Creator Micro 2 identity observed · controls unproven' : 'USB identity not observed', ready: false, observed: status.boardConnected },
     { number: '02', title: 'Observe ChatGPT Desktop metadata', detail: 'The native route belongs to ChatGPT Desktop. Agent Board reads only fixed-path version/build metadata; it does not prove bundle identity, signature, Gatekeeper status, or the running process. Work Louder Input, its profile, Input Monitoring for Agent Board, and Agent Board shortcut ownership are not native-route prerequisites. ChatGPT Desktop’s displayed Input Monitoring state remains part of the Codex Settings observation.', state: chatgptDesktop.status === 'metadata_observed' ? `ChatGPT Desktop${chatgptDesktop.version ? ` ${chatgptDesktop.version}` : ''}${chatgptDesktop.build ? ` · build ${chatgptDesktop.build}` : ''} metadata observed` : chatgptDesktop.status === 'missing' ? 'ChatGPT Desktop not found' : 'ChatGPT Desktop metadata unavailable', ready: false, observed: chatgptDesktop.status === 'metadata_observed' },
     { number: '03', title: 'Declare Codex Native', detail: 'This local declaration changes only the expected verification route; it does not configure or claim the board.', state: status.boardRoute === 'codex_native' ? 'Codex Native declared' : 'Codex Native not declared', ready: false, observed: status.boardRoute === 'codex_native' },
     { number: '04', title: 'Infer native initialization', detail: 'Agent Board may infer an ordered native initialization from fresh, bounded ChatGPT Desktop diagnostics. This observation is not a Settings result, physical-control result, or readiness decision.', state: nativeInitializationObserved ? 'Ordered native initialization inferred' : nativeCodexMicro.status === 'firmware_rpc_missing' ? `Native RPC qualification required${nativeCodexMicro.fresh ? '' : ' · historical evidence only'}` : 'Fresh native initialization not observed', ready: false, observed: nativeInitializationObserved },
@@ -1343,14 +1347,19 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
     const load = async () => {
       try {
         const receipt = await window.agentBoard?.getNativeControlCheck?.()
-        if (current) setNativeControlReceipt(receipt ?? null)
+        if (current) {
+          setNativeControlReceipt(receipt ?? null)
+          onNativeControlReceipt(receipt ?? null)
+        }
       } catch {
-        if (current) setNativeControlError('The private control report could not be read. Existing local state was not changed.')
+        if (current) {
+          setNativeControlError('The private control report could not be read. Existing local state was not changed.')
+        }
       }
     }
     void load()
     return () => { current = false }
-  }, [nativeEvidenceKey, status.boardRoute])
+  }, [nativeEvidenceKey, onNativeControlReceipt, status.boardRoute])
   useEffect(() => {
     const read = window.agentBoard?.getNativeAcceptance
     if (
@@ -1400,6 +1409,7 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
     try {
       const receipt = await save(report)
       setNativeControlReceipt(receipt)
+      onNativeControlReceipt(receipt)
     } catch (error) {
       setNativeControlError('The report could not be saved for the current passive Codex Native context. Refresh Setup and try again.')
       throw error
@@ -1545,7 +1555,7 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
         </article>)}
         {nativeShortcutProfileObserved && <div className="native-profile-warning" role="alert" aria-labelledby="native-profile-warning-title">
           <CircleX size={18} />
-          <div><strong id="native-profile-warning-title">Possible native-layer mismatch</strong><p>Input’s read-only cache currently names <b>Ashlr Agent Board Corrected · Ashlr Daily</b>. That cache does not prove which layer reached the board, but this profile targets Agent Board shortcuts that Codex Native intentionally releases. Before retesting, select the board’s native firmware <b>Layer 1</b>, keep Work Louder Input quit, then Command-Q and reopen ChatGPT Desktop.</p></div>
+          <div><strong id="native-profile-warning-title">Possible native-layer mismatch</strong><p>Input’s read-only cache currently names <b>Ashlr Agent Board Corrected · Ashlr Daily</b>. That cache does not prove which layer reached the board, but this profile targets Agent Board shortcuts that Codex Native intentionally releases. Before retesting, hold the bottom-left sensor for three seconds and select the fourth, white <b>WIRED</b> communication channel. Let that selector exit, then short-tap the sensor until the layer LEDs indicate native firmware <b>Layer 1</b>. Keep Work Louder Input quit, do not reset or import a profile, then Command-Q and reopen ChatGPT Desktop.</p></div>
         </div>}
         {status.boardRoute === 'codex_native' && <NativeControlCheck key={nativeControlReceipt?.reportedAt ?? 'new'} receipt={nativeControlReceipt} busy={nativeControlBusy} error={nativeControlError} onSave={saveNativeControlCheck} />}
         {status.boardRoute === 'codex_native' && <section className="native-acceptance legacy-native-acceptance" aria-labelledby="native-acceptance-title" aria-busy={nativeBusy}>
