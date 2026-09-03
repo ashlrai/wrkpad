@@ -161,7 +161,7 @@ fn render_physical_board(frame: &mut ratatui::Frame<'_>, area: Rect, snapshot: &
         frame,
         top[3],
         "JOYSTICK",
-        "planar + press\nInput-owned",
+        "planar toggle\nInput-owned",
         Color::DarkGray,
     );
 
@@ -181,12 +181,7 @@ fn render_physical_board(frame: &mut ratatui::Frame<'_>, area: Rect, snapshot: &
         );
     }
 
-    let bottom = Layout::horizontal([
-        Constraint::Percentage(25),
-        Constraint::Percentage(50),
-        Constraint::Percentage(25),
-    ])
-    .split(rows[3]);
+    let bottom = four_columns(rows[3]);
     render_control(
         frame,
         bottom[0],
@@ -197,16 +192,23 @@ fn render_physical_board(frame: &mut ratatui::Frame<'_>, area: Rect, snapshot: &
     render_control(
         frame,
         bottom[1],
-        "MIC · ACT10 + ACT11",
-        "wide cap · ACT11 silent daily",
+        "ACT10",
+        "separate key\nInput layer",
         Color::Rgb(109, 93, 252),
     );
     render_control(
         frame,
         bottom[2],
+        "ACT11",
+        "separate key\nInput layer",
+        Color::Rgb(109, 93, 252),
+    );
+    render_control(
+        frame,
+        bottom[3],
         "ACT12",
-        "workflow signal\nInput layer",
-        Color::Rgb(72, 82, 98),
+        "transparent key\nInput layer",
+        Color::Rgb(180, 205, 202),
     );
 }
 
@@ -369,25 +371,13 @@ mod tests {
         }
 
         for label in [
-            "DIAL",
-            "AG00",
-            "AG01",
-            "JOYSTICK",
-            "AG02",
-            "AG03",
-            "AG04",
-            "AG05",
-            "ACT06",
-            "ACT07",
-            "ACT08",
-            "ACT09",
-            "TOUCH",
-            "MIC · ACT10 + ACT11",
-            "ACT12",
+            "DIAL", "AG00", "AG01", "JOYSTICK", "AG02", "AG03", "AG04", "AG05", "ACT06", "ACT07",
+            "ACT08", "ACT09", "TOUCH", "ACT10", "ACT11", "ACT12",
         ] {
             assert!(rendered.contains(label), "missing physical control {label}");
         }
-        assert!(rendered.contains("ACT11 silent daily"));
+        assert!(rendered.contains("separate key"));
+        assert!(rendered.contains("transparent key"));
         assert!(rendered.contains("zero HID writes"));
         Ok(())
     }

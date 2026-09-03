@@ -96,8 +96,9 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 - Keep operator safety notices visible even when Fleet evidence is unavailable.
 - Separate USB detection, native firmware compatibility, route declaration,
   desktop endpoint registration, and physical acceptance in Setup and doctor.
-- Correct the screen twin and canonical layout to place the white joystick at
-  top-left and the black rotary dial at top-right.
+- Correct the screen twin and canonical layout to match the desk-verified board:
+  rotary dial at top-left, planar stick at top-right, separate ACT10 and ACT11
+  keys, and transparent ACT12 at bottom-right.
 - Refuse to arm Flight Check when the active Input receipt has a known reversed
   encoder, reserve Setup readiness for the exact corrected profile receipt, and
   keep daily and disposable diagnostic acceptance gates distinct.

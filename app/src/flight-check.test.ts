@@ -7,9 +7,9 @@ const event = (signal: ControlId, expectedSignals: ControlId[], at: number, matc
 })
 
 describe('Flight Check model', () => {
-  it('models 19 gestures, 19 daily signals, and all 20 diagnostic signals', () => {
-    expect(dailyFlightSteps).toHaveLength(19)
-    expect(dailyFlightSteps.flatMap((step) => step.signals)).toHaveLength(19)
+  it('models all 20 physical gestures and routed signals in both profiles', () => {
+    expect(dailyFlightSteps).toHaveLength(20)
+    expect(dailyFlightSteps.flatMap((step) => step.signals)).toHaveLength(20)
     expect(new Set(diagnosticFlightSteps.flatMap((step) => step.signals))).toEqual(new Set(allControlIds))
   })
   it('does not bank an out-of-order signal for a later step', () => {
@@ -23,10 +23,10 @@ describe('Flight Check model', () => {
     expect(flightStepComplete(step, [1, 2, 3].map((time) => event('dialLeft', step.signals, time)))).toBe(true)
   })
   it('identifies the physical dial and reveals recovery only after a silent grace period', () => {
-    expect(diagnosticFlightSteps[0].instruction).toContain('top-right rotary dial')
+    expect(diagnosticFlightSteps[0].instruction).toContain('top-left rotary dial')
     expect(diagnosticFlightSteps[0].instruction).toContain('layer and connection selector')
-    expect(diagnosticFlightSteps.find((step) => step.label === 'Agent 1')?.instruction).toContain('white joystick')
-    expect(diagnosticFlightSteps.find((step) => step.label === 'Agent 2')?.instruction).toContain('black dial')
+    expect(diagnosticFlightSteps.find((step) => step.label === 'Agent 1')?.instruction).toContain('right of the dial')
+    expect(diagnosticFlightSteps.find((step) => step.label === 'Agent 2')?.instruction).toContain('left of the planar stick')
     const startedAt = '2026-09-01T18:00:00.000Z'
     expect(noSignalRecoveryNeeded(true, startedAt, [], Date.parse(startedAt) + 11_999)).toBe(false)
     expect(noSignalRecoveryNeeded(true, startedAt, [], Date.parse(startedAt) + 12_000)).toBe(true)
@@ -34,10 +34,12 @@ describe('Flight Check model', () => {
     expect(noSignalRecoveryNeeded(false, startedAt, [], Date.parse(startedAt) + 30_000)).toBe(false)
     expect(noSignalRecoveryNeeded(true, 'not-a-timestamp', [], Date.parse(startedAt) + 30_000)).toBe(false)
   })
-  it('accepts both diagnostic Mic halves only inside the paired window', () => {
-    const step = diagnosticFlightSteps.find((candidate) => candidate.label === 'Mic cap')!
-    expect(flightStepComplete(step, [event('cmd6', step.signals, 1000), event('cmd5', step.signals, 1100)])).toBe(true)
-    expect(flightStepComplete(step, [event('cmd6', step.signals, 1000), event('cmd5', step.signals, 1300)])).toBe(false)
+  it('accepts ACT10 and ACT11 only as their own physical steps', () => {
+    const act10 = diagnosticFlightSteps.find((candidate) => candidate.label === 'Action 5')!
+    const act11 = diagnosticFlightSteps.find((candidate) => candidate.label === 'Action 6')!
+    expect(flightStepComplete(act10, [event('cmd5', act10.signals, 1000)])).toBe(true)
+    expect(flightStepComplete(act10, [event('cmd6', act10.signals, 1000, false)])).toBe(false)
+    expect(flightStepComplete(act11, [event('cmd6', act11.signals, 1000)])).toBe(true)
   })
 
   it('requires clean routes, live USB, and every shortcut registration', () => {

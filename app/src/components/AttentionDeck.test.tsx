@@ -18,8 +18,8 @@ const agents: AgentSlotSummary[] = [
 describe('black-cap attention runway', () => {
   it('mirrors the physical anchors and exposes every state without relying on color', () => {
     render(<AttentionDeck agents={agents} selectedSlot={2} source="observer_online" onSelect={() => {}} onFocus={() => {}} />)
-    const topRow = screen.getByText('STICK').parentElement
-    expect(Array.from(topRow?.children ?? []).map((node) => node.textContent?.includes('AG0') ? node.textContent?.slice(0, 4) : node.textContent)).toEqual(['STICK', 'AG00', 'AG01', 'DIAL'])
+    const topRow = screen.getByText('DIAL').parentElement
+    expect(Array.from(topRow?.children ?? []).map((node) => node.textContent?.includes('AG0') ? node.textContent?.slice(0, 4) : node.textContent)).toEqual(['DIAL', 'AG00', 'AG01', 'STICK'])
     expect(screen.getByRole('button', { name: /Agent 2, AG01, Claude Code, ashlr-hub, Needs you/i }).getAttribute('aria-pressed')).toBe('true')
     expect(screen.getByRole('button', { name: /Agent 4.*Ready to review/i })).toBeTruthy()
     expect(screen.getByRole('button', { name: /Agent 5.*Local agent.*Idle/i })).toBeTruthy()

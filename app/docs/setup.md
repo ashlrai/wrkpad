@@ -92,13 +92,60 @@ Use **Prepare handoff** before the controller-isolation restart:
    A fresh ordered `v.oai.rgbcfg` → `v.oai.thstatus` → HID notification →
    radial notification sequence may advance the ladder to **Initialization
    inferred**. It does not complete the Settings or physical checks.
-5. Exercise the dial, joystick, all six Agent keys, all seven action switches,
-   the wide microphone cap, and the black-cap lighting. Check an observation
-   only after personally seeing that result on the physical board and in Codex.
-6. **Accept operator attestation** becomes available only when all seven groups
+5. Confirm the board remains on firmware layer 1, which the current official
+   [Codex Micro guide](https://learn.chatgpt.com/docs/features/codex-micro)
+   assigns to ChatGPT, and on the explicitly selected white wired channel. Do
+   not short-tap the bottom-left layer/connection touch sensor during this run.
+6. Isolate Agent-key navigation from commands before testing it. In ChatGPT's
+   Creator Micro settings, choose a chat-following Agent-key mode rather than a
+   Custom shortcut, action, or skill, and make at least two harmless existing
+   chats available to assigned, lit slots. A pinned ordering is the most
+   deterministic. Use the sidebar only to establish which chat is selected;
+   do not submit a prompt or invoke an approval for this check.
+7. Exercise the six center Agent keys using their physical two-plus-four
+   geometry: AG00 and AG01 sit between the left rotary dial and right planar
+   toggle/joystick; AG02 through AG05 are directly below. Choose a lit key
+   assigned to a chat other than the current chat, put another application in
+   front, and double-tap the key within 350 ms. ChatGPT should select that chat
+   and come to the foreground. With ChatGPT visible, single-tap a different
+   assigned key; a single tap selects its chat without bringing ChatGPT forward.
+   Pressing the already selected chat can have no visible navigation effect,
+   and an unassigned or unlit slot does not prove failure. Leave an unassigned
+   slot pending rather than claiming it passed.
+8. Exercise the left rotary dial, right planar toggle/joystick, safely isolated
+   action switches, separate ACT10 and ACT11 bottom-row keys, transparent ACT12,
+   and black-cap lighting. Do not press an
+   approval, rejection, or other consequential native command against live work
+   merely to complete this receipt. Leave that group pending when a harmless
+   context cannot be established.
+9. Keep Agent Board passive throughout the native check. After a prepared
+   handoff it owns no Ashlr global shortcuts and opens no board HID handle, so a
+   physical press will not animate its board twin or prove a native event there.
+   Judge the result in ChatGPT and on the physical board, then record only the
+   observation you personally made.
+10. **Accept operator attestation** becomes available only when all seven groups
    are checked and the initialization is fresh, ordered, newer than the
    preparation, and bound to the same VID:PID class and fixed-path ChatGPT
    metadata.
+
+#### Per-control native recovery report
+
+Setup also provides a separate **Prove what the key actually did** report for
+diagnosing a connected-but-inactive native board. Record ChatGPT Settings as
+connected/granted, failed/ungranted, or not checked, then record a bounded result
+for the left dial, right planar toggle/joystick, each of AG00–AG05, each of
+ACT06–ACT12, and lighting. The UI calls these 16 control groups because the
+dial's three motions and joystick's four directions are grouped; this is not the
+20-gesture Ashlr Layer Flight Check.
+
+`no_response` or `unexpected_target` produces a reported failure.
+`not_configured` and `skipped` keep the report incomplete. Only
+connected/granted plus an observed response for all 16 groups produces the
+`operator_accepted` label. The private mode-`0600` receipt is bound to the
+current declared route, VID:PID class, and ChatGPT version/build and contains no
+task title, identifier, prompt, transcript, path, or raw log. It is a human
+report, not HID proof, and it does not replace the restart-safe initialization
+handoff above or the Ashlr Layer Flight Check below.
 
 Acceptance is saved in two fail-closed phases. If Agent Board closes or local
 storage stops between staging and final promotion, Setup shows **Acceptance
@@ -227,7 +274,7 @@ Open **System Settings → Privacy & Security → Input Monitoring** and enable 
 
 Map the physical controls to [the canonical shortcuts](controls.md#action-switches-and-motion-controls).
 
-The daily layer has 19 gestures: six Agent keys, six visible action caps, four joystick directions, and dial left/right/press. The desktop reserves 20 shortcut endpoints because the Mic cap covers two switches. Assign the Mic shortcut to ACT10 and set ACT11 to `None` for daily use. Never give the two hidden halves different daily actions.
+The daily layer has 20 independently observable gestures: six Agent keys, seven action keys, four joystick directions, and dial left/right/press. ACT10 and ACT11 are separate bottom-row switches and must have separate mappings. ACT12 is the transparent Attention key.
 
 The Setup screen's `20/20 desktop endpoints registered` result proves only that Electron registered all expected global shortcuts. It does not inspect Input's active profile, prove that the mapping reached the board, or complete this setup step. The ordered physical Flight Check is the acceptance gate for the active layer.
 
@@ -344,13 +391,13 @@ Open the architecture directory created under `release/`, then select a working 
 
 1. Open **Flight Check** and choose **Daily profile**.
 2. Wait until the app says **Actions suppressed**.
-3. Use only the physical board while following each gesture prompt. The white
-   control at top-left is the joystick, the black control at top-right is the
-   rotary dial, and the bottom-left circle with three LEDs is the layer and
+3. Use only the physical board while following each gesture prompt. The rotary
+   dial is at the left of the first row; the planar toggle/joystick is at the
+   right. The bottom-left circle with three LEDs is the layer and
    communication-mode touch sensor—not a Flight Check gesture.
 4. Confirm USB is present, Setup says **One receiver · shortcut ownership
    available**, 20 desktop shortcuts are registered, and misroutes remain zero.
-5. Export a receipt only after all 19 daily signals pass.
+5. Export a receipt only after all 20 daily signals pass.
 6. Stop Flight Check or return to Operate to release the interlock.
 
 During Flight Check, the Electron main process disables mapped actions and Agent-slot focus. Mouse clicks on the board twin do not count. Keyboard input can generate the same shortcuts, so keep hands off the keyboard during acceptance.
@@ -359,7 +406,7 @@ A passing receipt proves only that expected global shortcuts were observed in or
 
 Receipts are written with mode `0600` and include a SHA-256 over the canonical payload. Store them privately and do not commit them.
 
-## Diagnostic Mic test
+## Diagnostic bottom-row test
 
 1. Generate the disposable diagnostic profile from an ordinary export with
    `npm run profile:generate -- source.json diagnostic.json diagnostic`.
@@ -368,10 +415,10 @@ Receipts are written with mode `0600` and include a SHA-256 over the canonical p
    same two Input writes and restart/reconciliation checks as the daily profile.
 3. Reopen Agent Board and require the exact diagnostic profile receipt before
    starting **20-signal diagnostic**. The daily profile cannot arm this check.
-4. Press the wide cap once; both signals must arrive within 250 milliseconds.
+4. Press ACT10, then ACT11. Each must arrive as its own ordered signal.
 5. Deactivate the diagnostic profile afterward.
-6. Restore **Ashlr Agent Board Corrected** / **Ashlr Daily**, where ACT11 is
-   `None`, and verify its fresh read-only receipt before daily use.
+6. Restore **Ashlr Agent Board Corrected** / **Ashlr Daily**, where ACT10 is
+   Voice and ACT11 is guarded Continue, and verify its fresh read-only receipt before daily use.
 
 ## Optional agent and Fleet receipts
 

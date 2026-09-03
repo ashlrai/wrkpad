@@ -4,9 +4,9 @@ const diagnosticSteps = [
   { signals: ['joyUp'] }, { signals: ['joyRight'] }, { signals: ['joyDown'] }, { signals: ['joyLeft'] },
   { signals: ['agent3'] }, { signals: ['agent4'] }, { signals: ['agent5'] }, { signals: ['agent6'] },
   { signals: ['cmd1'] }, { signals: ['cmd2'] }, { signals: ['cmd3'] }, { signals: ['cmd4'] },
-  { signals: ['cmd5', 'cmd6'], pairWindowMs: 250 }, { signals: ['cmd7'] },
+  { signals: ['cmd5'] }, { signals: ['cmd6'] }, { signals: ['cmd7'] },
 ]
-const dailySteps = diagnosticSteps.map((step) => step.signals.includes('cmd6') ? { signals: ['cmd5'] } : step)
+const dailySteps = diagnosticSteps
 
 function evaluateFlightSignals(variant, rawEvents) {
   const steps = variant === 'diagnostic' ? diagnosticSteps : dailySteps
@@ -33,7 +33,7 @@ function evaluateFlightSignals(variant, rawEvents) {
     status: stepIndex === steps.length && problems.length === 0 ? 'passed' : stepIndex === 0 && rawEvents.length === 0 ? 'incomplete' : 'failed',
     completedGestures: stepIndex,
     expectedGestures: steps.length,
-    expectedSignals: variant === 'diagnostic' ? 20 : 19,
+    expectedSignals: 20,
     receivedSignals: [...new Set(acceptedEvents.map((event) => event.signalId))],
     missingSignals,
     problems,

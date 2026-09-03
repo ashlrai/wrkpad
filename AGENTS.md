@@ -30,6 +30,8 @@ agents. Keep it concise and keep provider-specific files pointed here.
 - `docs/`: core setup, operations, ownership, and release procedures.
 - `app/docs/`: desktop setup, controls, troubleshooting, and readiness.
 - `tools/`: dependency-free repository checks intended for humans and agents.
+- `.agents/skills/ashlr-delivery/`: shared Amplify, Verify, Polish, and Advance
+  delivery workflow for Codex and Claude Code.
 
 ## Safe automation boundary
 

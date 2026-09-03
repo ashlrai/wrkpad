@@ -22,15 +22,21 @@ describe('board contract', () => {
   it('matches the verified 4x4 physical geometry', () => {
     expect(hardware.mechanicalSwitches).toBe(13)
     expect(hardware.controls.filter((control) => control.kind === 'agent')).toHaveLength(6)
-    expect(hardware.controls.find((control) => control.id === 'joyUp')).toMatchObject({ row: 1, column: 1, hardwareId: 'JOY_UP' })
-    expect(hardware.controls.find((control) => control.id === 'dialPress')).toMatchObject({ row: 1, column: 4, hardwareId: 'ENC_CLK' })
-    expect(hardware.controls.find((control) => control.id === 'cmd5')).toMatchObject({ row: 4, column: 2, span: 2, hardwareId: 'ACT10 + ACT11' })
+    expect(hardware.controls.find((control) => control.id === 'dialPress')).toMatchObject({ row: 1, column: 1, hardwareId: 'ENC_CLK' })
+    expect(hardware.controls.find((control) => control.id === 'joyUp')).toMatchObject({ row: 1, column: 4, hardwareId: 'JOY_UP' })
+    expect(hardware.controls.find((control) => control.id === 'cmd5')).toMatchObject({ row: 4, column: 2, hardwareId: 'ACT10' })
+    expect(hardware.controls.find((control) => control.id === 'cmd6')).toMatchObject({ row: 4, column: 3, hardwareId: 'ACT11' })
+    expect(hardware.controls.find((control) => control.id === 'cmd7')).toMatchObject({ row: 4, column: 4, hardwareId: 'ACT12', cap: 'transparent' })
     expect(hardware.firmwareControls[0]).toMatchObject({ row: 4, column: 1, bindable: false, leds: 3 })
   })
-  it('never assigns different actions beneath the wide Mic cap', () => {
-    for (const id of profileOrder) expect(profiles[id].mapping.cmd5).toBe(profiles[id].mapping.cmd6)
+  it('keeps Voice, Continue, and transparent Attention independently addressable', () => {
+    for (const id of profileOrder) {
+      expect(profiles[id].mapping.cmd5).toBe('stage_voice')
+      expect(profiles[id].mapping.cmd6).toBe('copy_guarded_continue')
+      expect(profiles[id].mapping.cmd7).toBe('stage_attention')
+    }
   })
-  it('keeps all 20 shortcut signals unique, including both hidden Mic switches', () => {
+  it('keeps all 20 shortcut signals unique, including both bottom-row keys', () => {
     expect(allControlIds).toHaveLength(20)
     expect(new Set(allControlIds).size).toBe(20)
     expect(allControlIds).toEqual(expect.arrayContaining(['cmd5', 'cmd6']))

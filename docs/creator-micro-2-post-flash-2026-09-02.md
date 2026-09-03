@@ -100,7 +100,7 @@ This was a bounded process snapshot, not proof of exclusive HID ownership.
 | Current Input installation trusted for another mutation | Blocked by known sealed-resource mutation |
 | Codex consumed both RPC responses in an exclusive retry | Not observed |
 | Native Codex key and lighting behavior | Not physically accepted |
-| Ashlr Layer profile synchronization and 19-gesture Flight Check after update | Not performed |
+| Ashlr Layer profile synchronization and 20-gesture Flight Check after update | Not performed |
 | Provider and operator workflow acceptance | Not performed |
 
 The next native qualification must keep Input and Agent Board closed, make

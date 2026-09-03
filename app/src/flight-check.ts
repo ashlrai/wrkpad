@@ -5,11 +5,11 @@ export interface FlightStep { label: string; instruction: string; signals: Contr
 export interface FlightEvent { signal: ControlId; receivedAt: string; sequence: number; accelerator: string; monotonicNs: string; expectedSignals: ControlId[]; matched: boolean }
 
 export const diagnosticFlightSteps: FlightStep[] = [
-  { label: 'Dial left', instruction: 'Turn the top-right rotary dial three slow detents counterclockwise. The bottom-left circle is the layer and connection selector, not the dial.', signals: ['dialLeft'], requiredCount: 3 },
-  { label: 'Dial right', instruction: 'Turn the top-right rotary dial three slow detents clockwise.', signals: ['dialRight'], requiredCount: 3 },
-  { label: 'Dial press', instruction: 'Press the top-right rotary dial once.', signals: ['dialPress'] },
-  { label: 'Agent 1', instruction: 'Press the upper Agent key beside the white joystick.', signals: ['agent1'] },
-  { label: 'Agent 2', instruction: 'Press the upper Agent key beside the black dial.', signals: ['agent2'] },
+  { label: 'Dial left', instruction: 'Turn the top-left rotary dial three slow detents counterclockwise. The bottom-left circle is the layer and connection selector, not the dial.', signals: ['dialLeft'], requiredCount: 3 },
+  { label: 'Dial right', instruction: 'Turn the top-left rotary dial three slow detents clockwise.', signals: ['dialRight'], requiredCount: 3 },
+  { label: 'Dial press', instruction: 'Press the top-left rotary dial once.', signals: ['dialPress'] },
+  { label: 'Agent 1', instruction: 'Press the first upper Agent key, immediately right of the dial.', signals: ['agent1'] },
+  { label: 'Agent 2', instruction: 'Press the second upper Agent key, immediately left of the planar stick.', signals: ['agent2'] },
   { label: 'Joystick up', instruction: 'Push the joystick upward, then return it to center.', signals: ['joyUp'] },
   { label: 'Joystick right', instruction: 'Push the joystick right, then return it to center.', signals: ['joyRight'] },
   { label: 'Joystick down', instruction: 'Push the joystick downward, then return it to center.', signals: ['joyDown'] },
@@ -22,13 +22,12 @@ export const diagnosticFlightSteps: FlightStep[] = [
   { label: 'Action 2', instruction: 'Press the check key.', signals: ['cmd2'] },
   { label: 'Action 3', instruction: 'Press the X key.', signals: ['cmd3'] },
   { label: 'Action 4', instruction: 'Press the split key.', signals: ['cmd4'] },
-  { label: 'Mic cap', instruction: 'Press the wide Mic cap once; both hidden switches must report.', signals: ['cmd5', 'cmd6'] },
-  { label: 'Action 7', instruction: 'Press the brain key.', signals: ['cmd7'] },
+  { label: 'Action 5', instruction: 'Press the ACT10 key immediately right of the touch selector.', signals: ['cmd5'] },
+  { label: 'Action 6', instruction: 'Press the ACT11 key immediately left of the transparent key.', signals: ['cmd6'] },
+  { label: 'Action 7', instruction: 'Press the transparent ACT12 key at bottom right.', signals: ['cmd7'] },
 ]
 
-export const dailyFlightSteps: FlightStep[] = diagnosticFlightSteps.map((step) => step.label === 'Mic cap'
-  ? { ...step, instruction: 'Press the wide Mic cap once; the daily profile should report ACT10 only.', signals: ['cmd5'] }
-  : step)
+export const dailyFlightSteps: FlightStep[] = diagnosticFlightSteps
 
 export const stepsForVariant = (variant: FlightVariant) => variant === 'diagnostic' ? diagnosticFlightSteps : dailyFlightSteps
 

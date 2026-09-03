@@ -28,6 +28,7 @@ export interface ExecutionResult {
   output?: string
   needsConfirmation?: boolean
   token?: string
+  stagedIntent?: { actionId: string; intent: 'voice_capture' | 'focus_attention' }
 }
 
 export interface PhysicalSignalEnvelope {
@@ -262,8 +263,7 @@ export interface PhysicalControl {
   kind: 'agent' | 'action' | 'dial' | 'joystick'
   row: number
   column: number
-  span?: number
-  pairedWith?: ControlId
+  cap?: 'black_opaque' | 'transparent'
 }
 
 const action = (
@@ -285,7 +285,7 @@ const action = (
 const actionEntries = [
   action('native_agent', 'Native agent slot', 'Agent slot', 'A live Codex thread slot with hardware RGB feedback.', 'Codex focuses the assigned thread. The app does not intercept or imitate the native HID event.', 'safe', 'sparkles', 'native', true),
   action('native_action', 'Native Codex action', 'Codex action', 'A command owned by Codex and configured in Codex Micro settings.', 'Codex runs the action configured for this physical key.', 'safe', 'command', 'native', true),
-  action('mic_setup', 'Voice prompt key', 'Voice prompt', 'The factory Mic cap spans two switches but should produce one daily action.', 'Configure push-to-talk on ACT10 and set ACT11 to None in the daily Work Louder Input layer. A separate paired mapping is only for the log-only diagnostic.', 'safe', 'mic', 'native', true),
+  action('mic_setup', 'Native voice key', 'Voice', 'A native Codex voice control configured on one physical bottom-row switch.', 'Choose the intended key in Codex settings, then verify ACT10 and ACT11 independently. This app never assumes they share an action.', 'safe', 'mic', 'native', true),
   ...Array.from({ length: 6 }, (_, index) => action(
     `focus_agent_${index + 1}`,
     `Open agent surface ${index + 1}`,
@@ -307,6 +307,13 @@ const actionEntries = [
   action('resume_claude', 'Resume Claude Code', 'Resume', 'Continue the latest Claude Code session in this directory.', 'Opens Terminal and asks Claude Code to continue the most recent local conversation.', 'confirm', 'refresh'),
   action('claude_agents', 'Open Claude agent monitor', 'Agents', 'Open Claude Code’s background-agent view.', 'Opens a read/control view in Terminal; it does not dispatch a new agent.', 'confirm', 'bot'),
   action('copy_review_brief', 'Copy independent review brief', 'Review brief', 'Prepare a fresh-agent code review prompt with security and edge-case checks.', 'Copies the brief only. No changes or review requests are sent.', 'safe', 'shield'),
+  action('copy_amplify_skill', 'Amplify the work', 'Amplify', 'Copy the reusable Ashlr delivery skill that expands investigation and parallel coverage.', 'Copies `$ashlr-delivery Amplify` only. Nothing is pasted, submitted, pushed, or deployed.', 'safe', 'sparkles'),
+  action('copy_verify_skill', 'Verify the whole story', 'Verify', 'Copy the reusable Ashlr delivery skill for evidence-backed end-to-end verification.', 'Copies `$ashlr-delivery Verify` only. Nothing is pasted or submitted.', 'safe', 'shield'),
+  action('copy_polish_skill', 'Polish to release quality', 'Polish', 'Copy the reusable Ashlr delivery skill for quality, accessibility, security, and documentation passes.', 'Copies `$ashlr-delivery Polish` only. Nothing is pasted, committed, or published.', 'safe', 'sparkles'),
+  action('copy_advance_skill', 'Advance the next gate', 'Advance', 'Copy the reusable Ashlr delivery skill that selects the safest highest-value incomplete step.', 'Copies `$ashlr-delivery Advance` only. Existing authorization gates remain intact.', 'safe', 'activity'),
+  action('stage_voice', 'Voice capture', 'Voice', 'Stage a voice-capture intent for a trusted provider surface.', 'No microphone permission is changed and no prompt is submitted. Provider-specific capture remains an explicit user action.', 'safe', 'mic'),
+  action('copy_guarded_continue', 'Guarded Continue', 'Continue', 'Copy a bounded continuation prompt that preserves release and authority gates.', 'Copies text only. It never sends Enter or writes into a terminal or agent composer.', 'safe', 'command'),
+  action('stage_attention', 'Open highest-priority agent', 'Attention', 'Resolve error, needs-input, working, unread, then idle across the six current slots.', 'Uses the current bounded snapshot to foreground the provider app. It does not guess a task, send a prompt, or approve anything.', 'safe', 'activity'),
   action('fleet_status', 'Inspect fleet status', 'Fleet status', 'Read the current Ashlr fleet snapshot.', 'Runs `ashlr fleet status --json` read-only and shows the evidence here.', 'safe', 'fleet'),
   action('fleet_direction', 'Inspect fleet direction', 'Direction', 'Read the current autonomous direction report.', 'Runs `ashlr fleet direction --json` read-only.', 'safe', 'fleet'),
   action('fleet_doctor', 'Run fleet preflight', 'Doctor', 'Check engine readiness and blocked control surfaces.', 'Runs the read-only Ashlr fleet doctor and returns its evidence.', 'safe', 'shield'),
@@ -353,10 +360,10 @@ export const hardware = {
     { id: 'touchProfile', label: 'Layer and connection selector', row: 4, column: 1, bindable: false, leds: 3 },
   ],
   controls: [
-    { id: 'joyUp', hardwareId: 'JOY_UP', kind: 'joystick', row: 1, column: 1 },
+    { id: 'dialPress', hardwareId: 'ENC_CLK', kind: 'dial', row: 1, column: 1 },
     { id: 'agent1', hardwareId: 'AG00', kind: 'agent', row: 1, column: 2 },
     { id: 'agent2', hardwareId: 'AG01', kind: 'agent', row: 1, column: 3 },
-    { id: 'dialPress', hardwareId: 'ENC_CLK', kind: 'dial', row: 1, column: 4 },
+    { id: 'joyUp', hardwareId: 'JOY_UP', kind: 'joystick', row: 1, column: 4 },
     { id: 'agent3', hardwareId: 'AG02', kind: 'agent', row: 2, column: 1 },
     { id: 'agent4', hardwareId: 'AG03', kind: 'agent', row: 2, column: 2 },
     { id: 'agent5', hardwareId: 'AG04', kind: 'agent', row: 2, column: 3 },
@@ -365,8 +372,9 @@ export const hardware = {
     { id: 'cmd2', hardwareId: 'ACT07', kind: 'action', row: 3, column: 2 },
     { id: 'cmd3', hardwareId: 'ACT08', kind: 'action', row: 3, column: 3 },
     { id: 'cmd4', hardwareId: 'ACT09', kind: 'action', row: 3, column: 4 },
-    { id: 'cmd5', hardwareId: 'ACT10 + ACT11', kind: 'action', row: 4, column: 2, span: 2, pairedWith: 'cmd6' },
-    { id: 'cmd7', hardwareId: 'ACT12', kind: 'action', row: 4, column: 4 },
+    { id: 'cmd5', hardwareId: 'ACT10', kind: 'action', row: 4, column: 2, cap: 'black_opaque' },
+    { id: 'cmd6', hardwareId: 'ACT11', kind: 'action', row: 4, column: 3, cap: 'black_opaque' },
+    { id: 'cmd7', hardwareId: 'ACT12', kind: 'action', row: 4, column: 4, cap: 'transparent' },
   ] satisfies PhysicalControl[],
 } as const
 
@@ -380,30 +388,35 @@ const liveAgents = {
   agent4: 'focus_agent_4', agent5: 'focus_agent_5', agent6: 'focus_agent_6',
 }
 
+const workflowKeys = {
+  cmd1: 'copy_amplify_skill', cmd2: 'copy_verify_skill', cmd3: 'copy_polish_skill', cmd4: 'copy_advance_skill',
+  cmd5: 'stage_voice', cmd6: 'copy_guarded_continue', cmd7: 'stage_attention',
+}
+
 const profileMap: Record<ProfileId, Profile> = {
   codex: { id: 'codex', name: 'Attention', shortLabel: 'CODEX + CLAUDE', color: '#4e70ff', description: 'One stable six-slot runway for live Codex and Claude Code work, regardless of the active lens.', mapping: map({
     ...liveAgents,
-    cmd1: 'open_codex', cmd2: 'open_claude', cmd3: 'copy_plan_brief', cmd4: 'copy_review_brief', cmd5: 'mic_setup', cmd6: 'mic_setup', cmd7: 'ashlr_tui',
+    ...workflowKeys,
     joyUp: 'fleet_status', joyDown: 'copy_test_brief',
   }) },
   claude: { id: 'claude', name: 'Pair', shortLabel: 'CLAUDE + CODEX', color: '#d97857', description: 'Provider launch, resumption, agent visibility, and reusable guarded briefs.', mapping: map({
     ...liveAgents,
-    cmd1: 'git_status', cmd2: 'git_diff', cmd3: 'copy_test_brief', cmd4: 'run_tests', cmd5: 'mic_setup', cmd6: 'mic_setup', cmd7: 'ashlr_tui',
+    ...workflowKeys,
     joyUp: 'copy_plan_brief', joyDown: 'copy_test_brief',
   }) },
   fleet: { id: 'fleet', name: 'Fleet', shortLabel: 'ORCHESTRATE', color: '#7b5cff', description: 'Exception-first oversight for local proposal fleets and human review.', mapping: map({
     ...liveAgents,
-    cmd1: 'git_status', cmd2: 'git_diff', cmd3: 'copy_plan_brief', cmd4: 'copy_review_brief', cmd5: 'mic_setup', cmd6: 'mic_setup', cmd7: 'pause_fleet',
+    ...workflowKeys,
     joyUp: 'fleet_direction', joyDown: 'fleet_status',
   }) },
   ship: { id: 'ship', name: 'Proof', shortLabel: 'VERIFY CHANGE', color: '#24a77a', description: 'Evidence before release: inspect, test, and review without binding publication.', mapping: map({
     ...liveAgents,
-    cmd1: 'tool_health', cmd2: 'fleet_doctor', cmd3: 'open_codex', cmd4: 'start_codex', cmd5: 'mic_setup', cmd6: 'mic_setup', cmd7: 'copy_test_brief',
+    ...workflowKeys,
     joyUp: 'git_log', joyDown: 'git_status',
   }) },
   emergency: { id: 'emergency', name: 'Recovery', shortLabel: 'GUARDED STOPS', color: '#ef4d6f', description: 'Deliberate stops, diagnostics, and recovery controls—isolated from daily actions.', mapping: map({
     ...liveAgents,
-    cmd1: 'pause_fleet', cmd2: 'daemon_stop', cmd3: 'fleet_status', cmd4: 'fleet_doctor', cmd5: 'mic_setup', cmd6: 'mic_setup', cmd7: 'tool_health',
+    cmd1: 'pause_fleet', cmd2: 'daemon_stop', cmd3: 'fleet_status', cmd4: 'fleet_doctor', cmd5: 'stage_voice', cmd6: 'copy_guarded_continue', cmd7: 'stage_attention',
     joyUp: 'fleet_doctor', joyDown: 'pause_fleet',
   }) },
 }

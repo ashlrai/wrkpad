@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "schema": "dev.wrkpad.layout/v1",
   "id": "creator-micro-2-black-opaque",
-  "name": "Creator Micro 2 — black opaque",
+  "name": "Creator Micro 2 — black opaque with transparent ACT12",
   "hardware": {
     "mechanical_switches": 13,
     "touch_controls": 1,
@@ -17,7 +17,7 @@
     {"vid": "574C", "pid": "E6E3", "classification": "legacy_micro_v1", "evidence": "official_qmk", "writes": false}
   ],
   "matrix": [
-    ["JOYSTICK", "AG00", "AG01", "ENCODER"],
+    ["ENCODER", "AG00", "AG01", "JOYSTICK"],
     ["AG02", "AG03", "AG04", "AG05"],
     ["ACT06", "ACT07", "ACT08", "ACT09"],
     ["TOUCH", "ACT10", "ACT11", "ACT12"]
@@ -33,19 +33,17 @@
     {"id": "ACT07", "kind": "switch", "private_keycode": "KV_OAI_ACT07", "cap": "black_opaque"},
     {"id": "ACT08", "kind": "switch", "private_keycode": "KV_OAI_ACT08", "cap": "black_opaque"},
     {"id": "ACT09", "kind": "switch", "private_keycode": "KV_OAI_ACT09", "cap": "black_opaque"},
-    {"id": "ACT10", "kind": "switch", "private_keycode": "KV_OAI_ACT10", "cap": "wide_mic_left"},
-    {"id": "ACT11", "kind": "switch", "private_keycode": "KV_OAI_ACT11", "cap": "wide_mic_right"},
-    {"id": "ACT12", "kind": "switch", "private_keycode": "KV_OAI_ACT12", "cap": "black_opaque"},
+    {"id": "ACT10", "kind": "switch", "private_keycode": "KV_OAI_ACT10", "cap": "black_opaque"},
+    {"id": "ACT11", "kind": "switch", "private_keycode": "KV_OAI_ACT11", "cap": "black_opaque"},
+    {"id": "ACT12", "kind": "switch", "private_keycode": "KV_OAI_ACT12", "cap": "transparent"},
     {"id": "ENCODER", "kind": "rotary_encoder", "signals": ["counter_clockwise", "clockwise", "press"], "input_serialization_order": ["clockwise", "counter_clockwise", "press"]},
     {"id": "JOYSTICK", "kind": "planar_joystick", "signals": ["up", "right", "down", "left"]},
     {"id": "TOUCH", "kind": "firmware_owned_touch_selector", "status_leds": 3}
   ],
-  "relationships": [
-    {"type": "shared_cap", "visible_control": "MIC", "physical_switches": ["ACT10", "ACT11"], "daily_policy": "ACT10 active; ACT11 disabled"}
-  ],
+  "relationships": [],
   "appearance": {
     "profile": "black-opaque",
-    "optional_cap_variants": ["frosted_hero"],
+    "optional_cap_variants": ["all_black", "frosted_hero"],
     "calibration_status": "proposed_not_physically_accepted",
     "ambient": "#080A12",
     "states": {

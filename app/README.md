@@ -12,8 +12,10 @@ Ashlr Agent Board gives opaque black keycaps a complete on-screen legend, keeps 
 The Creator Micro 2 has six Agent keys but black keycaps cannot communicate state by themselves. Agent Board mirrors their exact `2 + 4` geometry:
 
 ```text
-STICK | AG00 | AG01 | DIAL
-      AG02 | AG03 | AG04 | AG05
+DIAL  | AG00  | AG01  | STICK
+AG02  | AG03  | AG04  | AG05
+ACT06 | ACT07 | ACT08 | ACT09
+TOUCH | ACT10 | ACT11 | ACT12 (transparent)
 ```
 
 Every slot combines provider, task title, icon, text state, and color. The experience therefore works without replacement keycaps and remains understandable without color alone.
@@ -34,6 +36,12 @@ Every slot combines provider, task title, icon, text state, and color. The exper
 - Summarizes `ashlr fleet status --json` into an exception-first operator brief.
 - Maps 20 desktop shortcuts to the board's dial, joystick, Agent keys, and action switches only while the Ashlr Layer route is declared. Codex Native and unknown routes unregister every shortcut.
 - Provides Attention, Pair, Fleet, Proof, and Recovery software lenses while keeping Agent keys fixed.
+- Provides a movable, hardware-optional Compact Deck with privacy-first titles,
+  window-scoped numpad bindings, and the exact physical four-row geometry.
+- Keeps ACT06–ACT09 stable as Amplify, Verify, Polish, and Advance across the
+  four daily lenses; ACT10 stages Voice, ACT11 copies guarded Continue, and
+  transparent ACT12 resolves Attention. Recovery deliberately replaces only
+  ACT06–ACT09 with guarded fleet controls.
 - Separates immediate, confirm, and press-and-hold actions in the Electron main process.
 - Runs an interlocked Ashlr Layer Flight Check and exports a hashed local receipt.
 - Presents separate Codex Native and Ashlr Layer setup flight plans, with a
@@ -49,7 +57,9 @@ See [controls and state](docs/controls.md) for the complete map and [architectur
 
 ## Requirements
 
-- macOS and a Work Louder Creator Micro 2
+- macOS. The Compact Deck and on-screen mission control work without hardware.
+- A Work Louder Creator Micro 2 is required only for physical shortcuts, Flight
+  Check, and Codex Native qualification.
 - Node.js 22 or newer and npm for development
 - **Codex Native:** ChatGPT Desktop is required for the native board route.
 - **Ashlr Layer, profile repair, or firmware qualification:** [Work Louder Input](https://worklouder.cc/input/) is required for board profiles and shortcut mapping.

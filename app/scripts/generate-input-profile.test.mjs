@@ -18,10 +18,13 @@ test('generates the safe daily profile with Work Louder encoder ordering', () =>
   assert.deepEqual(profile.profile.layers[0].layout.encoders, [[{ keycode: 'KA_18' }, { keycode: 'KA_17' }, { keycode: 'KA_19' }]])
   assert.equal(profile.actions[17].name, 'Ashlr dialLeft')
   assert.equal(profile.actions[18].name, 'Ashlr dialRight')
-  assert.equal(profile.profile.layers[0].layout.base[3][1].keycode, 'KC_NONE')
+  assert.equal(profile.actions[10].name, 'Ashlr cmd5')
+  assert.equal(profile.actions[11].name, 'Ashlr cmd6')
+  assert.equal(profile.profile.layers[0].layout.base[3][0].keycode, 'KA_10')
+  assert.equal(profile.profile.layers[0].layout.base[3][1].keycode, 'KA_11')
 })
 
-test('diagnostic profile exposes the second Mic switch without changing encoder order', () => {
+test('diagnostic profile preserves both bottom keys without changing encoder order', () => {
   const profile = generateInputProfile(source(), 'diagnostic')
   assert.equal(profile.profile.layers[0].layout.base[3][1].keycode, 'KA_11')
   assert.deepEqual(profile.profile.layers[0].layout.encoders.map((row) => row.map((item) => item.keycode)), [['KA_18', 'KA_17', 'KA_19']])

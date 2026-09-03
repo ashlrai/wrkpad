@@ -13,11 +13,13 @@ test('finds the transitive static relative require closure', () => {
   fs.mkdirSync(path.join(root, 'electron'))
   fs.writeFileSync(path.join(root, 'electron', 'main.cjs'), "require('./first.cjs')\nrequire('electron')\n")
   fs.writeFileSync(path.join(root, 'electron', 'preload.cjs'), '')
+  fs.writeFileSync(path.join(root, 'electron', 'compact-preload.cjs'), '')
   fs.writeFileSync(path.join(root, 'electron', 'input-installation-worker-entry.cjs'), '')
   fs.writeFileSync(path.join(root, 'electron', 'first.cjs'), "require('./second.cjs')\n")
   fs.writeFileSync(path.join(root, 'electron', 'second.cjs'), '')
 
   assert.deepEqual(collectRequireClosure(root), [
+    'electron/compact-preload.cjs',
     'electron/first.cjs',
     'electron/input-installation-worker-entry.cjs',
     'electron/main.cjs',

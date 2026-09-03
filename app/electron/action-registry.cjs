@@ -8,7 +8,22 @@ const BRIEFS = {
   copy_plan_brief: 'Investigate the current state first. Surface assumptions, risks, and unknowns. Propose a detailed plan with explicit acceptance criteria, safety boundaries, and rollback. Do not implement or perform consequential actions until the architecture is confirmed.',
   copy_test_brief: 'Verify this work end to end. Run the relevant tests, inspect failure and recovery paths, and report exact evidence. Keep source completion separate from deployment, provider activation, and customer acceptance. Do not push, merge, deploy, publish, or approve permissions.',
   copy_review_brief: 'Review this change independently for correctness, security, edge cases, maintainability, regression risk, and completeness. Lead with actionable findings and exact file locations. Do not modify files or perform release actions.',
+  copy_amplify_skill: '$ashlr-delivery Amplify',
+  copy_verify_skill: '$ashlr-delivery Verify',
+  copy_polish_skill: '$ashlr-delivery Polish',
+  copy_advance_skill: '$ashlr-delivery Advance',
+  copy_guarded_continue: 'Continue from the current state. Re-check the working tree, prior evidence, and unresolved acceptance criteria, then complete the safest highest-value in-scope next step. Preserve existing authority gates: do not submit terminal input, approve permissions, push, merge, deploy, publish, release, or perform another consequential action without explicit authorization. Report exact validation evidence and remaining manual gates.',
 }
+
+const WORKFLOW_ACTION_IDS = Object.freeze([
+  'copy_amplify_skill',
+  'copy_verify_skill',
+  'copy_polish_skill',
+  'copy_advance_skill',
+  'stage_voice',
+  'copy_guarded_continue',
+  'stage_attention',
+])
 
 const ACTION_SPECS = {
   open_codex: { safety: 'safe', kind: 'openCodex' },
@@ -16,6 +31,25 @@ const ACTION_SPECS = {
   copy_plan_brief: { safety: 'safe', kind: 'copy', text: BRIEFS.copy_plan_brief },
   copy_test_brief: { safety: 'safe', kind: 'copy', text: BRIEFS.copy_test_brief },
   copy_review_brief: { safety: 'safe', kind: 'copy', text: BRIEFS.copy_review_brief },
+  copy_amplify_skill: { safety: 'safe', kind: 'copy', text: BRIEFS.copy_amplify_skill, title: 'Amplify copied' },
+  copy_verify_skill: { safety: 'safe', kind: 'copy', text: BRIEFS.copy_verify_skill, title: 'Verify copied' },
+  copy_polish_skill: { safety: 'safe', kind: 'copy', text: BRIEFS.copy_polish_skill, title: 'Polish copied' },
+  copy_advance_skill: { safety: 'safe', kind: 'copy', text: BRIEFS.copy_advance_skill, title: 'Advance copied' },
+  stage_voice: {
+    safety: 'safe',
+    kind: 'stage',
+    intent: 'voice_capture',
+    title: 'Voice requested',
+    message: 'Voice capture is staged for the trusted UI. No microphone permission was changed and no prompt was submitted.',
+  },
+  copy_guarded_continue: { safety: 'safe', kind: 'copy', text: BRIEFS.copy_guarded_continue, title: 'Continue prompt copied' },
+  stage_attention: {
+    safety: 'safe',
+    kind: 'stage',
+    intent: 'focus_attention',
+    title: 'Attention requested',
+    message: 'Attention focus is staged for the trusted UI to resolve from its current bounded snapshot. No task was guessed and no prompt was submitted.',
+  },
   fleet_status: { safety: 'safe', kind: 'inspect', executable: 'ashlr', args: ['fleet', 'status', '--json'] },
   fleet_direction: { safety: 'safe', kind: 'inspect', executable: 'ashlr', args: ['fleet', 'direction', '--json'] },
   fleet_doctor: { safety: 'safe', kind: 'inspect', executable: 'ashlr', args: ['fleet', 'doctor', '--json'] },
@@ -71,7 +105,16 @@ async function executeSpec(id, workspace, electron) {
   const spec = ACTION_SPECS[id]
   const home = electron.home
   if (!spec) return outcome(false, 'Action unavailable', 'The requested action is not in the allowlisted desktop registry.')
-  if (spec.kind === 'copy') { electron.clipboard.writeText(spec.text); return outcome(true, 'Brief copied', 'The guarded prompt is ready on your clipboard.') }
+  if (spec.kind === 'copy') {
+    electron.clipboard.writeText(spec.text)
+    return outcome(true, spec.title || 'Brief copied', 'The guarded prompt is ready on your clipboard. Nothing was pasted or submitted.')
+  }
+  if (spec.kind === 'stage') {
+    return {
+      ...outcome(true, spec.title, spec.message),
+      stagedIntent: { actionId: id, intent: spec.intent },
+    }
+  }
   if (spec.kind === 'openApp') {
     const result = await runProcess('/usr/bin/open', ['-a', spec.app])
     return result.ok ? outcome(true, `${spec.app} opened`, 'No message or task was submitted.') : outcome(false, `Could not open ${spec.app}`, result.error)
@@ -124,4 +167,4 @@ function outcome(ok, title, message, output) {
   return { ok, title, message, output: output || undefined, timestamp: new Date().toISOString() }
 }
 
-module.exports = { ACTION_SPECS, BRIEFS, executeSpec, shellQuote, testCommand }
+module.exports = { ACTION_SPECS, BRIEFS, WORKFLOW_ACTION_IDS, executeSpec, shellQuote, testCommand }

@@ -12,6 +12,8 @@ test('native acceptance handlers stay behind trusted renderer IPC', () => {
     'board:prepareNativeAcceptance',
     'board:acceptNativeAcceptance',
     'board:clearNativeAcceptance',
+    'board:getNativeControlCheck',
+    'board:saveNativeControlCheck',
   ]) {
     assert.match(mainSource, new RegExp(`ipcMain\\.handle\\('${channel}', trustedIpc\\(`))
     assert.match(preloadSource, new RegExp(`ipcRenderer\\.invoke\\('${channel}'`))

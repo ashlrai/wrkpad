@@ -76,7 +76,7 @@ export default function AttentionDeck({ agents, selectedSlot, source, onSelect, 
       <span className={`source-receipt ${source}`}>{source === 'observer_online' ? 'OBSERVER ONLINE' : source === 'invalid' ? 'OBSERVER INVALID' : 'OBSERVER UNAVAILABLE'}</span>
     </div>
     <div className="slot-geometry">
-      <div className="slot-row top"><span className="slot-anchor" aria-hidden="true">STICK</span>{slots.slice(0, 2).map((agent) => <Slot key={agent.slot} agent={agent} selected={agent.slot === selectedSlot} onSelect={onSelect} onFocus={onFocus} />)}<span className="slot-anchor" aria-hidden="true">DIAL</span></div>
+      <div className="slot-row top"><span className="slot-anchor" aria-hidden="true">DIAL</span>{slots.slice(0, 2).map((agent) => <Slot key={agent.slot} agent={agent} selected={agent.slot === selectedSlot} onSelect={onSelect} onFocus={onFocus} />)}<span className="slot-anchor" aria-hidden="true">STICK</span></div>
       <div className="slot-row bottom">{slots.slice(2).map((agent) => <Slot key={agent.slot} agent={agent} selected={agent.slot === selectedSlot} onSelect={onSelect} onFocus={onFocus} />)}</div>
     </div>
     <div className="screen-legend" aria-label="Agent state legend for opaque keycaps">

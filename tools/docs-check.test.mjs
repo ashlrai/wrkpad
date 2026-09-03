@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -47,4 +47,29 @@ test('expected-unsigned workflows cannot upload or publish artifacts', (t) => {
   assert.deepEqual(validateUnsignedDistributionPolicy(root), [
     'unsafe.yml: expected-unsigned workflow must not publish or upload artifacts',
   ])
+})
+
+test('operator docs preserve the exact twenty-gesture cross-provider contract', () => {
+  const root = join(import.meta.dirname, '..')
+  const controls = readFileSync(join(root, 'app', 'docs', 'controls.md'), 'utf8')
+  const setup = readFileSync(join(root, 'app', 'docs', 'setup.md'), 'utf8')
+  const operations = readFileSync(join(root, 'docs', 'agent-operations.md'), 'utf8')
+  const publicDocs = [
+    readFileSync(join(root, 'README.md'), 'utf8'),
+    readFileSync(join(root, 'app', 'README.md'), 'utf8'),
+    controls,
+    setup,
+    operations,
+    readFileSync(join(root, 'app', 'docs', 'troubleshooting.md'), 'utf8'),
+    readFileSync(join(root, 'docs', 'creator-micro-2-post-flash-2026-09-02.md'), 'utf8'),
+  ].join('\n')
+
+  assert.match(controls, /DIAL \| AG00 \| AG01 \| PLANAR TOGGLE \/ JOYSTICK/)
+  assert.match(controls, /ACT10 \| Voice[\s\S]*ACT11 \| Guarded Continue[\s\S]*ACT12 \| Attention/)
+  assert.match(controls, /error > needs_input > working > unread > idle/)
+  assert.match(controls, /two taps within 350 ms/)
+  assert.match(controls, /Recovery \| Fleet doctor \| Pause Fleet \(hold required\)/)
+  assert.match(operations, /all 20 gestures/)
+  assert.match(setup, /16 control groups[\s\S]*not the\s+20-gesture Ashlr Layer Flight Check/)
+  assert.doesNotMatch(publicDocs, /19-gesture|all 19 daily signals|wide microphone cap/i)
 })

@@ -26,8 +26,10 @@ provider receipt, and Fleet authority remain unverified. See
 [architecture and trust boundaries](app/docs/architecture.md)._
 
 ```text
-STICK | AG00 | AG01 | DIAL
-       AG02 | AG03 | AG04 | AG05
+DIAL  | AG00  | AG01  | STICK
+AG02  | AG03  | AG04  | AG05
+ACT06 | ACT07 | ACT08 | ACT09
+TOUCH | ACT10 | ACT11 | ACT12 (transparent)
 ```
 
 The project is local-first and fail-closed. It preserves Codex and Claude's own
@@ -59,6 +61,14 @@ marks missing observers and optional CLIs as unavailable.
 - Agent Board shows provider, task title, icon, text state, and color in the exact
   black-cap geometry; selecting a slot foregrounds Codex Desktop or cmux without
   sending a prompt or terminal input.
+- The movable Compact Deck gives people without the hardware the same six-slot
+  attention runway, window-scoped numpad controls, privacy switch, and four
+  provider-neutral delivery skills. It never installs a global keyboard hook.
+- Across the four daily lenses, ACT06–ACT09 keep stable Amplify, Verify, Polish,
+  and Advance muscle memory; ACT10 stages Voice, ACT11 copies a guarded
+  Continue prompt, and transparent ACT12 opens the highest-priority observed
+  provider surface. Recovery deliberately replaces only ACT06–ACT09 with
+  guarded fleet controls.
 - On Ashlr Layer, Agent Board maps 20 shortcuts across five software lenses,
   guards consequential actions, and exports a hashed operator-guided Flight
   Check receipt. Codex Native and an unselected route keep mapped actions off.

@@ -21,7 +21,7 @@ test('main synchronizes receiver ownership before registering shortcuts', () => 
 })
 
 test('startup and route switches apply the declared route before owning shortcuts', () => {
-  assert.match(source, /app\.whenReady\(\)\.then\(\(\) => \{ createWindow\(\); synchronizeShortcutOwnership\(readSettings\(\)\.boardRoute\) \}\)/)
+  assert.match(source, /app\.whenReady\(\)\.then\(\(\) => \{[\s\S]*?createWindow\(\)[\s\S]*?synchronizeShortcutOwnership\(readSettings\(\)\.boardRoute\)[\s\S]*?\n\s*\}\)/)
   assert.match(source, /if \(boardRoute !== 'ashlr_layer'\) \{[\s\S]*shortcutState = synchronizeShortcutOwnership\(boardRoute\)[\s\S]*shortcutState\.released !== true[\s\S]*saveBoardRoute\(boardRoute\)[\s\S]*if \(boardRoute === 'ashlr_layer'\) synchronizeShortcutOwnership\(boardRoute\)/)
 })
 

@@ -42,6 +42,9 @@ test('main action IPC handlers enforce route policy and revoke passive authoriza
 test('software-only agent slot focus remains outside the configured action gate', () => {
   const source = readFileSync(path.join(__dirname, 'main.cjs'), 'utf8')
   const focus = source.match(/ipcMain\.handle\('board:focusAgentSlot'[\s\S]*?\n\}\)\)/)?.[0] ?? ''
+  const focusImplementation = source.match(/async function focusAgentSlotResult\(slot\) \{[\s\S]*?\n\}/)?.[0] ?? ''
   assert.doesNotMatch(focus, /routeAllowsConfiguredActions/)
-  assert.match(focus, /appForProvider/)
+  assert.match(focus, /focusAgentSlotResult/)
+  assert.doesNotMatch(focusImplementation, /routeAllowsConfiguredActions/)
+  assert.match(focusImplementation, /appForProvider/)
 })

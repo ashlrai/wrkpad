@@ -4,7 +4,7 @@ const { closeSync, constants, fstatSync, openSync, readFileSync, writeFileSync }
 const MAX_SOURCE_BYTES = 512 * 1024
 const shortcutActions = [
   ['agent1', 'KC_1'], ['agent2', 'KC_2'], ['agent3', 'KC_3'], ['agent4', 'KC_4'], ['agent5', 'KC_5'], ['agent6', 'KC_6'],
-  ['cmd1', 'KC_A'], ['cmd2', 'KC_B'], ['cmd3', 'KC_C'], ['cmd4', 'KC_D'], ['wideMic', 'KC_E'], ['cmd6Diagnostic', 'KC_F'], ['cmd7', 'KC_G'],
+  ['cmd1', 'KC_A'], ['cmd2', 'KC_B'], ['cmd3', 'KC_C'], ['cmd4', 'KC_D'], ['cmd5', 'KC_E'], ['cmd6', 'KC_F'], ['cmd7', 'KC_G'],
   ['joyUp', 'KC_UP'], ['joyRight', 'KC_RGHT'], ['joyDown', 'KC_DOWN'], ['joyLeft', 'KC_LEFT'],
   ['dialLeft', 'KC_Q'], ['dialRight', 'KC_W'], ['dialPress', 'KC_R'],
 ]
@@ -80,7 +80,6 @@ function generateInputProfile(source, variant = 'daily') {
   profile.actionGroups = [{ id: 0, name: 'Ashlr Agent Board', actionIds: profile.actions.map((action) => action.id) }]
 
   const action = (id) => ({ keycode: `KA_${id}` })
-  const none = () => ({ keycode: 'KC_NONE' })
   const layer = {
     id: 0,
     name: variant === 'daily' ? 'Ashlr Daily' : 'Ashlr Diagnostic',
@@ -93,7 +92,7 @@ function generateInputProfile(source, variant = 'daily') {
     [action(0), action(1)],
     [action(2), action(3), action(4), action(5)],
     [action(6), action(7), action(8), action(9)],
-    [action(10), variant === 'diagnostic' ? action(11) : none(), action(12)],
+    [action(10), action(11), action(12)],
   ]
   // Work Louder Input serializes encoder positions clockwise, counterclockwise,
   // press. The user-facing action list is left, right, press, so the first two
@@ -135,8 +134,8 @@ function writeGeneratedProfile(sourcePath, outputPath, variant = 'daily') {
     variant,
     sha256: createHash('sha256').update(output).digest('hex'),
     actions: shortcutActions.length,
-    physicalGestures: 19,
-    emittedSignals: variant === 'daily' ? 19 : 20,
+    physicalGestures: 20,
+    emittedSignals: 20,
   }
 }
 

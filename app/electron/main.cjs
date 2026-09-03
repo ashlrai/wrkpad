@@ -1,9 +1,12 @@
-const { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, shell } = require('electron')
+const { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, screen, shell } = require('electron')
 const { spawn } = require('node:child_process')
 const { createHash, randomUUID } = require('node:crypto')
-const { renameSync, writeFileSync } = require('node:fs')
+const { existsSync, lstatSync, mkdirSync, renameSync, writeFileSync } = require('node:fs')
 const path = require('node:path')
 const { ACTION_SPECS, executeSpec } = require('./action-registry.cjs')
+const { requireCompactAction, requireCompactWorkflowAction } = require('./compact-action-policy.cjs')
+const { readCompactDeckBounds, readCompactDeckSettings, validateCompactDeckSettings, writeCompactDeckSettings } = require('./compact-deck-settings.cjs')
+const { projectCompactSnapshot } = require('./compact-snapshot.cjs')
 const { detectCreatorMicro2 } = require('./creator-micro-identity.cjs')
 const { inspectCodexMicroLogs } = require('./codex-micro-diagnostics.cjs')
 const { inspectChatGptInstallationAsync } = require('./chatgpt-installation.cjs')
@@ -15,6 +18,7 @@ const { writeGeneratedProfile } = require('./input-profile-generator.cjs')
 const { buildRecoveryChecklist, observeRecoveryArtifact, readRecoveryReceipt, recoveryChecklistText, recoveryReceiptPath, removeRecoveryReceipt, writeRecoveryReceipt } = require('./recovery-receipt.cjs')
 const { acceptNativeAcceptance, evaluateNativeAcceptance, prepareNativeAcceptance, readNativeAcceptanceReceipt, removeNativeAcceptanceReceipt, stageNativeAcceptance, writeNativeAcceptanceReceipt } = require('./native-acceptance-receipt.cjs')
 const { createNativeAcceptanceOperationCoordinator } = require('./native-acceptance-operations.cjs')
+const { createNativeControlCheck, readNativeControlCheck, writeNativeControlCheck } = require('./native-control-check.cjs')
 const { holdSatisfied } = require('./approval-guard.cjs')
 const { evaluateFlightSignals } = require('./flight-receipt.cjs')
 const { createFlightSession } = require('./flight-session.cjs')
@@ -35,7 +39,7 @@ const HOTKEYS = {
   joyUp:'Control+Alt+Command+Up',joyRight:'Control+Alt+Command+Right',joyDown:'Control+Alt+Command+Down',joyLeft:'Control+Alt+Command+Left',
   dialLeft:'Control+Alt+Command+Q',dialRight:'Control+Alt+Command+W',dialPress:'Control+Alt+Command+R',
 }
-let mainWindow; let rendererUrl; let currentProfile = 'codex'; let signalSequence = 0; let shortcutRegistrations = []
+let mainWindow; let rendererUrl; let compactWindow; let compactRendererUrl; let compactSnapshotTimer; let compactBoundsTimer; let currentProfile = 'codex'; let signalSequence = 0; let shortcutRegistrations = []
 let missionCache = null; let missionCacheAt = 0; let missionInFlight = null
 const approvals = new Map()
 const flightSession = createFlightSession()
@@ -45,10 +49,28 @@ const inspectInputInstallationAsync = createInputInstallationInspector()
 const shortcutCallbackGuard = createShortcutCallbackGuard()
 
 function settingsPath() { return appSettingsPath(app.getPath('appData')) }
+function compactSettingsPath() { return path.join(path.dirname(settingsPath()), 'compact-deck.json') }
 function handoffPath() { return recoveryReceiptPath(settingsPath()) }
 function readSettings() { return readWorkspaceSettings(settingsPath(), app.getPath('home')) }
-function saveWorkspace(workspace) { saveWorkspaceSettings(settingsPath(), workspace, app.getPath('home')) }
-function saveBoardRoute(boardRoute) { saveBoardRouteSettings(settingsPath(), boardRoute, app.getPath('home')) }
+function ensureSettingsDirectory() {
+  const directory = path.dirname(settingsPath())
+  if (!existsSync(directory)) mkdirSync(directory, { mode: 0o700 })
+  const status = lstatSync(directory)
+  if (!status.isDirectory() || status.isSymbolicLink()) throw new Error('Agent Board settings directory is unsafe')
+  return directory
+}
+function saveWorkspace(workspace) { ensureSettingsDirectory(); saveWorkspaceSettings(settingsPath(), workspace, app.getPath('home')) }
+function saveBoardRoute(boardRoute) { ensureSettingsDirectory(); saveBoardRouteSettings(settingsPath(), boardRoute, app.getPath('home')) }
+
+function compactWorkArea(bounds) {
+  const display = bounds ? screen.getDisplayMatching(bounds) : screen.getPrimaryDisplay()
+  return display.workArea
+}
+
+function readCompactSettings(bounds) {
+  const targetBounds = bounds ?? readCompactDeckBounds(compactSettingsPath())
+  return readCompactDeckSettings(compactSettingsPath(), compactWorkArea(targetBounds))
+}
 
 function publicChatGptDesktopStatus(inspection) {
   if (inspection?.status === 'installed') return { status: 'metadata_observed', version: inspection.version, build: inspection.build }
@@ -120,11 +142,120 @@ function createWindow() {
   })
 }
 
+function stopCompactSnapshotFeed() {
+  if (compactSnapshotTimer) clearInterval(compactSnapshotTimer)
+  compactSnapshotTimer = null
+}
+
+async function sendCompactSnapshot() {
+  const target = compactWindow
+  if (!target || target.isDestroyed() || !target.isVisible()) return
+  const mission = await missionControl(true)
+  if (target !== compactWindow || target.isDestroyed() || !target.isVisible()) return
+  const preferences = readCompactSettings(target.getBounds())
+  const snapshot = projectCompactSnapshot(mission, { showTitles: preferences.showTitles })
+  target.webContents.send('compact:snapshot', snapshot)
+}
+
+function queueCompactSnapshot() {
+  void sendCompactSnapshot().catch(() => {})
+}
+
+function startCompactSnapshotFeed() {
+  stopCompactSnapshotFeed()
+  queueCompactSnapshot()
+  compactSnapshotTimer = setInterval(queueCompactSnapshot, 10_000)
+}
+
+function persistCompactBoundsNow() {
+  if (!compactWindow || compactWindow.isDestroyed()) return
+  try {
+    const bounds = compactWindow.getBounds()
+    const current = readCompactSettings(bounds)
+    writeCompactDeckSettings(compactSettingsPath(), { ...current, bounds }, compactWorkArea(bounds))
+  } catch {}
+}
+
+function persistCompactBounds() {
+  if (!compactWindow || compactWindow.isDestroyed()) return
+  if (compactBoundsTimer) clearTimeout(compactBoundsTimer)
+  compactBoundsTimer = setTimeout(() => {
+    compactBoundsTimer = null
+    persistCompactBoundsNow()
+  }, 250)
+}
+
+function createCompactWindow() {
+  if (compactWindow && !compactWindow.isDestroyed()) return compactWindow
+  const preferences = readCompactSettings()
+  compactRendererUrl = app.isPackaged
+    ? configuredRendererUrl(undefined, path.join(__dirname, '..', 'dist-renderer', 'compact.html'))
+    : new URL('compact.html', rendererUrl).href
+  compactWindow = new BrowserWindow({
+    ...preferences.bounds,
+    minWidth: 340,
+    minHeight: 240,
+    show: false,
+    frame: false,
+    transparent: true,
+    resizable: true,
+    alwaysOnTop: preferences.alwaysOnTop,
+    skipTaskbar: true,
+    title: 'Ashlr Compact Deck',
+    backgroundColor: '#00000000',
+    webPreferences: { preload: path.join(__dirname, 'compact-preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, partition: 'ashlr-compact-deck' },
+  })
+  compactWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  compactWindow.webContents.on('will-navigate', (event, targetUrl) => {
+    if (!trustedRendererUrl(targetUrl, compactRendererUrl)) event.preventDefault()
+  })
+  compactWindow.webContents.on('will-attach-webview', (event) => event.preventDefault())
+  compactWindow.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false))
+  compactWindow.once('ready-to-show', () => {
+    compactWindow?.show()
+    compactWindow?.focus()
+  })
+  compactWindow.on('show', startCompactSnapshotFeed)
+  compactWindow.on('hide', stopCompactSnapshotFeed)
+  compactWindow.on('move', persistCompactBounds)
+  compactWindow.on('resize', persistCompactBounds)
+  compactWindow.on('close', persistCompactBoundsNow)
+  compactWindow.on('closed', () => {
+    stopCompactSnapshotFeed()
+    if (compactBoundsTimer) clearTimeout(compactBoundsTimer)
+    compactBoundsTimer = null
+    compactWindow = null
+  })
+  const loadingWindow = compactWindow
+  void loadingWindow.loadURL(compactRendererUrl).catch(() => {
+    if (compactWindow === loadingWindow && !loadingWindow.isDestroyed()) loadingWindow.destroy()
+  })
+  return compactWindow
+}
+
+function showCompactDeck() {
+  const window = createCompactWindow()
+  if (window.webContents.isLoadingMainFrame()) return
+  if (window.isMinimized()) window.restore()
+  window.show()
+  window.focus()
+}
+
 function trustedIpc(handler) {
   return (event, ...args) => {
     const frame = event.senderFrame
     if (!mainWindow || event.sender !== mainWindow.webContents || !frame || frame !== event.sender.mainFrame || !trustedRendererUrl(frame.url, rendererUrl)) {
       throw new Error('Rejected IPC from an untrusted renderer')
+    }
+    return handler(event, ...args)
+  }
+}
+
+function trustedCompactIpc(handler) {
+  return (event, ...args) => {
+    const frame = event.senderFrame
+    if (!compactWindow || event.sender !== compactWindow.webContents || !frame || frame !== event.sender.mainFrame || !trustedRendererUrl(frame.url, compactRendererUrl)) {
+      throw new Error('Rejected IPC from an untrusted Compact Deck renderer')
     }
     return handler(event, ...args)
   }
@@ -281,6 +412,22 @@ function openFixedApp(name) {
   })
 }
 
+async function focusAgentSlotResult(slot) {
+  if (flightSession.isActive()) return { ok:false,title:'Flight Check interlock',message:'Agent focus is disabled until hardware acceptance ends.',timestamp:new Date().toISOString() }
+  if (!Number.isInteger(slot) || slot < 1 || slot > 6) return { ok:false,title:'Slot unavailable',message:'Choose one of the six agent slots.',timestamp:new Date().toISOString() }
+  const snapshot = await missionControl(true)
+  const agent = snapshot.agents.find((candidate) => candidate.slot === slot)
+  if (!agent?.provider || agent.state === 'off') return { ok:false,title:`Agent ${slot} is empty`,message:'This slot has no live provider receipt yet. Start or resume a session, then try again.',timestamp:new Date().toISOString() }
+  const appName = appForProvider(agent.provider)
+  if (!appName) return { ok:false,title:'Focus unavailable',message:'This session does not advertise a safe local focus target.',timestamp:new Date().toISOString() }
+  const opened = await openFixedApp(appName)
+  if (!opened) return { ok:false,title:`Could not open ${appName}`,message:'The provider app was not available. No fallback terminal or command was launched.',timestamp:new Date().toISOString() }
+  const message = agent.provider === 'claude'
+    ? 'cmux is foregrounded. Exact pane correlation is not available in the installed cmux build, so no terminal input was sent.'
+    : 'Codex Desktop is foregrounded. No prompt, approval, or task was submitted.'
+  return { ok:true,title:`Opened ${appName} for ${agent.title}`,message,timestamp:new Date().toISOString() }
+}
+
 ipcMain.handle('board:getStatus', trustedIpc(async () => {
   const settings = readSettings()
   const home = app.getPath('home')
@@ -334,6 +481,23 @@ ipcMain.handle('board:getNativeAcceptance', trustedIpc(() => nativeAcceptanceOpe
 ipcMain.handle('board:prepareNativeAcceptance', trustedIpc(() => nativeAcceptanceOperations.prepare()))
 ipcMain.handle('board:acceptNativeAcceptance', trustedIpc((_event, attestations) => nativeAcceptanceOperations.accept(attestations)))
 ipcMain.handle('board:clearNativeAcceptance', trustedIpc(() => nativeAcceptanceOperations.clear()))
+ipcMain.handle('board:getNativeControlCheck', trustedIpc(async () => {
+  const { currentContext } = await collectNativeAcceptanceEvidence()
+  if (!currentContext) return null
+  return readNativeControlCheck(settingsPath(), { currentContext })
+}))
+ipcMain.handle('board:saveNativeControlCheck', trustedIpc(async (_event, report) => {
+  const { currentContext } = await collectNativeAcceptanceEvidence()
+  if (!currentContext) throw new Error('Native control check requires the current passive Codex Native context')
+  const now = new Date()
+  const receipt = createNativeControlCheck({
+    context: currentContext,
+    settings: report?.settings,
+    outcomes: report?.outcomes,
+    reportedAt: now.toISOString(),
+  }, { now })
+  return writeNativeControlCheck(settingsPath(), receipt, { currentContext, now })
+}))
 ipcMain.handle('board:setBoardRoute', trustedIpc((_event, boardRoute) => {
   if (!validBoardRoute(boardRoute)) throw new TypeError('Unsupported board route declaration')
   return nativeAcceptanceOperations.mutateContext(() => {
@@ -346,20 +510,47 @@ ipcMain.handle('board:setBoardRoute', trustedIpc((_event, boardRoute) => {
     return boardRoute
   })
 }))
-ipcMain.handle('board:focusAgentSlot', trustedIpc(async (_event, slot) => {
-  if (flightSession.isActive()) return { ok:false,title:'Flight Check interlock',message:'Agent focus is disabled until hardware acceptance ends.',timestamp:new Date().toISOString() }
-  if (!Number.isInteger(slot) || slot < 1 || slot > 6) return { ok:false,title:'Slot unavailable',message:'Choose one of the six physical agent slots.',timestamp:new Date().toISOString() }
-  const snapshot = await missionControl(true)
-  const agent = snapshot.agents.find((candidate) => candidate.slot === slot)
-  if (!agent?.provider || agent.state === 'off') return { ok:false,title:`Agent ${slot} is empty`,message:'This slot has no live provider receipt yet. Start or resume a session, then try again.',timestamp:new Date().toISOString() }
-  const appName = appForProvider(agent.provider)
-  if (!appName) return { ok:false,title:'Focus unavailable',message:'This session does not advertise a safe local focus target.',timestamp:new Date().toISOString() }
-  const opened = await openFixedApp(appName)
-  if (!opened) return { ok:false,title:`Could not open ${appName}`,message:'The provider app was not available. No fallback terminal or command was launched.',timestamp:new Date().toISOString() }
-  const message = agent.provider === 'claude'
-    ? 'cmux is foregrounded. Exact pane correlation is not available in the installed cmux build, so no terminal input was sent.'
-    : 'Codex Desktop is foregrounded. No prompt, approval, or task was submitted.'
-  return { ok:true,title:`Opened ${appName} for ${agent.title}`,message,timestamp:new Date().toISOString() }
+ipcMain.handle('board:focusAgentSlot', trustedIpc((_event, slot) => focusAgentSlotResult(slot)))
+ipcMain.handle('board:showCompactDeck', trustedIpc(() => {
+  showCompactDeck()
+  return { ok: true }
+}))
+
+ipcMain.handle('compact:getSnapshot', trustedCompactIpc(async () => {
+  const mission = await missionControl(true)
+  const preferences = readCompactSettings(compactWindow?.getBounds())
+  return projectCompactSnapshot(mission, { showTitles: preferences.showTitles })
+}))
+ipcMain.handle('compact:focusAgentSlot', trustedCompactIpc((_event, slot) => focusAgentSlotResult(slot)))
+ipcMain.handle('compact:runSkillAction', trustedCompactIpc(async (_event, actionId) => {
+  requireCompactAction(actionId, ACTION_SPECS)
+  return executeSpec(actionId, readSettings().workspace, { clipboard, home: app.getPath('home') })
+}))
+ipcMain.handle('compact:runWorkflowAction', trustedCompactIpc(async (_event, actionId) => {
+  requireCompactWorkflowAction(actionId, ACTION_SPECS)
+  return executeSpec(actionId, readSettings().workspace, { clipboard, home: app.getPath('home') })
+}))
+ipcMain.handle('compact:getPreferences', trustedCompactIpc(() => readCompactSettings(compactWindow?.getBounds())))
+ipcMain.handle('compact:savePreferences', trustedCompactIpc((_event, candidate) => {
+  const bounds = compactWindow?.getBounds()
+  const workArea = compactWorkArea(bounds)
+  const previous = readCompactSettings(bounds)
+  const next = validateCompactDeckSettings({ ...candidate, bounds }, workArea)
+  try {
+    compactWindow?.setAlwaysOnTop(next.alwaysOnTop)
+    app.setLoginItemSettings({ openAtLogin: next.openAtLaunch, args: ['--compact-deck'] })
+    const saved = writeCompactDeckSettings(compactSettingsPath(), next, workArea)
+    queueCompactSnapshot()
+    return saved
+  } catch (error) {
+    try { compactWindow?.setAlwaysOnTop(previous.alwaysOnTop) } catch {}
+    try { app.setLoginItemSettings({ openAtLogin: previous.openAtLaunch, args: ['--compact-deck'] }) } catch {}
+    throw error
+  }
+}))
+ipcMain.handle('compact:hide', trustedCompactIpc(() => {
+  compactWindow?.hide()
+  return { ok: true }
 }))
 ipcMain.handle('board:setProfile', trustedIpc((_event, profile) => { if (PROFILE_IDS.has(profile)) currentProfile = profile; return currentProfile }))
 ipcMain.handle('board:setFlightCheck', trustedIpc(async (_event, active, variant) => {
@@ -576,14 +767,27 @@ const hasSingleInstanceLock = app.requestSingleInstanceLock()
 if (!hasSingleInstanceLock) {
   app.quit()
 } else {
-  app.on('second-instance', () => {
+  app.on('second-instance', (_event, commandLine) => {
+    if (commandLine.includes('--compact-deck')) { showCompactDeck(); return }
     if (!mainWindow) return
     if (mainWindow.isMinimized()) mainWindow.restore()
     mainWindow.show()
     mainWindow.focus()
   })
-  app.whenReady().then(() => { createWindow(); synchronizeShortcutOwnership(readSettings().boardRoute) })
+  app.whenReady().then(() => {
+    ensureSettingsDirectory()
+    createWindow()
+    synchronizeShortcutOwnership(readSettings().boardRoute)
+    if (process.argv.includes('--compact-deck') || readCompactSettings().openAtLaunch) showCompactDeck()
+  }).catch(() => app.quit())
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
-  app.on('will-quit', () => { flightOperations.reset(); globalShortcut.unregisterAll() })
+  app.on('will-quit', () => {
+    persistCompactBoundsNow()
+    stopCompactSnapshotFeed()
+    if (compactBoundsTimer) clearTimeout(compactBoundsTimer)
+    compactBoundsTimer = null
+    flightOperations.reset()
+    globalShortcut.unregisterAll()
+  })
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
 }

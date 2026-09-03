@@ -77,7 +77,7 @@ const NATIVE_MANUAL_CHECKS = [
   {
     id: 'native-physical-controls',
     name: 'Native physical controls',
-    detail: 'Verify the dial, joystick, agent keys, action keys, microphone control, and lighting in Codex.',
+    detail: 'Verify the dial, joystick, agent keys, action keys, separate ACT10 and ACT11 behavior, and lighting in Codex.',
   },
 ]
 const INPUT_RUNTIME_STATUSES = new Set(['unresolved_profile_layer', 'not_observed', 'log_missing', 'log_unsafe', 'log_unavailable'])

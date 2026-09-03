@@ -107,7 +107,6 @@ describe('operator interface', () => {
     expect(setFlightCheck).not.toHaveBeenCalled()
     expect(await screen.findByText('Expected board route saved')).toBeTruthy()
     expect(screen.getByText(/changed Agent Board’s local preference and runtime global-shortcut ownership/i)).toBeTruthy()
-    expect(screen.getByText('Native RPC unavailable')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /Agent 1, AG00, Codex, Native review.*open its provider app/i }))
     expect(focusAgentSlot).toHaveBeenCalledWith(1)
   })
@@ -194,7 +193,7 @@ describe('operator interface', () => {
     expect(screen.getByRole('heading', { name: 'Exercise the joystick' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Exercise all six agent keys' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Exercise all seven action keys' })).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Exercise the microphone key' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Exercise the bottom keys' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Observe lighting' })).toBeTruthy()
     expect(screen.queryByRole('heading', { name: 'Verify Work Louder Input' })).toBeNull()
     expect(screen.queryByRole('heading', { name: 'Prove one shortcut receiver' })).toBeNull()
@@ -595,21 +594,22 @@ describe('operator interface', () => {
     expect(screen.getByText(/Screen is authoritative now/i)).toBeTruthy()
   })
 
-  it('renders the physical top row as white joystick, two agent keys, then black dial', () => {
+  it('renders the physical top row as dial, two agent keys, then planar stick', () => {
     render(<App />)
     const topRow = document.querySelector('.hardware-grid')?.children
-    expect(topRow?.[0].classList.contains('joystick-module')).toBe(true)
+    expect(topRow?.[0].classList.contains('dial-module')).toBe(true)
     expect(topRow?.[1].getAttribute('aria-label')).toMatch(/^AG00:/)
     expect(topRow?.[2].getAttribute('aria-label')).toMatch(/^AG01:/)
-    expect(topRow?.[3].classList.contains('dial-module')).toBe(true)
+    expect(topRow?.[3].classList.contains('joystick-module')).toBe(true)
   })
 
-  it('selects the paired Mic cap as one logical control', () => {
+  it('renders ACT10 and ACT11 as separate bottom-row keys', () => {
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: /Pair.*CLAUDE \+ CODEX/i }))
-    fireEvent.click(screen.getByRole('button', { name: /ACT10: Voice prompt key/i }))
-    expect(screen.getByRole('heading', { name: 'Voice prompt key' })).toBeTruthy()
-    expect(screen.getByText(/ACT10 and set ACT11 to None/i)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /ACT10: Voice capture/i }))
+    expect(screen.getByRole('heading', { name: 'Voice capture' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /ACT11: Guarded Continue/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /ACT12:/i }).className).toContain('transparent')
   })
 
   it('keeps macOS permission verification visibly unresolved', () => {
@@ -715,7 +715,7 @@ describe('operator interface', () => {
     expect(screen.getByText(artifactPath)).toBeTruthy()
     expect(screen.getByText(/receipt does not prove import, activation, synchronization, permission, or physical acceptance/i)).toBeTruthy()
     expect(screen.getByText(/Choose Import Profile/)).toBeTruthy()
-    expect(heading.closest('section')).toBe(document.activeElement)
+    await waitFor(() => expect(heading.closest('section')).toBe(document.activeElement))
 
     fireEvent.click(screen.getByRole('button', { name: 'Reveal artifact in Finder' }))
     await waitFor(() => expect(revealRecoveryArtifact).toHaveBeenCalledOnce())
