@@ -91,7 +91,7 @@ export interface SystemStatus {
 }
 
 export interface ChatGPTDesktopStatus {
-  status: 'verified' | 'missing' | 'unavailable'
+  status: 'metadata_observed' | 'missing' | 'unavailable'
   version: string | null
   build: string | null
 }

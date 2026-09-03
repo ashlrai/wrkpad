@@ -67,9 +67,10 @@ marks missing observers and optional CLIs as unavailable.
   from a fresh, inferred initialization sequence while keeping the manual
   Settings connection and physical acceptance separate from the shortcut route.
 - A restart-safe Codex Native handoff binds that inferred sequence to the
-  current board VID:PID and ChatGPT Desktop build, then requires seven explicit
+  observed board VID:PID class and fixed-path ChatGPT Desktop metadata, then requires seven explicit
   operator observations. It stores no prompt, title, session ID, raw log,
-  diagnostic detail, or local path and remains an attestation, not device proof.
+  diagnostic detail, or local path and remains an attestation, not unique-device
+  identity, running-process provenance, or restart proof.
 - Privacy-bounded Input cache/runtime diagnostics report the cache-current
   profile, a uniquely observable single layer, encoder order, and exact
   unresolved-index reason codes without exposing raw logs or claiming current

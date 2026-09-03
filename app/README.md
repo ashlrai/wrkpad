@@ -37,8 +37,9 @@ Every slot combines provider, task title, icon, text state, and color. The exper
 - Separates immediate, confirm, and press-and-hold actions in the Electron main process.
 - Runs an interlocked Flight Check for all physical routes and exports a hashed local receipt.
 - Presents separate Codex Native and Ashlr Layer setup flight plans, with a
-  private restart-safe native handoff that rejects stale device/Desktop context
-  and records only explicit operator observations.
+  private restart-safe native handoff that rejects stale VID:PID/Desktop-metadata
+  context and records only explicit operator observations. Restart-safe means
+  the handoff survives quitting Agent Board; it does not prove a new Codex process.
 - Keeps session IDs, provider working directories, prompts, transcripts, tool arguments, and raw Fleet payloads out of mission snapshots. Workspace Pulse separately shows the working directory the user selected.
 
 See [controls and state](docs/controls.md) for the complete map and [architecture and trust](docs/architecture.md) for the security model.

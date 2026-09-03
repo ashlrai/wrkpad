@@ -18,16 +18,19 @@ test('native acceptance handlers stay behind trusted renderer IPC', () => {
   }
 })
 
-test('native preparation requires declared route, USB identity, and verified Desktop metadata', () => {
+test('native preparation requires declared route, USB identity, and bounded Desktop metadata', () => {
   assert.match(mainSource, /settings\.boardRoute === 'codex_native' && board && chatgpt\.status === 'installed'/)
   assert.match(mainSource, /device: \{ vidPid: board\.vidPid \}/)
   assert.match(mainSource, /codex: \{ version: chatgpt\.version, build: chatgpt\.build \}/)
 })
 
 test('native acceptance is re-evaluated from current evidence before persistence', () => {
-  assert.match(mainSource, /const evidence = await collectNativeAcceptanceEvidence\(\)/)
-  assert.match(mainSource, /acceptNativeAcceptance\(prepared, \{[\s\S]*currentContext: evidence\.currentContext,[\s\S]*nativeInitialization: evidence\.nativeInitialization/)
-  assert.match(mainSource, /writeNativeAcceptanceReceipt\(settingsPath\(\), receipt\)/)
+  assert.match(mainSource, /createNativeAcceptanceOperationCoordinator\(\{[\s\S]*collectEvidence: collectNativeAcceptanceEvidence,[\s\S]*readReceipt: \(\) => readNativeAcceptanceReceipt\(settingsPath\(\)\),[\s\S]*writeReceipt: \(receipt\) => writeNativeAcceptanceReceipt\(settingsPath\(\), receipt\)/)
+  assert.match(mainSource, /nativeAcceptanceOperations\.accept\(attestations\)/)
+})
+
+test('board route mutations share the native acceptance operation queue', () => {
+  assert.match(mainSource, /board:setBoardRoute[\s\S]*nativeAcceptanceOperations\.mutateContext\(\(\) => \{[\s\S]*saveBoardRoute\(boardRoute\)/)
 })
 
 test('native evidence projection excludes diagnostic detail and local paths', () => {

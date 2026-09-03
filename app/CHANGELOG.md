@@ -6,6 +6,10 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 
 ### Fixed
 
+- Read Codex Desktop's current and previous UTC log folders so native evidence
+  is not lost during the local/UTC date rollover.
+- Keep ChatGPT metadata inspection off Electron's main thread and bound both
+  fixed-path reads to one aggregate timeout.
 - Recognize Work Louder's official lowercase `input.app` installation name
   without weakening fixed-path, canonical-path, or bundle-integrity checks.
 
@@ -15,11 +19,12 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
   evidence separate from Work Louder Input, Input Monitoring, and the Ashlr
   shortcut receiver path.
 - A private restart-safe Codex Native handoff with an evidence ladder, strict
-  device/Desktop context binding, fresh ordered initialization checks, and
+  VID:PID/fixed-path Desktop-metadata context binding, fresh ordered
+  initialization checks, and
   seven explicit operator observations. The receipt contains no prompts,
   titles, session IDs, raw logs, diagnostic details, or local paths.
 - A fixed-path, mutation-aware ChatGPT Desktop metadata probe that exposes only
-  sanitized version/build readiness.
+  sanitized version/build observation without claiming signing or process identity.
 
 - Route-aware doctor metadata for agents, including a stable schema, timestamp,
   declared route, read-only marker, and separate prerequisite, native, and
@@ -104,6 +109,9 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 
 ### Security
 
+- Serialize native handoff reads, writes, clears, and route mutations; re-read
+  the receipt and recollect current evidence before persistence, then return a
+  fresh post-write projection so superseded acceptance cannot revive.
 - Bind Input metadata, publisher, signature, and Gatekeeper probes to one
   canonical unchanged bundle fingerprint; reject direct or ancestor symlinks
   and reconfirm publisher identity after strict verification.

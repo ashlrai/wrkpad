@@ -119,7 +119,7 @@ describe('operator interface', () => {
     render(<App />)
     expect(await screen.findByText('Codex Native observer only.')).toBeTruthy()
     const nativeRibbon = document.querySelector('.readiness-ribbon')
-    expect(nativeRibbon?.textContent).toContain('ChatGPT Desktop verification unavailable')
+    expect(nativeRibbon?.textContent).toContain('ChatGPT Desktop metadata unavailable')
     expect(nativeRibbon?.textContent).toContain('Native initialization unverified')
     expect(nativeRibbon?.textContent).toContain('Open native acceptance handoff')
     expect(nativeRibbon?.textContent).not.toContain('Input Monitoring')
@@ -129,8 +129,8 @@ describe('operator interface', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
     expect(screen.queryByRole('button', { name: /Run Ashlr Flight Check/i })).toBeNull()
     const nativeGate = screen.getByText(/Operator acceptance handoff/i).closest('.native-manual-gate')
-    expect(nativeGate?.textContent).toContain('quit Work Louder Input and Agent Board')
-    expect(nativeGate?.textContent).toContain('open ChatGPT Desktop alone')
+    expect(nativeGate?.textContent).toContain('Command-Q ChatGPT Desktop, Work Louder Input, and Agent Board')
+    expect(nativeGate?.textContent).toContain('reopen ChatGPT Desktop alone')
     fireEvent.click(screen.getByRole('tab', { name: 'Flight Check' }))
     expect(screen.getByRole('heading', { name: 'Flight Check belongs to Ashlr Layer.' })).toBeTruthy()
     expect(screen.getByText(/Quit Work Louder Input and quit this Agent Board app/i)).toBeTruthy()
@@ -147,7 +147,7 @@ describe('operator interface', () => {
         receiverIdentity: { appVersion: 'private-receiver-version', packaged: false, appAsarSha256: 'd'.repeat(64) },
         inputProfile: { cacheStatus: 'unsafe', activeProfile: 'private-profile', activeLayer: 'private-layer', encoderDirection: 'reversed' },
         codex: true, claude: true, ashlr: true, boardRoute: 'codex_native',
-        chatgptDesktop: { status: 'verified', version: '1.2026.238', build: '1822' },
+        chatgptDesktop: { status: 'metadata_observed', version: '1.2026.238', build: '1822' },
         nativeCodexMicro: { status: 'connected', observedAt: '2026-09-02T20:01:00.000Z', detail: 'bounded', fresh: true },
         workspace: '/Users/private/company', shortcutCount: 0, shortcutRegistrations: [], workspaceSnapshot: null,
       }),
@@ -160,10 +160,13 @@ describe('operator interface', () => {
 
     render(<App />)
     expect(await screen.findByText('Native initialization observed')).toBeTruthy()
+    const inferredRibbon = screen.getByText('Native initialization inferred')
+    expect(inferredRibbon.className).toContain('observed')
+    expect(inferredRibbon.className).not.toContain('ready')
     fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
 
-    expect(screen.getByRole('heading', { name: 'Verify ChatGPT Desktop' })).toBeTruthy()
-    expect(screen.getByText('ChatGPT Desktop 1.2026.238 · build 1822 verified')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Observe ChatGPT Desktop metadata' })).toBeTruthy()
+    expect(screen.getByText('ChatGPT Desktop 1.2026.238 · build 1822 metadata observed')).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Infer native initialization' })).toBeTruthy()
     expect(screen.getByText('Ordered native initialization inferred')).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Observe Creator Micro in Codex Settings' })).toBeTruthy()
@@ -195,7 +198,7 @@ describe('operator interface', () => {
       getStatus: vi.fn().mockResolvedValue({
         boardConnected: true, inputInstalled: false, inputMonitoring: 'unverified',
         codex: true, claude: true, ashlr: true, boardRoute: 'codex_native',
-        chatgptDesktop: { status: 'verified', version: '1.2026.238', build: '1822' },
+        chatgptDesktop: { status: 'metadata_observed', version: '1.2026.238', build: '1822' },
         nativeCodexMicro: { status: 'connected', observedAt: '2026-09-02T20:01:00.000Z', detail: 'bounded', fresh: true },
         workspace: '/Users/private/company', shortcutCount: 0, shortcutRegistrations: [], workspaceSnapshot: null,
       }),
@@ -223,16 +226,17 @@ describe('operator interface', () => {
     ]
     const acceptButton = screen.getByRole('button', { name: 'Accept operator attestation' }) as HTMLButtonElement
     expect(acceptButton.disabled).toBe(true)
+    observationLabels.forEach((label) => expect((screen.getByRole('checkbox', { name: label }) as HTMLInputElement).disabled).toBe(true))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh after isolated retry' }))
+    await screen.findByText(/Native initialization observation refreshed/i)
+    expect(getNativeAcceptance).toHaveBeenCalledTimes(2)
+    expect(screen.getByText('Inferred after prepare')).toBeTruthy()
+    observationLabels.forEach((label) => expect((screen.getByRole('checkbox', { name: label }) as HTMLInputElement).disabled).toBe(false))
     observationLabels.slice(0, -1).forEach((label) => fireEvent.click(screen.getByRole('checkbox', { name: label })))
     expect(acceptButton.disabled).toBe(true)
     fireEvent.click(screen.getByRole('checkbox', { name: observationLabels.at(-1)! }))
     expect(acceptButton.disabled).toBe(false)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh after restart' }))
-    await screen.findByText(/Native initialization observation refreshed/i)
-    expect(getNativeAcceptance).toHaveBeenCalledTimes(2)
-    expect(screen.getByText('Inferred after prepare')).toBeTruthy()
-    observationLabels.forEach((label) => fireEvent.click(screen.getByRole('checkbox', { name: label })))
     fireEvent.click(screen.getByRole('button', { name: 'Accept operator attestation' }))
     await screen.findByText('Operator attestation saved for this prepared context.')
     expect(acceptNativeAcceptance).toHaveBeenCalledWith({
@@ -242,6 +246,42 @@ describe('operator interface', () => {
     expect(screen.getByText(/Operator attestation—not device proof/i)).toBeTruthy()
     expect(screen.queryByText(/Users\/private should not render/i)).toBeNull()
     expect(screen.queryByText('private backend text')).toBeNull()
+  })
+
+  it('requires a fresh preparation when a prior accepted receipt is no longer current', async () => {
+    const revoked = nativeAcceptanceSnapshot('accepted')
+    revoked.evaluation = {
+      ...revoked.evaluation,
+      status: 'pending',
+      reason: 'initialization_historical',
+    }
+    const prepareNativeAcceptance = vi.fn().mockResolvedValue({ ok: true, message: 'bounded', snapshot: nativeAcceptanceSnapshot('pending') })
+    window.agentBoard = {
+      getStatus: vi.fn().mockResolvedValue({
+        boardConnected: true, inputInstalled: false, inputMonitoring: 'unverified',
+        codex: true, claude: true, ashlr: true, boardRoute: 'codex_native',
+        chatgptDesktop: { status: 'metadata_observed', version: '1.2026.238', build: '1822' },
+        nativeCodexMicro: { status: 'not_observed', observedAt: null, detail: 'bounded', fresh: false },
+        workspace: '/tmp', shortcutCount: 0, shortcutRegistrations: [], workspaceSnapshot: null,
+      }),
+      getNativeAcceptance: vi.fn().mockResolvedValue(revoked), prepareNativeAcceptance,
+      clearNativeAcceptance: vi.fn(), getMissionControl: vi.fn().mockResolvedValue(initialUnavailableMission()),
+      setBoardRoute: vi.fn(), focusAgentSlot: vi.fn(), setProfile: vi.fn(), setFlightCheck: vi.fn(),
+      requestAction: vi.fn(), confirmAction: vi.fn(), beginHold: vi.fn(), cancelHold: vi.fn(),
+      chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(), onControl: vi.fn(() => () => {}),
+    } as unknown as NonNullable<typeof window.agentBoard>
+
+    render(<App />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
+    expect(await screen.findByText('Prior acceptance is no longer current')).toBeTruthy()
+    expect(screen.queryByRole('checkbox')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Accept operator attestation' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Clear handoff' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Prepare fresh handoff' }))
+    expect(prepareNativeAcceptance).not.toHaveBeenCalled()
+    expect(screen.getByText(/Confirm once more to start a fresh handoff/i)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm fresh handoff' }))
+    await waitFor(() => expect(prepareNativeAcceptance).toHaveBeenCalledTimes(1))
   })
 
   it('keeps the Ashlr Setup checklist and excludes the native handoff', async () => {

@@ -65,15 +65,17 @@ Board shortcut ownership. Those belong to the separate Ashlr Layer route.
 
 Use **Prepare handoff** before the controller-isolation restart:
 
-1. Require USB presence, a declared **Codex Native** route, and a verified
-   fixed `/Applications/ChatGPT.app` installation.
+1. Require USB presence, a declared **Codex Native** route, and bounded
+   version/build metadata from fixed `/Applications/ChatGPT.app`. This does not
+   verify its signature, publisher, Gatekeeper result, or the running process.
 2. Select **Prepare handoff**. Agent Board saves a private mode-`0600` receipt
    containing only the route, board VID:PID, ChatGPT Desktop version/build,
    preparation time, and seven false observation flags.
 3. Quit Work Louder Input and Agent Board with Command-Q. Open ChatGPT Desktop
    alone and wait for native initialization. In Codex Settings, open
    **Creator Micro** and inspect the connection state.
-4. Reopen Agent Board, return to Setup, and select **Refresh after restart**.
+4. Reopen Agent Board, return to Setup, and select **Refresh after isolated
+   retry**.
    A fresh ordered `v.oai.rgbcfg` → `v.oai.thstatus` → HID notification →
    radial notification sequence may advance the ladder to **Initialization
    inferred**. It does not complete the Settings or physical checks.
@@ -82,14 +84,16 @@ Use **Prepare handoff** before the controller-isolation restart:
    only after personally seeing that result on the physical board and in Codex.
 6. **Accept operator attestation** becomes available only when all seven groups
    are checked and the initialization is fresh, ordered, newer than the
-   preparation, and bound to the same VID:PID and ChatGPT build.
+   preparation, and bound to the same VID:PID class and fixed-path ChatGPT
+   metadata.
 
 The saved result is an operator attestation, not a cryptographic device proof.
 It contains no prompt, task title, session identifier, raw log, diagnostic
-detail, or local path. Any route, device identity, Desktop build, or live
+detail, or local path. Any route, VID:PID class, Desktop metadata, or live
 initialization mismatch invalidates the projected acceptance. **Clear handoff**
 removes only this local receipt; it never changes the board, Codex, Input, or
-firmware.
+firmware. The receipt survives quitting Agent Board; it does not uniquely
+identify one board, prove the running ChatGPT binary, or prove a process restart.
 
 ## 3. Verify Work Louder Input
 

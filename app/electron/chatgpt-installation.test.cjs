@@ -17,7 +17,9 @@ const {
   PLUTIL_PATH,
   PROBE_TIMEOUT_MS,
   inspectChatGptInstallation,
+  inspectChatGptInstallationAsync,
   runFixed,
+  runFixedAsync,
   sanitizeMetadata,
 } = require('./chatgpt-installation.cjs')
 
@@ -84,6 +86,27 @@ test('reads only the two exact bounded ChatGPT bundle values with fixed plutil a
     ])
     assert.ok(calls.every(({ options }) => options.timeout === PROBE_TIMEOUT_MS))
     assert.ok(calls.every(({ options }) => options.maxBuffer === MAX_COMMAND_OUTPUT_BYTES))
+  } finally {
+    rmSync(files.root, { recursive: true, force: true })
+  }
+})
+
+test('async inspection preserves the fixed contract under one aggregate deadline', async () => {
+  const files = fixture()
+  const calls = []
+  try {
+    assert.deepEqual(await inspectChatGptInstallationAsync({
+      filesystem: files.filesystem,
+      runner: metadataRunner(calls),
+    }), {
+      installed: true,
+      version: '26.818.61809',
+      build: '17600',
+      status: 'installed',
+    })
+    assert.equal(calls.length, 2)
+    assert.ok(calls.every(({ options }) => options.timeout > 0 && options.timeout <= PROBE_TIMEOUT_MS))
+    assert.ok(calls[1].options.timeout <= calls[0].options.timeout)
   } finally {
     rmSync(files.root, { recursive: true, force: true })
   }
@@ -308,6 +331,26 @@ test('the production runner rejects every executable or argv shape outside the f
     stderr: '',
   })
   assert.deepEqual(runFixed(PLUTIL_PATH, [
+    '-extract',
+    'CFBundleVersion',
+    'raw',
+    '-o',
+    '-',
+    '/private/Info.plist',
+  ]), {
+    status: null,
+    stdout: '',
+    stderr: '',
+  })
+})
+
+test('the async runner rejects executable and argv input outside the fixed contract', async () => {
+  assert.deepEqual(await runFixedAsync('/bin/sh', ['-c', 'exit 0']), {
+    status: null,
+    stdout: '',
+    stderr: '',
+  })
+  assert.deepEqual(await runFixedAsync(PLUTIL_PATH, [
     '-extract',
     'CFBundleVersion',
     'raw',

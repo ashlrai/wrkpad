@@ -190,9 +190,10 @@ new conclusion. An app process that started before the update may have only the
 historical failed attempt in its current log session. In Agent Board, select
 **Codex Native**, choose **Prepare handoff**, quit Input and Agent Board, and
 restart ChatGPT Desktop alone. Then reopen Agent Board and choose **Refresh
-after restart**. The evidence ladder intentionally stops at **Initialization
+after isolated retry**. The evidence ladder intentionally stops at **Initialization
 inferred** until you separately observe Codex Settings and every physical
-control group.
+control group. The fresh initialization timestamp supports the retry sequence;
+it does not prove a new process generation.
 
 If preparation is unavailable, resolve the exact prerequisite shown in Setup:
 
