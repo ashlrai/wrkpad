@@ -99,6 +99,11 @@ screen but cannot promise the same mixed-provider physical key semantics. Daily
 cross-provider control requires the Ashlr Layer route; native firmware
 qualification remains a separate passive route and evidence chain.
 
+The proposed [cmux provider adapter](../protocol/cmux-provider-adapter.md)
+specifies how a future Claude Code hook may bind a session to its cmux workspace
+and surface without adding terminal read/write authority. Until that contract is
+implemented and accepted, Claude slot focus remains application foregrounding.
+
 ## Extension policy
 
 New providers implement normalization into HASP; they do not add provider semantics to the reducer. New hardware implements the private adapter behind the same occupancy and lighting planner. Remote networking, agent control, and approvals require separate protocols and threat models and are not backwards-compatible HASP additions.
