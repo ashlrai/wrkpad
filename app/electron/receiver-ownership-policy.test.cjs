@@ -36,3 +36,8 @@ test('status IPC does not expose the local receiver executable path', () => {
   assert.doesNotMatch(identityBlock, /path:/)
   assert.doesNotMatch(identityBlock, /process\.execPath|app\.getAppPath/)
 })
+
+test('packaged build identity is available independently of shortcut ownership', () => {
+  assert.match(source, /function currentPackagedAsarSha256\(\) \{[\s\S]*previousNoAsar = process\.noAsar[\s\S]*process\.noAsar = true[\s\S]*cachedReceiverAsarHash\(app\.getAppPath\(\)\)[\s\S]*process\.noAsar = previousNoAsar/)
+  assert.match(source, /appAsarSha256: currentReceiverRuntime\.currentAsarSha256 \?\? currentPackagedAsarSha256\(\)/)
+})

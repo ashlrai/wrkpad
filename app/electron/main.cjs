@@ -294,6 +294,20 @@ function inspectCurrentReceiverRuntime() {
   return inspectReceiverRuntime({ currentPid: process.pid, hashAsar: cachedReceiverAsarHash })
 }
 
+function currentPackagedAsarSha256() {
+  if (!app.isPackaged) return null
+  // Electron's default fs wrapper treats the archive as a virtual directory.
+  // Disable that wrapper only for this synchronous, bounded raw-file hash.
+  const previousNoAsar = process.noAsar
+  try {
+    process.noAsar = true
+    const hashed = cachedReceiverAsarHash(app.getAppPath())
+    return hashed.status === 'available' ? hashed.sha256 : null
+  } finally {
+    process.noAsar = previousNoAsar
+  }
+}
+
 function receiverOwnsShortcuts(runtime) {
   return app.isPackaged ? shouldRegisterShortcuts(runtime) : runtime?.status === 'exclusive'
 }
@@ -478,7 +492,7 @@ ipcMain.handle('board:getStatus', trustedIpc(async () => {
     receiverIdentity: {
       appVersion: app.getVersion(),
       packaged: app.isPackaged,
-      appAsarSha256: currentReceiverRuntime.currentAsarSha256,
+      appAsarSha256: currentReceiverRuntime.currentAsarSha256 ?? currentPackagedAsarSha256(),
     },
     receiverRuntime: currentReceiverRuntime,
   }
