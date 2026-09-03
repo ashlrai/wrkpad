@@ -117,6 +117,7 @@ describe('operator interface', () => {
     window.agentBoard = {
       getStatus: vi.fn().mockResolvedValue({
         boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
+        inputProfile: correctedInputProfile,
         codex: true, claude: true, ashlr: true, boardRoute: 'codex_native',
         nativeCodexMicro: { status: 'firmware_rpc_missing', observedAt: '2026-09-01T04:38:28Z', detail: 'RPC 404', fresh: false },
         workspace: '/tmp', shortcutCount: 20, shortcutRegistrations: [], workspaceSnapshot: null,
@@ -143,6 +144,11 @@ describe('operator interface', () => {
     expect(screen.getByRole('button', { name: 'Disabled in Codex Native' }).hasAttribute('disabled')).toBe(true)
     fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
     expect(screen.queryByRole('button', { name: /Run Ashlr Flight Check/i })).toBeNull()
+    const routeWarning = screen.getByRole('alert', { name: /Possible native-layer mismatch/i })
+    expect(routeWarning.textContent).toContain('read-only cache')
+    expect(routeWarning.textContent).toContain('does not prove which layer reached the board')
+    expect(routeWarning.textContent).toContain('native firmware Layer 1')
+    expect(routeWarning.textContent).toContain('Command-Q and reopen ChatGPT Desktop')
     const nativeGate = screen.getByText(/Operator acceptance handoff/i).closest('.native-manual-gate')
     expect(nativeGate?.textContent).toContain('unregisters its shortcuts')
     expect(nativeGate?.textContent).toContain('may remain open in passive Codex Native mode')

@@ -1114,6 +1114,7 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
         ? `${observedInputProfile} · dial mapping unverified`
         : 'Current keyboard profile requires physical verification'
   const correctedProfileObserved = correctedInputProfileObserved(inputProfile)
+  const nativeShortcutProfileObserved = status.boardRoute === 'codex_native' && correctedProfileObserved
   const inputRecoveryState = status.boardRoute !== 'ashlr_layer'
     ? 'none'
     : correctedProfileObserved
@@ -1416,6 +1417,10 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
         {steps.map((step) => <article key={step.number} className={step.ready ? 'setup-step ready' : step.observed ? 'setup-step observed' : 'setup-step'}>
           <span className="step-number">{step.number}</span><div><h3>{step.title}</h3><p>{step.detail}</p><strong><i />{step.state}</strong></div>
         </article>)}
+        {nativeShortcutProfileObserved && <div className="native-profile-warning" role="alert" aria-labelledby="native-profile-warning-title">
+          <CircleX size={18} />
+          <div><strong id="native-profile-warning-title">Possible native-layer mismatch</strong><p>Input’s read-only cache currently names <b>Ashlr Agent Board Corrected · Ashlr Daily</b>. That cache does not prove which layer reached the board, but this profile targets Agent Board shortcuts that Codex Native intentionally releases. Before retesting, select the board’s native firmware <b>Layer 1</b>, keep Work Louder Input quit, then Command-Q and reopen ChatGPT Desktop.</p></div>
+        </div>}
         {status.boardRoute === 'codex_native' && <NativeControlCheck key={nativeControlReceipt?.reportedAt ?? 'new'} receipt={nativeControlReceipt} busy={nativeControlBusy} error={nativeControlError} onSave={saveNativeControlCheck} />}
         {status.boardRoute === 'codex_native' && <section className="native-acceptance legacy-native-acceptance" aria-labelledby="native-acceptance-title" aria-busy={nativeBusy}>
           <div className="native-acceptance-heading">

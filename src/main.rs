@@ -39,7 +39,10 @@ enum Command {
     Doctor {
         #[arg(long)]
         json: bool,
-        #[arg(long)]
+        #[arg(
+            long,
+            help = "Include descriptor-only HID evidence; no live input reports are read"
+        )]
         dump_hid: bool,
     },
     /// Run the authenticated loopback HASP server.
