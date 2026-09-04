@@ -1,10 +1,14 @@
 const path = require('node:path')
 const { performance } = require('node:perf_hooks')
 const { Worker } = require('node:worker_threads')
+const { TOTAL_PROBE_BUDGET_MS } = require('./input-installation-diagnostics.cjs')
 
 const CACHE_TTL_MS = 30_000
 const MAX_HOME_LENGTH = 4_096
-const WORKER_TIMEOUT_MS = 11_000
+// The Electron main thread never performs the synchronous trust walk. Give the
+// worker only a small delivery/termination margin beyond the core deadline.
+const WORKER_SHUTDOWN_GRACE_MS = 1_000
+const WORKER_TIMEOUT_MS = TOTAL_PROBE_BUDGET_MS + WORKER_SHUTDOWN_GRACE_MS
 const WORKER_ENTRY_PATH = path.join(__dirname, 'input-installation-worker-entry.cjs')
 const STATUSES = new Set([
   'gatekeeper_rejected',
@@ -154,6 +158,7 @@ function createInputInstallationInspector(options = {}) {
 module.exports = {
   CACHE_TTL_MS,
   WORKER_ENTRY_PATH,
+  WORKER_SHUTDOWN_GRACE_MS,
   WORKER_TIMEOUT_MS,
   createInputInstallationInspector,
   sanitizeInspection,

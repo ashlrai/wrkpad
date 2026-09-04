@@ -427,9 +427,10 @@ function synchronizeShortcutOwnership(boardRoute) {
     shortcutObservability.beginGeneration(boardRoute)
   }
   try {
-    const state = shortcutOwnership.synchronize(boardRoute)
+    shortcutOwnership.synchronize(boardRoute)
+    const state = shortcutOwnership.finalize(boardRoute)
     shortcutRegistrations = state.registrations
-    const active = routeOwnsShortcuts(boardRoute) && registrationsAreActive(shortcutRegistrations, boardRoute)
+    const active = state.active === true
     if (active) shortcutCallbackGuard.enable()
     else shortcutCallbackGuard.invalidate()
     const scope = active

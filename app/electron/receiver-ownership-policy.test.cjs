@@ -20,7 +20,7 @@ test('main synchronizes receiver ownership before registering shortcuts', () => 
   assert.match(source, /inputApplication = boardRoute === 'hybrid_native' \? inspectInputApplicationRuntime\(\) : null[\s\S]*routeAllowsShortcutDelivery\(boardRoute, currentRoute, inputApplication\)[\s\S]*if \(!deliveryAllowed\) \{[\s\S]*shortcutCallbackGuard\.invalidate\(\)[\s\S]*synchronizeShortcutOwnership\('unknown'\)/)
   assert.match(source, /if \(!deliveryAllowed\) \{[\s\S]*synchronizeShortcutOwnership\('unknown'\)[\s\S]*shortcutObservability\.observe\(control\)[\s\S]*return/)
   assert.match(source, /if \(!routeOwnsShortcuts\(boardRoute\)\) \{[\s\S]*shortcutCallbackGuard\.invalidate\(\)[\s\S]*shortcutObservability\.beginGeneration\(boardRoute\)/)
-  assert.match(source, /const active = routeOwnsShortcuts\(boardRoute\)[\s\S]*const scope = active[\s\S]*`\$\{boardRoute\}_released`[\s\S]*shortcutObservability\.beginGeneration\(scope\)/)
+  assert.match(source, /shortcutOwnership\.synchronize\(boardRoute\)[\s\S]*shortcutOwnership\.finalize\(boardRoute\)[\s\S]*const active = state\.active === true[\s\S]*const scope = active[\s\S]*`\$\{boardRoute\}_released`[\s\S]*shortcutObservability\.beginGeneration\(scope\)/)
   assert.match(source, /boardRoute !== 'hybrid_native' \|\| runtime\?\.inputApplication\?\.status === 'not_running'/)
   assert.match(source, /catch \(error\) \{[\s\S]*shortcutRegistrations = \[\][\s\S]*shortcutCallbackGuard\.invalidate\(\)[\s\S]*throw error/)
 })

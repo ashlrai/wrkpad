@@ -73,7 +73,24 @@ function createShortcutOwnershipController(options) {
     return { runtime, registrations: [...registrations], released: false }
   }
 
-  return Object.freeze({ synchronize })
+  function finalize(boardRoute) {
+    const active = options.routeOwnsShortcuts(boardRoute)
+      && registrationRoute === boardRoute
+      && registrations.length > 0
+      && registrations.every((registration) => registration?.registered === true)
+      && options.registrationsAreActive(registrations, boardRoute)
+    if (active) return { runtime, registrations: [...registrations], released: false, active: true }
+
+    // Registration return values are historical. If the final Electron
+    // liveness check disagrees, release the complete set and clear the
+    // controller's records before status or callback delivery can use them.
+    const released = registrations.length > 0
+      ? deactivate(true)
+      : options.shortcutsAreReleased()
+    return { runtime, registrations: [], released, active: false }
+  }
+
+  return Object.freeze({ finalize, synchronize })
 }
 
 function createShortcutCallbackGuard() {

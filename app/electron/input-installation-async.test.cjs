@@ -3,11 +3,15 @@ const assert = require('node:assert/strict')
 const { EventEmitter } = require('node:events')
 const { readFileSync } = require('node:fs')
 const path = require('node:path')
+const { Worker } = require('node:worker_threads')
 const {
   WORKER_ENTRY_PATH,
+  WORKER_SHUTDOWN_GRACE_MS,
+  WORKER_TIMEOUT_MS,
   createInputInstallationInspector,
   sanitizeInspection,
 } = require('./input-installation-async.cjs')
+const { TOTAL_PROBE_BUDGET_MS } = require('./input-installation-diagnostics.cjs')
 const { validRequest } = require('./input-installation-worker-entry.cjs')
 
 const HOME = '/Users/example'
@@ -128,6 +132,27 @@ test('terminates a worker that exceeds the outer deadline and ignores late outpu
   assert.deepEqual(await inspect({ home: HOME }), result)
 })
 
+test('keeps the caller event loop responsive while a real worker is blocked', async () => {
+  let settled = false
+  const inspect = createInputInstallationInspector({
+    workerFactory() {
+      return new Worker(`
+        const { parentPort } = require('node:worker_threads')
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 30)
+        parentPort.postMessage({ status: 'verified', version: '0.18.4' })
+      `, { eval: true })
+    },
+  })
+
+  const pending = inspect({ home: HOME }).then((value) => {
+    settled = true
+    return value
+  })
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(settled, false)
+  assert.deepEqual(await pending, { status: 'verified', version: '0.18.4' })
+})
+
 test('fails closed for worker errors, invalid homes, clock failure, and competing homes', async () => {
   let worker
   let calls = 0
@@ -193,6 +218,7 @@ test('fails closed for worker construction, premature exit, and termination reje
 
 test('worker request and result contracts remain fixed and narrow', () => {
   assert.equal(path.basename(WORKER_ENTRY_PATH), 'input-installation-worker-entry.cjs')
+  assert.equal(WORKER_TIMEOUT_MS, TOTAL_PROBE_BUDGET_MS + WORKER_SHUTDOWN_GRACE_MS)
   assert.equal(validRequest({ schemaVersion: 1, home: HOME }), true)
   assert.equal(validRequest({ schemaVersion: 1, home: HOME, candidate: '/private/input.app' }), false)
   assert.equal(validRequest({ schemaVersion: 1, home: 'relative' }), false)

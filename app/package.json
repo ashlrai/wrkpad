@@ -35,6 +35,7 @@
     "doctor": "node scripts/doctor.mjs",
     "agent:preflight": "node ../tools/agent-preflight.mjs inspect --json",
     "profile:generate": "node scripts/generate-input-profile.mjs",
+    "profile:check": "node scripts/generate-input-profile.mjs --verify",
     "profile:generate-native": "node scripts/generate-codex-native-recovery-layer.mjs",
     "profile:check-native": "node scripts/generate-codex-native-recovery-layer.mjs --verify",
     "profile:generate-dual": "node scripts/generate-dual-plane-profile.mjs",

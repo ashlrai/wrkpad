@@ -162,6 +162,61 @@ test('a throwing registration attempt is immediately cleaned up and remains retr
   assert.equal(controller.synchronize('ashlr_layer').registrations.length, 1)
 })
 
+test('final liveness preserves a complete active registration set', () => {
+  const { calls, controller } = fixture()
+  const registered = controller.synchronize('ashlr_layer')
+
+  assert.deepEqual(controller.finalize('ashlr_layer'), {
+    runtime: { status: 'exclusive' },
+    registrations: registered.registrations,
+    released: false,
+    active: true,
+  })
+  assert.equal(calls.register, 1)
+  assert.equal(calls.unregister, 0)
+  assert.equal(calls.reset, 0)
+  assert.equal(calls.clear, 0)
+})
+
+test('final liveness is authoritative and clears stale successful registration records', () => {
+  const guard = createShortcutCallbackGuard()
+  const effects = { clear: 0, delivered: 0, liveness: 0, reset: 0, unregister: 0 }
+  let captured
+  const controller = createShortcutOwnershipController({
+    clearApprovals: () => { effects.clear += 1 },
+    expectedRegistrationCount: () => 1,
+    inspectRuntime: () => ({ status: 'exclusive' }),
+    registerShortcuts: () => {
+      guard.invalidate()
+      captured = guard.bind(() => { effects.delivered += 1 })
+      return [{ signalId: 'one', accelerator: 'Control+Alt+Command+1', registered: true }]
+    },
+    registrationsAreActive: () => {
+      effects.liveness += 1
+      return effects.liveness === 1
+    },
+    resetFlight: () => { effects.reset += 1 },
+    runtimeOwnsShortcuts: () => true,
+    routeOwnsShortcuts: (route) => route === 'ashlr_layer',
+    shortcutsAreReleased: () => true,
+    unregisterAll: () => { effects.unregister += 1 },
+  })
+
+  const registered = controller.synchronize('ashlr_layer')
+  assert.equal(registered.registrations[0].registered, true)
+
+  const final = controller.finalize('ashlr_layer')
+  if (final.active) guard.enable()
+  else guard.invalidate()
+
+  assert.deepEqual(final, {
+    runtime: { status: 'exclusive' }, registrations: [], released: true, active: false,
+  })
+  assert.deepEqual(effects, { clear: 1, delivered: 0, liveness: 2, reset: 1, unregister: 1 })
+  assert.equal(captured(), false)
+  assert.equal(effects.delivered, 0)
+})
+
 test('native state reports an unregister failure instead of trusting empty bookkeeping', () => {
   const controller = createShortcutOwnershipController({
     clearApprovals() {}, expectedRegistrationCount: () => 1, inspectRuntime: () => ({ status: 'exclusive' }),

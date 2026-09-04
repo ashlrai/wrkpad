@@ -71,6 +71,9 @@ test('operator docs preserve the exact twenty-gesture cross-provider contract', 
   assert.match(controls, /Recovery \| Fleet doctor \| Pause Fleet \(hold required\)/)
   assert.match(operations, /all 20 gestures/)
   assert.match(setup, /16 control groups[\s\S]*not the\s+20-gesture Ashlr Layer Flight Check/)
+  assert.match(setup, /npm run profile:check -- ashlr-agent-board\.json daily/)
+  assert.match(setup, /npm run profile:check -- diagnostic\.json diagnostic/)
+  assert.match(setup, /A `match` proves only that JSON file/)
   assert.doesNotMatch(publicDocs, /19-gesture|all 19 daily signals|wide microphone cap/i)
 })
 

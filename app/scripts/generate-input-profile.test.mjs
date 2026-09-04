@@ -2,9 +2,10 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import test from 'node:test'
-import { generateInputProfile, writeGeneratedProfile } from './generate-input-profile.mjs'
+import { generateInputProfile, inspectGeneratedInputProfile, writeGeneratedProfile } from './generate-input-profile.mjs'
 import {
   generateCodexNativeRecoveryLayer,
   inspectCodexNativeRecovery,
@@ -44,6 +45,78 @@ test('diagnostic profile preserves both bottom keys without changing encoder ord
   const profile = generateInputProfile(source(), 'diagnostic')
   assert.equal(profile.profile.layers[0].layout.base[3][1].keycode, 'KA_11')
   assert.deepEqual(profile.profile.layers[0].layout.encoders.map((row) => row.map((item) => item.keycode)), [['KA_18', 'KA_17', 'KA_19']])
+})
+
+test('strictly verifies generated daily and diagnostic one-layer profiles', () => {
+  for (const variant of ['daily', 'diagnostic']) {
+    for (const os of [0, 1, 2, 3]) {
+      const input = source()
+      input.profile.layers[0].os = os
+      const profile = generateInputProfile(input, variant)
+      assert.deepEqual(inspectGeneratedInputProfile(profile, variant), {
+        status: 'match', reason: `exact_${variant}_one_layer_profile`,
+      })
+      assert.equal(inspectGeneratedInputProfile(profile, variant === 'daily' ? 'diagnostic' : 'daily').status, 'mismatch')
+    }
+  }
+  assert.deepEqual(inspectGeneratedInputProfile(generateInputProfile(source()), 'other'), {
+    status: 'mismatch', reason: 'expected_daily_or_diagnostic_variant',
+  })
+})
+
+test('one-layer verifier rejects changed layout, actions, identity, and ownership surfaces', () => {
+  const mutations = [
+    (value) => { value.keyboard = 'other' },
+    (value) => { value.unexpectedRoot = { linkedAppId: 1 } },
+    (value) => { value.profile.id = 7 },
+    (value) => { value.profile.name = 'Ashlr Agent Board Corrected ' },
+    (value) => { value.profile.layers.push(structuredClone(value.profile.layers[0])) },
+    (value) => { value.profile.layers[0].id = 1 },
+    (value) => { value.profile.layers[0].name = 'Ashlr Daily ' },
+    (value) => { value.profile.layers[0].color = '#4e70ff' },
+    (value) => { value.profile.layers[0].os = 4 },
+    (value) => { value.profile.layers[0].layout.unexpected = true },
+    (value) => { value.profile.layers[0].layout.base[0][0].keycode = 'KA_1' },
+    (value) => { value.profile.layers[0].layout.base[0][0].command = 'not-allowed' },
+    (value) => { value.profile.layers[0].layout.encoders[0].reverse() },
+    (value) => { value.profile.layers[0].layout.joystick.sectors[0].a1 = 0 },
+    (value) => { value.profile.layers[0].lights.backlight.unexpected = true },
+    (value) => { value.actions[0].name = 'Ashlr agent2' },
+    (value) => { value.actions[0].keyInputs[3].keycode = 'KC_2' },
+    (value) => { value.actions[0].keyInputs[3].delay = 1 },
+    (value) => { value.actions[0].keyInputs[3].command = 'not-allowed' },
+    (value) => { value.actionGroups[0].actionIds.pop() },
+    (value) => { value.multiactions = [{ id: 1 }] },
+    (value) => { value.smartActions = [{ id: 1 }] },
+  ]
+  for (const mutate of mutations) {
+    const changed = generateInputProfile(source(), 'daily')
+    mutate(changed)
+    assert.doesNotThrow(() => inspectGeneratedInputProfile(changed, 'daily'))
+    assert.equal(inspectGeneratedInputProfile(changed, 'daily').status, 'mismatch')
+  }
+})
+
+test('profile:check CLI exits fail closed for drift and supports an explicit diagnostic variant', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'ashlr-profile-check-'))
+  const scriptPath = fileURLToPath(new URL('./generate-input-profile.mjs', import.meta.url))
+  const dailyPath = join(directory, 'daily.json')
+  const diagnosticPath = join(directory, 'diagnostic.json')
+  try {
+    writeFileSync(dailyPath, JSON.stringify(generateInputProfile(source(), 'daily')))
+    writeFileSync(diagnosticPath, JSON.stringify(generateInputProfile(source(), 'diagnostic')))
+    const daily = spawnSync(process.execPath, [scriptPath, '--verify', dailyPath], { encoding: 'utf8' })
+    const diagnostic = spawnSync(process.execPath, [scriptPath, '--verify', diagnosticPath, 'diagnostic'], { encoding: 'utf8' })
+    const wrongVariant = spawnSync(process.execPath, [scriptPath, '--verify', diagnosticPath], { encoding: 'utf8' })
+    assert.equal(daily.status, 0, daily.stderr)
+    assert.equal(JSON.parse(daily.stdout).status, 'match')
+    assert.equal(diagnostic.status, 0, diagnostic.stderr)
+    assert.equal(JSON.parse(diagnostic.stdout).status, 'match')
+    assert.equal(wrongVariant.status, 2, wrongVariant.stderr)
+    assert.equal(JSON.parse(wrongVariant.stdout).status, 'mismatch')
+  } finally {
+    rmSync(directory, { recursive: true })
+  }
 })
 
 test('refuses protected native layers and unsupported exports', () => {

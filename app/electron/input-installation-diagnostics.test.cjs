@@ -8,6 +8,8 @@ const {
   INPUT_TEAM_ID,
   MAX_COMMAND_OUTPUT_BYTES,
   PROBE_TIMEOUT_MS,
+  TOTAL_PROBE_BUDGET_MS,
+  TRUST_PROBE_TIMEOUT_MS,
   defaultCandidates,
   inspectInputInstallation,
   sanitizeVersion,
@@ -130,7 +132,15 @@ test('verifies one exact publisher bundle with bounded fixed commands', () => {
       ['/usr/sbin/spctl', '--assess', '--type', 'execute'],
       ['/usr/bin/codesign', '--verify', '--deep', '--strict', '--verbose=1'],
     ])
-    assert.ok(calls.every(({ options }) => options.timeout === PROBE_TIMEOUT_MS))
+    assert.deepEqual(calls.map(({ options }) => options.timeout), [
+      PROBE_TIMEOUT_MS,
+      PROBE_TIMEOUT_MS,
+      PROBE_TIMEOUT_MS,
+      TRUST_PROBE_TIMEOUT_MS,
+      PROBE_TIMEOUT_MS,
+      TRUST_PROBE_TIMEOUT_MS,
+      TRUST_PROBE_TIMEOUT_MS,
+    ])
     assert.doesNotMatch(JSON.stringify(inspectInputInstallation({ candidates: [files.system, files.user], runner: verifiedRunner() })), /Users|example|Input\.app/)
   } finally {
     rmSync(files.root, { recursive: true, force: true })
@@ -354,7 +364,9 @@ test('one monotonic deadline bounds helper retries and every subprocess timeout'
     const baseRunner = verifiedRunner()
     const runner = (executable, args, options) => {
       timeouts.push(options.timeout)
-      clock += options.timeout === 2_000 ? 2_000 : 4_000
+      // The injected runner deliberately overruns its first two subprocess
+      // ceilings; the shared monotonic deadline must still stop the retry loop.
+      clock += clock < 55_000 ? 27_500 : options.timeout
       const output = baseRunner(executable, args, options)
       if (executable === '/usr/libexec/PlistBuddy' && args[1] === 'Print :CFBundleIdentifier') {
         retries += 1
@@ -365,9 +377,97 @@ test('one monotonic deadline bounds helper retries and every subprocess timeout'
     assert.deepEqual(inspectInputInstallation({
       candidates: [files.system, files.user], runner, now: () => clock,
     }), { status: 'probe_unavailable', version: null })
-    assert.deepEqual(timeouts, [5_000, 5_000, 2_000])
-    assert.equal(clock, 10_000)
+    assert.deepEqual(timeouts, [5_000, 5_000, 5_000])
+    assert.equal(clock, TOTAL_PROBE_BUDGET_MS)
     assert.equal(retries, 3)
+  } finally {
+    rmSync(files.root, { recursive: true, force: true })
+  }
+})
+
+test('allows slow successful trust checks while retaining one bounded fail-closed deadline', () => {
+  const files = fixture()
+  let clock = 0
+  const calls = []
+  try {
+    createBundle(files.system)
+    const baseRunner = verifiedRunner(calls)
+    const runner = (executable, args, options) => {
+      const duration = executable === '/usr/sbin/spctl' || (executable === '/usr/bin/codesign' && args[0] === '--verify')
+        ? 6_000
+        : 100
+      clock += Math.min(duration, options.timeout)
+      if (options.timeout < duration) return { status: null, stdout: '', stderr: '' }
+      return baseRunner(executable, args, options)
+    }
+
+    assert.deepEqual(inspectInputInstallation({
+      candidates: [files.system, files.user], runner, now: () => clock,
+    }), { status: 'verified', version: '0.18.4' })
+    assert.equal(clock, 18_400)
+    assert.ok(clock < TOTAL_PROBE_BUDGET_MS)
+    assert.deepEqual(calls.filter(({ executable, args }) => (
+      executable === '/usr/sbin/spctl' || (executable === '/usr/bin/codesign' && args[0] === '--verify')
+    )).map(({ options }) => options.timeout), [
+      TRUST_PROBE_TIMEOUT_MS,
+      TRUST_PROBE_TIMEOUT_MS,
+      TRUST_PROBE_TIMEOUT_MS,
+    ])
+  } finally {
+    rmSync(files.root, { recursive: true, force: true })
+  }
+})
+
+test('fails closed when one trust check exceeds its widened command ceiling', () => {
+  const files = fixture()
+  let clock = 0
+  let strictChecks = 0
+  try {
+    createBundle(files.system)
+    const baseRunner = verifiedRunner()
+    const runner = (executable, args, options) => {
+      if (executable === '/usr/bin/codesign' && args[0] === '--verify') {
+        strictChecks += 1
+        clock += options.timeout
+        return { status: null, stdout: '', stderr: '' }
+      }
+      clock += 100
+      return baseRunner(executable, args, options)
+    }
+
+    assert.deepEqual(inspectInputInstallation({
+      candidates: [files.system, files.user], runner, now: () => clock,
+    }), { status: 'probe_unavailable', version: null })
+    assert.equal(strictChecks, 1)
+    assert.equal(clock, TRUST_PROBE_TIMEOUT_MS + 300)
+    assert.ok(clock < TOTAL_PROBE_BUDGET_MS)
+  } finally {
+    rmSync(files.root, { recursive: true, force: true })
+  }
+})
+
+test('fails closed when individually bounded trust checks exhaust the aggregate budget', () => {
+  const files = fixture()
+  let clock = 0
+  let trustChecks = 0
+  try {
+    createBundle(files.system)
+    const baseRunner = verifiedRunner()
+    const runner = (executable, args, options) => {
+      const isTrustCheck = executable === '/usr/sbin/spctl'
+        || (executable === '/usr/bin/codesign' && args[0] === '--verify')
+      const duration = isTrustCheck ? TRUST_PROBE_TIMEOUT_MS : 100
+      clock += Math.min(duration, options.timeout)
+      if (isTrustCheck) trustChecks += 1
+      if (options.timeout < duration) return { status: null, stdout: '', stderr: '' }
+      return baseRunner(executable, args, options)
+    }
+
+    assert.deepEqual(inspectInputInstallation({
+      candidates: [files.system, files.user], runner, now: () => clock,
+    }), { status: 'probe_unavailable', version: null })
+    assert.equal(trustChecks, 3)
+    assert.equal(clock, TOTAL_PROBE_BUDGET_MS)
   } finally {
     rmSync(files.root, { recursive: true, force: true })
   }
@@ -399,8 +499,16 @@ test('a helper retry restarts all evidence and can stabilize inside the shared d
     }), { status: 'verified', version: '0.18.4' })
     assert.equal(helperChanged, true)
     assert.equal(metadataReads, 3)
-    assert.equal(timeouts.length, 8)
-    assert.ok(timeouts.every((timeout) => timeout > 0 && timeout <= PROBE_TIMEOUT_MS))
+    assert.deepEqual(timeouts, [
+      PROBE_TIMEOUT_MS,
+      PROBE_TIMEOUT_MS,
+      PROBE_TIMEOUT_MS,
+      PROBE_TIMEOUT_MS,
+      TRUST_PROBE_TIMEOUT_MS,
+      PROBE_TIMEOUT_MS,
+      TRUST_PROBE_TIMEOUT_MS,
+      TRUST_PROBE_TIMEOUT_MS,
+    ])
     assert.equal(clock, 800)
   } finally {
     rmSync(files.root, { recursive: true, force: true })

@@ -31,6 +31,15 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 
 ### Added
 
+- A fail-closed `profile:check` CLI for exact generated one-layer daily and
+  diagnostic Work Louder profiles, including adversarial schema and action-map
+  checks. A match proves only the selected JSON artifact.
+- Authoritative final shortcut-registration liveness, so a transient endpoint
+  loss cannot leave stale `20/20` ownership or permit callbacks from a released
+  generation.
+- Wider, still-bounded trust-probe budgets for deep Input.app signature and
+  Gatekeeper checks, while Electron keeps the verification work off its main
+  thread and continues to fail closed on timeouts.
 - An experimental `hybrid_native` source path: the offline generator creates
   two layers and twenty shared action definitions, the mixed first layer
   references only fourteen non-Agent shortcuts, and the route-specific Flight

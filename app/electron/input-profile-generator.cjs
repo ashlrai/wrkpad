@@ -18,6 +18,18 @@ const CODEX_NATIVE_RECOVERY_LAYER_NAME = 'Codex Native Recovery (UNOFFICIAL)'
 const DUAL_PLANE_PROFILE_NAME = 'Ashlr Dual Plane (UNOFFICIAL)'
 const HYBRID_NATIVE_LAYER_NAME = 'Ashlr Hybrid Native (UNOFFICIAL)'
 const HYBRID_NATIVE_PROFILE_NAME = 'Ashlr Hybrid Dual Plane (UNOFFICIAL)'
+const ONE_LAYER_PROFILE_VARIANTS = Object.freeze({
+  daily: Object.freeze({
+    profileName: 'Ashlr Agent Board Corrected',
+    layerName: 'Ashlr Daily',
+    color: '#4E70FF',
+  }),
+  diagnostic: Object.freeze({
+    profileName: 'Ashlr Flight Check Corrected - diagnostic',
+    layerName: 'Ashlr Diagnostic',
+    color: '#ED9B4A',
+  }),
+})
 const CODEX_NATIVE_KEYMAP = Object.freeze([
   Object.freeze(['KV_OAI_AG00', 'KV_OAI_AG01']),
   Object.freeze(['KV_OAI_AG02', 'KV_OAI_AG03', 'KV_OAI_AG04', 'KV_OAI_AG05']),
@@ -151,6 +163,7 @@ function safeLights(value) {
 
 function generateInputProfile(source, variant = 'daily') {
   if (!['daily', 'diagnostic'].includes(variant)) throw new Error('Variant must be daily or diagnostic')
+  const variantProfile = ONE_LAYER_PROFILE_VARIANTS[variant]
   if (source?.keyboard !== 'creator_micro_v2' || source.language !== 'us') throw new Error('Expected a US Creator Micro V2 export')
   if (!source.profile || !Array.isArray(source.profile.layers) || !source.profile.layers[0]?.layout?.base) throw new Error('Profile export is missing its base layout')
   if (source.profile.layers.some((layer) => JSON.stringify(layer).includes('KV_OAI_'))) {
@@ -167,7 +180,7 @@ function generateInputProfile(source, variant = 'daily') {
     language: 'us',
     profile: {
       id: 0,
-      name: variant === 'daily' ? 'Ashlr Agent Board Corrected' : 'Ashlr Flight Check Corrected - diagnostic',
+      name: variantProfile.profileName,
       layers: [],
     },
     actions: [],
@@ -196,8 +209,8 @@ function generateInputProfile(source, variant = 'daily') {
   const action = (id) => ({ keycode: `KA_${id}` })
   const layer = {
     id: 0,
-    name: variant === 'daily' ? 'Ashlr Daily' : 'Ashlr Diagnostic',
-    color: variant === 'daily' ? '#4E70FF' : '#ED9B4A',
+    name: variantProfile.layerName,
+    color: variantProfile.color,
     os: sourceOs,
     lights: safeLights(sourceLayer.lights),
     layout: {},
@@ -265,6 +278,69 @@ function hasExactShortcutActions(actions) {
         { keycode: 'KC_LCTL', delay: 0, actionType: 0 },
       ])
   })
+}
+
+function layerHasExactAshlrShortcutLayout(layer, variant) {
+  const expected = ONE_LAYER_PROFILE_VARIANTS[variant]
+  if (!expected
+    || !layer
+    || layer.name !== expected.layerName
+    || !Number.isInteger(layer.os)
+    || layer.os < 0
+    || layer.os > 3
+    || layer.layout?.joystick?.type !== 'RADIAL') return false
+  return exactKeycodeRows(layer.layout.base, [
+    ['KA_0', 'KA_1'],
+    ['KA_2', 'KA_3', 'KA_4', 'KA_5'],
+    ['KA_6', 'KA_7', 'KA_8', 'KA_9'],
+    ['KA_10', 'KA_11', 'KA_12'],
+  ])
+    && exactKeycodeCells(layer.layout.encoders?.[0], ['KA_18', 'KA_17', 'KA_19'])
+    && JSON.stringify(layer.layout.joystick.sectors) === JSON.stringify([
+      { k: 'KA_15', a1: 0.1875, a2: 0.3125 }, { k: 'KC_NONE', a1: 0.3125, a2: 0.4375 },
+      { k: 'KA_16', a1: 0.4375, a2: 0.5625 }, { k: 'KC_NONE', a1: 0.5625, a2: 0.6875 },
+      { k: 'KA_13', a1: 0.6875, a2: 0.8125 }, { k: 'KC_NONE', a1: 0.8125, a2: 0.9375 },
+      { k: 'KA_14', a1: 0.9375, a2: 0.0625 }, { k: 'KC_NONE', a1: 0.0625, a2: 0.1875 },
+    ])
+}
+
+/**
+ * Verify only the exact one-layer artifact emitted by generateInputProfile.
+ * A match describes the selected JSON file; it does not attest that Input
+ * imported, activated, synchronized, or physically emitted the profile.
+ */
+function inspectGeneratedInputProfile(value, variant = 'daily') {
+  const expected = ONE_LAYER_PROFILE_VARIANTS[variant]
+  if (!expected) return { status: 'mismatch', reason: 'expected_daily_or_diagnostic_variant' }
+  if (!value || value.keyboard !== 'creator_micro_v2' || value.language !== 'us') {
+    return { status: 'mismatch', reason: 'expected_us_creator_micro_v2' }
+  }
+  if (!hasExactKeys(value, ['keyboard', 'language', 'profile', 'actions', 'actionGroups', 'multiactions', 'multiactionGroups', 'smartActions', 'smartActionGroups'])
+    || !hasExactKeys(value.profile, ['id', 'name', 'layers'])
+    || value.profile.id !== 0
+    || value.profile.name !== expected.profileName
+    || !Array.isArray(value.profile.layers)
+    || value.profile.layers.length !== 1) {
+    return { status: 'mismatch', reason: `expected_exact_${variant}_one_layer_profile` }
+  }
+  const [layer] = value.profile.layers
+  const exactActionGroups = JSON.stringify(value.actionGroups) === JSON.stringify([{ id: 0, name: 'Ashlr Agent Board', actionIds: shortcutActions.map((_, id) => id) }])
+  const exactEmptyGroups = JSON.stringify(value.multiactions) === '[]'
+    && JSON.stringify(value.smartActions) === '[]'
+    && JSON.stringify(value.multiactionGroups) === JSON.stringify([{ id: 0, name: 'Default', actionIds: [] }])
+    && JSON.stringify(value.smartActionGroups) === JSON.stringify([{ id: 0, name: 'Default', actionIds: [] }])
+  if (!hasExactKeys(layer, ['id', 'name', 'color', 'layout', 'os', 'lights'])
+    || layer.id !== 0
+    || layer.color !== expected.color
+    || !hasExactKeys(layer.layout, ['base', 'encoders', 'joystick'])
+    || !hasExactLights(layer.lights)
+    || !layerHasExactAshlrShortcutLayout(layer, variant)
+    || !hasExactShortcutActions(value.actions)
+    || !exactActionGroups
+    || !exactEmptyGroups) {
+    return { status: 'mismatch', reason: `ashlr_${variant}_profile_content_missing_or_changed` }
+  }
+  return { status: 'match', reason: `exact_${variant}_one_layer_profile` }
 }
 
 /**
@@ -500,6 +576,7 @@ module.exports = {
   generateInputProfile,
   inspectDualPlaneInputProfile,
   inspectHybridNativeInputProfile,
+  inspectGeneratedInputProfile,
   inspectCodexNativeRecovery,
   layerHasExactAshlrDailyLayout,
   layerHasExactCodexNativeLayout,

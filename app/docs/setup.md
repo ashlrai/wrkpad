@@ -354,7 +354,14 @@ To create and activate the daily profile safely:
 
 ```bash
 npm run profile:generate -- source-profile.json ashlr-agent-board.json daily
+npm run profile:check -- ashlr-agent-board.json daily
 ```
+
+`profile:check` fails closed unless the selected file is the exact generated
+one-layer variant: bounded root schema, profile and layer identity, all 20
+action macros, key/encoder/joystick mappings, lighting schema, and empty
+unsupported action groups. A `match` proves only that JSON file; it does not
+prove import, activation, device synchronization, or physical behavior.
 
 3. Inspect the generated **Ashlr Agent Board Corrected** profile name, **Ashlr
    Daily** layer, Mic mapping, and
@@ -456,7 +463,8 @@ Receipts are written with mode `0600` and include a SHA-256 over the canonical p
 ## Diagnostic bottom-row test
 
 1. Generate the disposable diagnostic profile from an ordinary export with
-   `npm run profile:generate -- source.json diagnostic.json diagnostic`.
+   `npm run profile:generate -- source.json diagnostic.json diagnostic`, then
+   require `npm run profile:check -- diagnostic.json diagnostic` to match.
 2. In an exclusive Input-only window, import and activate **Ashlr Flight Check
    Corrected - diagnostic**, then verify **Ashlr Diagnostic**. This performs the
    same two Input writes and restart/reconciliation checks as the daily profile.
