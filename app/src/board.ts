@@ -169,11 +169,19 @@ export const hybridNativeInputProfileConfigured = (profile: InputProfileStatus):
   && profile.configuredLayers[1]?.mapping === 'ashlr_daily'
   && profile.configuredLayers[1]?.encoderDirection === 'correct'
 
+export const singleAshlrDailyInputProfileConfigured = (profile: InputProfileStatus): boolean =>
+  profile.cacheStatus === 'available'
+  && profile.activeProfile === 'Ashlr Agent Board Corrected'
+  && profile.activeLayer === 'Ashlr Daily'
+  && profile.encoderDirection === 'correct'
+  && profile.configuredLayers?.length === 1
+  && profile.configuredLayers[0]?.name === 'Ashlr Daily'
+  && profile.configuredLayers[0]?.mapping === 'ashlr_daily'
+  && profile.configuredLayers[0]?.encoderDirection === 'correct'
+
 export const correctedInputProfileObservedForVariant = (profile: InputProfileStatus, variant: 'daily' | 'diagnostic', dualPlaneAshlrLayerAttested = false): boolean =>
   variant === 'daily'
-    ? (profile.activeProfile === 'Ashlr Agent Board Corrected'
-        && profile.activeLayer === 'Ashlr Daily'
-        && profile.encoderDirection === 'correct')
+    ? singleAshlrDailyInputProfileConfigured(profile)
       || (dualPlaneAshlrLayerAttested && dualPlaneInputProfileConfigured(profile))
     : profile.activeProfile === 'Ashlr Flight Check Corrected - diagnostic'
       && profile.activeLayer === 'Ashlr Diagnostic'

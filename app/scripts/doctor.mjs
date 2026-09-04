@@ -236,9 +236,14 @@ export function evaluateDoctor(probes, options = {}) {
     activeLayer: null,
     encoderDirection: 'unavailable',
   }
-  const dailyProfileReady = inputProfile.activeProfile === 'Ashlr Agent Board Corrected'
+  const dailyProfileReady = inputProfile.cacheStatus === 'available'
+    && inputProfile.activeProfile === 'Ashlr Agent Board Corrected'
     && inputProfile.activeLayer === 'Ashlr Daily'
     && inputProfile.encoderDirection === 'correct'
+    && inputProfile.configuredLayers?.length === 1
+    && inputProfile.configuredLayers[0]?.name === 'Ashlr Daily'
+    && inputProfile.configuredLayers[0]?.mapping === 'ashlr_daily'
+    && inputProfile.configuredLayers[0]?.encoderDirection === 'correct'
   const hybridProfileMatch = inputProfile.activeProfile === 'Ashlr Hybrid Dual Plane (UNOFFICIAL)'
   const hybridLayersMatch = exactHybridLayers(inputProfile.configuredLayers)
   const hybridProfileReady = inputProfile.cacheStatus === 'available'
@@ -382,6 +387,8 @@ export function evaluateDoctor(probes, options = {}) {
     modeGuidance: {
       codexNative: !nativePrerequisitesReady
         ? 'Native Codex requires the Creator Micro 2 over USB and ChatGPT desktop before its connection receipt can be evaluated.'
+        : nativeRouteSelected && dailyProfileReady && !nativeConnected
+          ? 'The read-only cache shows the exact Ashlr Daily shortcut keymap while Agent Board is passive and registers zero endpoints. If the board still emits that keymap, declaring Ashlr Layer is the reversible no-device-write fallback; cache evidence does not prove device synchronization.'
         : currentNativeFirmwareMissing
           ? 'Codex recently observed v.oai.rgbcfg RPC 404. Back up Input profiles, then qualify a reviewed vendor firmware candidate with Codex fully quit; release strings alone do not prove compatibility.'
           : nativeFirmwareMissing
@@ -406,7 +413,9 @@ export function evaluateDoctor(probes, options = {}) {
     },
     nextAction:
       failedRequiredIndex === -1
-        ? currentNativeFirmwareMissing && nativeRouteSelected
+        ? nativeRouteSelected && dailyProfileReady && !nativeConnected
+          ? 'Without changing the device or Input, declare Ashlr Layer in Agent Board to register the 20 observed shortcut endpoints, then test one key. This reversible fallback does not prove the board is synchronized; recover a native KV_OAI profile separately if native Codex ownership is still required.'
+          : currentNativeFirmwareMissing && nativeRouteSelected
           ? inputInstallation.status === 'verified'
             ? 'For the declared Codex Native route, back up the Input profile and plan a guarded vendor firmware qualification with Codex fully quit.'
             : `${inputRecoveryAction(inputInstallation.status)} This is required before another firmware qualification, not before a read-only native connection retry.`

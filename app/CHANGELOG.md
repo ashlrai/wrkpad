@@ -6,6 +6,15 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 
 ### Fixed
 
+- Include the Agent Board ancestor in the bounded macOS receiver probe so a
+  packaged app can verify itself and register all twenty declared shortcut
+  endpoints instead of falsely reporting zero receivers.
+- Hash packaged receiver identity through Electron's raw filesystem interface
+  without changing process-global ASAR behavior during preload startup.
+- Require the exact single-layer Ashlr Daily mapping before readiness can pass;
+  a partial cache or silent physical key now stays visibly unqualified.
+- Offer a one-click, no-device-write route recovery when the observed Ashlr
+  shortcut profile is active but Agent Board is still declared Codex Native.
 - Replace ambiguous layer-selection and Dual Plane claims with an explicit
   operator self-attestation, a visible native-response check, and the exact
   five-plus-two native action-switch grouping. The attention runway now labels

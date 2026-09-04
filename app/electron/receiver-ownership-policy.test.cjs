@@ -49,6 +49,10 @@ test('status IPC does not expose the local receiver executable path', () => {
 })
 
 test('packaged build identity is available independently of shortcut ownership', () => {
-  assert.match(source, /function currentPackagedAsarSha256\(\) \{[\s\S]*previousNoAsar = process\.noAsar[\s\S]*process\.noAsar = true[\s\S]*cachedReceiverAsarHash\(app\.getAppPath\(\)\)[\s\S]*process\.noAsar = previousNoAsar/)
+  assert.match(source, /originalFilesystem = require\('original-fs'\)/)
+  assert.match(source, /createCachedAsarHasher\(\{ ttlMs: 30_000, maxEntries: 32, filesystem: originalFilesystem \}\)/)
+  assert.match(source, /function inspectCurrentReceiverRuntime\(\) \{[\s\S]*inspectReceiverRuntime\(\{ currentPid: process\.pid, hashAsar: cachedReceiverAsarHash \}\)/)
+  assert.match(source, /function currentPackagedAsarSha256\(\) \{[\s\S]*cachedReceiverAsarHash\(app\.getAppPath\(\)\)/)
   assert.match(source, /appAsarSha256: currentReceiverRuntime\.currentAsarSha256 \?\? currentPackagedAsarSha256\(\)/)
+  assert.doesNotMatch(source, /process\.noAsar|withRawAsarFilesystem/)
 })

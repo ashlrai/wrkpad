@@ -17,6 +17,9 @@ const requiredProbes = {
     activeProfile: 'Ashlr Agent Board Corrected',
     activeLayer: 'Ashlr Daily',
     encoderDirection: 'correct',
+    configuredLayers: [
+      { name: 'Ashlr Daily', mapping: 'ashlr_daily', encoderDirection: 'correct' },
+    ],
   },
   inputRuntime: {
     status: 'not_observed', profileIndex: null, layerIndex: null, observedAt: null, fresh: false,
@@ -98,6 +101,22 @@ test('missing Work Louder Input fails doctor and leads with installation', () =>
   assert.match(result.nextAction, /Install the signed Work Louder Input app/)
 })
 
+test('does not call a partial or silent-key Ashlr cache ready', () => {
+  const result = evaluateDoctor({
+    ...requiredProbes,
+    ...missingOptionalProbes,
+    boardRoute: 'ashlr_layer',
+    inputProfile: {
+      ...requiredProbes.inputProfile,
+      configuredLayers: [{ name: 'Ashlr Daily', mapping: 'unknown', encoderDirection: 'correct' }],
+    },
+  })
+
+  assert.equal(result.inputProfile.dailyProfileReady, false)
+  assert.equal(result.readiness.ashlrLayer.reason, 'input_profile_requires_activation')
+  assert.match(result.nextAction, /Set as current profile for Ashlr Agent Board Corrected/)
+})
+
 test('required Input check passes only an exact verified installation receipt', () => {
   const verified = evaluateDoctor({ ...requiredProbes, ...missingOptionalProbes })
   assert.deepEqual(verified.inputInstallation, { status: 'verified', version: '0.18.4' })
@@ -168,7 +187,8 @@ test('Codex Native treats Input integrity as advisory during a connection retry'
     name: 'Work Louder Input', ok: false, detail: 'Input.app has the known modified signed resource v0.18.4',
     category: 'optional', severity: 'warning', blocking: false, code: 'known_resource_mutation',
   })
-  assert.match(result.nextAction, /prepare Agent Board’s passive Codex Native handoff successfully/)
+  assert.match(result.nextAction, /declare Ashlr Layer in Agent Board to register the 20 observed shortcut endpoints/)
+  assert.match(result.modeGuidance.codexNative, /passive and registers zero endpoints/)
   assert.doesNotMatch(result.nextAction, /replace|repair|re-sign/)
   assert.doesNotMatch(JSON.stringify(result), /Users|private|secret|window-info-retriever/)
 })
@@ -181,6 +201,7 @@ test('Codex Native requires verified Input only before a fresh firmware qualific
     chatgpt: { ok: true, detail: 'installed' },
     nativeCodex: { ok: false, code: 'firmware_rpc_missing', detail: 'RPC 404', fresh: true },
     inputInstallation: { status: 'invalid_signature', version: '0.18.4' },
+    inputProfile: { cacheStatus: 'missing', activeProfile: null, activeLayer: null, encoderDirection: 'unavailable' },
   })
 
   assert.equal(result.ok, true)
@@ -275,6 +296,7 @@ test('native route guidance does not promote Ashlr receiver recovery over native
     boardRoute: 'codex_native',
     chatgpt: { ok: true, detail: 'installed' },
     nativeCodex: { ok: false, code: 'firmware_rpc_missing', detail: 'RPC 404', fresh: true },
+    inputProfile: { cacheStatus: 'missing', activeProfile: null, activeLayer: null, encoderDirection: 'unavailable' },
     receiverRuntime: {
       status: 'contended_same_build', instanceCount: 2, distinctBuildCount: 1,
       currentAsarSha256: receiverHash, candidateAsarSha256: receiverHash, candidateMatchesCurrent: true,
@@ -414,6 +436,7 @@ test('native firmware RPC failure receives specific nonblocking recovery guidanc
     boardRoute: 'codex_native',
     chatgpt: { ok: true, detail: 'installed' },
     nativeCodex: { ok: false, code: 'firmware_rpc_missing', detail: 'RPC 404', fresh: true },
+    inputProfile: { cacheStatus: 'missing', activeProfile: null, activeLayer: null, encoderDirection: 'unavailable' },
   })
 
   assert.equal(result.ok, true)

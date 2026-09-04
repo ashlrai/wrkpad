@@ -1,4 +1,5 @@
 const { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, screen, shell } = require('electron')
+const originalFilesystem = require('original-fs')
 const { spawn } = require('node:child_process')
 const { createHash, randomUUID } = require('node:crypto')
 const { existsSync, lstatSync, mkdirSync, renameSync, writeFileSync } = require('node:fs')
@@ -50,7 +51,7 @@ const flightSession = createFlightSession()
 const flightOperations = createFlightOperationCoordinator(flightSession)
 let activeFlightAdmission = null
 let flightAdmissionMutation = 0
-const cachedReceiverAsarHash = createCachedAsarHasher({ ttlMs: 30_000, maxEntries: 32 })
+const cachedReceiverAsarHash = createCachedAsarHasher({ ttlMs: 30_000, maxEntries: 32, filesystem: originalFilesystem })
 const inspectInputInstallationAsync = createInputInstallationInspector()
 const shortcutCallbackGuard = createShortcutCallbackGuard()
 const cmuxFocusAdapter = createCmuxFocusAdapter({ foreground: () => openFixedApp('cmux') })
@@ -323,21 +324,16 @@ function inspectCurrentReceiverRuntime() {
     }
     return { status: 'unavailable', instanceCount: peers.status === 'present' ? peers.instanceCount + 1 : 0, distinctBuildCount: 0, currentAsarSha256: null, candidateAsarSha256: null, candidateMatchesCurrent: null, inputApplication }
   }
-  return { ...inspectReceiverRuntime({ currentPid: process.pid, hashAsar: cachedReceiverAsarHash }), inputApplication }
+  return {
+    ...inspectReceiverRuntime({ currentPid: process.pid, hashAsar: cachedReceiverAsarHash }),
+    inputApplication,
+  }
 }
 
 function currentPackagedAsarSha256() {
   if (!app.isPackaged) return null
-  // Electron's default fs wrapper treats the archive as a virtual directory.
-  // Disable that wrapper only for this synchronous, bounded raw-file hash.
-  const previousNoAsar = process.noAsar
-  try {
-    process.noAsar = true
-    const hashed = cachedReceiverAsarHash(app.getAppPath())
-    return hashed.status === 'available' ? hashed.sha256 : null
-  } finally {
-    process.noAsar = previousNoAsar
-  }
+  const hashed = cachedReceiverAsarHash(app.getAppPath())
+  return hashed.status === 'available' ? hashed.sha256 : null
 }
 
 function receiverOwnsShortcuts(runtime, boardRoute) {

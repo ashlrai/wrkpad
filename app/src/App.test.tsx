@@ -10,6 +10,9 @@ const correctedInputProfile = {
   activeProfile: 'Ashlr Agent Board Corrected',
   activeLayer: 'Ashlr Daily',
   encoderDirection: 'correct' as const,
+  configuredLayers: [
+    { name: 'Ashlr Daily', mapping: 'ashlr_daily' as const, encoderDirection: 'correct' as const },
+  ],
 }
 
 const dualPlaneInputProfile = {
@@ -160,6 +163,35 @@ describe('operator interface', () => {
     expect((screen.getByRole('button', { name: 'Turn dial counterclockwise' }) as HTMLButtonElement).disabled).toBe(false)
     expect((screen.getByRole('button', { name: 'Joystick up' }) as HTMLButtonElement).disabled).toBe(false)
     expect(screen.getByText(/Exact Claude task or cmux pane focus is not claimed/i)).toBeTruthy()
+  })
+
+  it('offers a no-device-write Ashlr fallback when the observed keymap cannot drive Codex Native', async () => {
+    const setBoardRoute = vi.fn().mockResolvedValue('ashlr_layer')
+    window.agentBoard = {
+      getStatus: vi.fn().mockResolvedValue({
+        boardConnected: true, boardVidPid: '303A:8298', inputInstalled: true, inputMonitoring: 'unverified',
+        inputInstallation: { status: 'known_resource_mutation', version: '0.18.4' },
+        inputProfile: correctedInputProfile,
+        inputApplication: { status: 'not_running' },
+        receiverRuntime: trustedHardwareDiagnostics.receiverRuntime,
+        codex: true, claude: true, ashlr: true, boardRoute: 'codex_native',
+        workspace: '/tmp', shortcutCount: 0,
+        shortcutRegistrations: [], workspaceSnapshot: null, receiverIdentity: null,
+      }),
+      getMissionControl: vi.fn().mockResolvedValue(initialUnavailableMission()),
+      getNativeControlCheck: vi.fn().mockResolvedValue(null),
+      setBoardRoute, focusAgentSlot: vi.fn(), setProfile: vi.fn(), setFlightCheck: vi.fn(),
+      requestAction: vi.fn(), confirmAction: vi.fn(), beginHold: vi.fn(), cancelHold: vi.fn(),
+      chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(), onControl: vi.fn(() => () => {}),
+    } as unknown as NonNullable<typeof window.agentBoard>
+
+    render(<App />)
+    expect(await screen.findByText('Possible native-layer mismatch')).toBeTruthy()
+    expect(screen.getByText(/exact Ashlr shortcut keymap while Agent Board is passive/i)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Use observed Ashlr keymap now/i }))
+    await waitFor(() => expect(setBoardRoute).toHaveBeenCalledWith('ashlr_layer'))
+    expect(screen.getByText('Expected board route saved')).toBeTruthy()
+    expect(screen.getByText(/did not change the board, firmware, Input, Codex configuration, or another process/i)).toBeTruthy()
   })
 
   it('keeps Codex Native observer-only and out of the Ashlr Flight Check', async () => {

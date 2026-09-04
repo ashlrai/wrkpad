@@ -839,7 +839,13 @@ function App() {
           <button type="button" onClick={() => changeView('setup')}><span className="attention-dot" /> {status.boardRoute === 'codex_native' ? 'Open native acceptance handoff' : status.boardRoute === 'ashlr_layer' ? 'Input Monitoring needs human verification' : status.boardRoute === 'hybrid_native' ? 'Open hybrid acceptance gates' : 'Choose a route in Setup'} <ChevronRight size={13} /></button>
         </div>
 
-        {nativeRoute && <NativeRouteTruth status={status} receipt={nativeControlReceipt} onOpenSetup={() => changeView('setup')} />}
+        {nativeRoute && <NativeRouteTruth
+          status={status}
+          receipt={nativeControlReceipt}
+          routeSaving={routeSaving}
+          onUseObservedAshlrRoute={() => void declareBoardRoute('ashlr_layer')}
+          onOpenSetup={() => changeView('setup')}
+        />}
         {hybridRoute && <HybridRouteTruth status={status} onOpenSetup={() => changeView('setup')} />}
 
         <div className="mission-control-grid">
@@ -923,7 +929,13 @@ function StatusPill({ label, tone, icon }: { label: string; tone: 'ready' | 'obs
   return <span className={`status-pill ${tone}`}>{icon}<i />{label}</span>
 }
 
-function NativeRouteTruth({ status, receipt, onOpenSetup }: { status: SystemStatus; receipt: NativeControlCheckReceipt | null; onOpenSetup: () => void }) {
+function NativeRouteTruth({ status, receipt, routeSaving, onUseObservedAshlrRoute, onOpenSetup }: {
+  status: SystemStatus
+  receipt: NativeControlCheckReceipt | null
+  routeSaving: boolean
+  onUseObservedAshlrRoute: () => void
+  onOpenSetup: () => void
+}) {
   const nativeCodexMicro = status.nativeCodexMicro ?? initialStatus.nativeCodexMicro
   const initializationObserved = nativeCodexMicro.status === 'connected' && nativeCodexMicro.fresh === true
   const possibleLayerMismatch = correctedInputProfileObserved(status.inputProfile ?? initialStatus.inputProfile)
@@ -950,7 +962,15 @@ function NativeRouteTruth({ status, receipt, onOpenSetup }: { status: SystemStat
         <h2 id="native-route-truth-title">Connected is not the same as input-ready.</h2>
         <p>Codex Settings can say Connected while no board event reaches a task. Treat these four checks separately.</p>
       </div>
-      <button type="button" onClick={onOpenSetup}>{hasProblem ? 'Open control recovery' : 'Open physical check'} <ChevronRight size={14} /></button>
+      <div className="native-truth-actions">
+        {possibleLayerMismatch && <button
+          type="button"
+          className="recovery-primary"
+          disabled={routeSaving}
+          onClick={onUseObservedAshlrRoute}
+        >{routeSaving ? 'Switching…' : 'Use observed Ashlr keymap now'} <Play size={14} /></button>}
+        <button type="button" className={possibleLayerMismatch ? 'recovery-secondary' : ''} onClick={onOpenSetup}>{hasProblem ? 'Open control recovery' : 'Open physical check'} <ChevronRight size={14} /></button>
+      </div>
     </div>
     <ol className="native-truth-grid">
       <li className={status.boardConnected ? 'observed' : 'problem'}>
@@ -966,7 +986,7 @@ function NativeRouteTruth({ status, receipt, onOpenSetup }: { status: SystemStat
       <li className={possibleLayerMismatch ? 'problem' : 'pending'}>
         <span>03 · Active layer</span>
         <strong>{possibleLayerMismatch ? 'Possible native-layer mismatch' : 'Native layer still needs verification'}</strong>
-        <small>{possibleLayerMismatch ? 'Do not change the existing profile. Require verified Input integrity, then follow the canonical native-layer recovery guide with rollback exports and a new candidate profile.' : 'Select white WIRED mode, then verify first-position badge 1 contains native KV_OAI bindings. A layer number alone is not content proof.'}</small>
+        <small>{possibleLayerMismatch ? 'The cached profile is the exact Ashlr shortcut keymap while Agent Board is passive. Use the no-write fallback above to register its 20 desktop endpoints now. Do not change the existing profile. Require verified Input integrity plus rollback exports and a new candidate profile before native recovery later.' : 'Select white WIRED mode, then verify first-position badge 1 contains native KV_OAI bindings. A layer number alone is not content proof.'}</small>
       </li>
       <li className={physicalState.tone}>
         <span>04 · Physical acceptance</span>

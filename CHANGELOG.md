@@ -72,6 +72,12 @@ All notable changes will be documented here. The project follows semantic versio
 
 ### Fixed
 
+- Fix packaged macOS shortcut ownership by including the Agent Board ancestor
+  in receiver discovery and replacing process-global ASAR toggling with
+  race-free raw archive inspection. The live acceptance target is one hashed
+  receiver and twenty registered endpoints before any physical pass is claimed.
+- Keep partial or silent-key Input profiles out of Ashlr readiness and expose a
+  reversible no-device-write route fallback for an already observed Ashlr map.
 - Keep a provider session on one private slot when its working directory is
   added, omitted, or changed between lifecycle hooks.
 - For an existing private binding, reject older non-duplicate lifecycle events

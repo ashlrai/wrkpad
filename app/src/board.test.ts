@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { actions, allControlIds, correctedInputProfileObserved, correctedInputProfileObservedForVariant, dualPlaneInputProfileConfigured, hardware, hybridNativeInputProfileConfigured, profileOrder, profiles } from './board'
+import { actions, allControlIds, correctedInputProfileObserved, correctedInputProfileObservedForVariant, dualPlaneInputProfileConfigured, hardware, hybridNativeInputProfileConfigured, profileOrder, profiles, singleAshlrDailyInputProfileConfigured } from './board'
 
 describe('board contract', () => {
   it('maps every physical signal in every profile', () => {
@@ -47,11 +47,19 @@ describe('board contract', () => {
       activeProfile: 'Ashlr Agent Board Corrected',
       activeLayer: 'Ashlr Daily',
       encoderDirection: 'correct' as const,
+      configuredLayers: [
+        { name: 'Ashlr Daily', mapping: 'ashlr_daily' as const, encoderDirection: 'correct' as const },
+      ],
     }
     expect(correctedInputProfileObserved(corrected)).toBe(true)
     expect(correctedInputProfileObserved({ ...corrected, activeProfile: 'Ashlr Agent Board' })).toBe(false)
     expect(correctedInputProfileObserved({ ...corrected, activeLayer: 'Other' })).toBe(false)
     expect(correctedInputProfileObserved({ ...corrected, encoderDirection: 'reversed' })).toBe(false)
+    expect(singleAshlrDailyInputProfileConfigured({
+      ...corrected,
+      configuredLayers: [{ name: 'Ashlr Daily', mapping: 'unknown', encoderDirection: 'correct' }],
+    })).toBe(false)
+    expect(singleAshlrDailyInputProfileConfigured({ ...corrected, configuredLayers: [] })).toBe(false)
     const diagnostic = {
       ...corrected,
       activeProfile: 'Ashlr Flight Check Corrected - diagnostic',
