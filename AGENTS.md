@@ -12,14 +12,20 @@ agents. Keep it concise and keep provider-specific files pointed here.
    editing. Existing prose is not proof of implementation.
 4. Run `node tools/agent-preflight.mjs inspect --route <route> --json` when the
    task touches setup, hooks, providers, hardware, or release readiness.
-5. Choose the route explicitly: `ashlr_layer` for daily cross-provider use, or
-   `codex_native` for exclusive native-firmware qualification. Never combine
-   their readiness claims.
+5. Choose the route explicitly: `ashlr_layer` for daily cross-provider use,
+   `codex_native` for exclusive native-firmware qualification, or the opt-in
+   `hybrid_native` experiment for Codex-owned Agent keys plus fourteen Agent
+   Board shortcuts. Never combine their readiness claims. Use
+   `app/docs/hybrid-native-profile.md` and the route-specific checks for Hybrid.
 6. For hardware/setup work, inspect `requested_route` and `declared_route`. On
-   `ashlr_layer`, also inspect `input_profile` and `input_runtime`. Never infer
+   `ashlr_layer` or `hybrid_native`, also inspect `input_profile` and
+   `input_runtime`. Never infer
    the current profile from Input's editor/header, board synchronization from
-   cache state, or physical acceptance from either. Protected `KV_OAI_*`
-   recovery is a human Input-only operation, never an agent rewrite or deletion.
+   cache state, or physical acceptance from either. On explicit request, an
+   agent may generate a new, fixed, reviewed, clearly unofficial `KV_OAI_*`
+   profile or layer-import artifact offline. Import, activation, cache/device/HID writes,
+   reset, deletion, and transformation of a live protected layer remain human
+   Input-only operations.
 
 ## Repository map
 
@@ -30,6 +36,8 @@ agents. Keep it concise and keep provider-specific files pointed here.
 - `docs/`: core setup, operations, ownership, and release procedures.
 - `app/docs/`: desktop setup, controls, troubleshooting, and readiness.
 - `tools/`: dependency-free repository checks intended for humans and agents.
+- `.agents/skills/ashlr-delivery/`: shared Amplify, Verify, Polish, and Advance
+  delivery workflow for Codex and Claude Code.
 
 ## Safe automation boundary
 
@@ -120,6 +128,7 @@ cannot substitute for it.
 Flag any change that creates an unguarded consequential action, weakens
 loopback/authentication/privacy bounds, treats process absence as exclusive HID
 ownership, runs hook/service operations from a build-tree binary, conflates the
-two board routes, or promotes tests/builds into provider/physical/release claims.
+three board routes, or promotes tests/builds into provider/physical/release
+claims.
 The safe path is an explicit actor, authority class, confirmation or hold,
 rollback, and evidence-layer statement.

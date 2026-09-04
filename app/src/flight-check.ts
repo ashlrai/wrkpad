@@ -1,15 +1,15 @@
-import type { ControlId } from './board'
+import type { BoardRoute, ControlId } from './board'
 
 export type FlightVariant = 'daily' | 'diagnostic'
 export interface FlightStep { label: string; instruction: string; signals: ControlId[]; requiredCount?: number }
 export interface FlightEvent { signal: ControlId; receivedAt: string; sequence: number; accelerator: string; monotonicNs: string; expectedSignals: ControlId[]; matched: boolean }
 
 export const diagnosticFlightSteps: FlightStep[] = [
-  { label: 'Dial left', instruction: 'Turn the top-right rotary dial three slow detents counterclockwise. The bottom-left circle is the layer and connection selector, not the dial.', signals: ['dialLeft'], requiredCount: 3 },
-  { label: 'Dial right', instruction: 'Turn the top-right rotary dial three slow detents clockwise.', signals: ['dialRight'], requiredCount: 3 },
-  { label: 'Dial press', instruction: 'Press the top-right rotary dial once.', signals: ['dialPress'] },
-  { label: 'Agent 1', instruction: 'Press the upper Agent key beside the white joystick.', signals: ['agent1'] },
-  { label: 'Agent 2', instruction: 'Press the upper Agent key beside the black dial.', signals: ['agent2'] },
+  { label: 'Dial left', instruction: 'Turn the top-left rotary dial three slow detents counterclockwise. The bottom-left circle is the layer and connection selector, not the dial.', signals: ['dialLeft'], requiredCount: 3 },
+  { label: 'Dial right', instruction: 'Turn the top-left rotary dial three slow detents clockwise.', signals: ['dialRight'], requiredCount: 3 },
+  { label: 'Dial press', instruction: 'Press the top-left rotary dial once.', signals: ['dialPress'] },
+  { label: 'Agent 1', instruction: 'Press the first upper Agent key, immediately right of the dial.', signals: ['agent1'] },
+  { label: 'Agent 2', instruction: 'Press the second upper Agent key, immediately left of the planar stick.', signals: ['agent2'] },
   { label: 'Joystick up', instruction: 'Push the joystick upward, then return it to center.', signals: ['joyUp'] },
   { label: 'Joystick right', instruction: 'Push the joystick right, then return it to center.', signals: ['joyRight'] },
   { label: 'Joystick down', instruction: 'Push the joystick downward, then return it to center.', signals: ['joyDown'] },
@@ -22,15 +22,32 @@ export const diagnosticFlightSteps: FlightStep[] = [
   { label: 'Action 2', instruction: 'Press the check key.', signals: ['cmd2'] },
   { label: 'Action 3', instruction: 'Press the X key.', signals: ['cmd3'] },
   { label: 'Action 4', instruction: 'Press the split key.', signals: ['cmd4'] },
-  { label: 'Mic cap', instruction: 'Press the wide Mic cap once; both hidden switches must report.', signals: ['cmd5', 'cmd6'] },
-  { label: 'Action 7', instruction: 'Press the brain key.', signals: ['cmd7'] },
+  { label: 'Action 5', instruction: 'Press the ACT10 key immediately right of the touch selector.', signals: ['cmd5'] },
+  { label: 'Action 6', instruction: 'Press the ACT11 key immediately left of the transparent key.', signals: ['cmd6'] },
+  { label: 'Action 7', instruction: 'Press the transparent ACT12 key at bottom right.', signals: ['cmd7'] },
 ]
 
-export const dailyFlightSteps: FlightStep[] = diagnosticFlightSteps.map((step) => step.label === 'Mic cap'
-  ? { ...step, instruction: 'Press the wide Mic cap once; the daily profile should report ACT10 only.', signals: ['cmd5'] }
-  : step)
+export const dailyFlightSteps: FlightStep[] = diagnosticFlightSteps
 
-export const stepsForVariant = (variant: FlightVariant) => variant === 'diagnostic' ? diagnosticFlightSteps : dailyFlightSteps
+export const hybridNativeFlightSteps: FlightStep[] = [
+  { label: 'Action 1', instruction: 'Press ACT06, the lightning key.', signals: ['cmd1'] },
+  { label: 'Action 2', instruction: 'Press ACT07, the check key.', signals: ['cmd2'] },
+  { label: 'Action 3', instruction: 'Press ACT08, the X key.', signals: ['cmd3'] },
+  { label: 'Action 4', instruction: 'Press ACT09, the split key.', signals: ['cmd4'] },
+  { label: 'Action 5', instruction: 'Press ACT10 immediately right of the touch selector.', signals: ['cmd5'] },
+  { label: 'Action 6', instruction: 'Press ACT11 immediately left of the transparent key.', signals: ['cmd6'] },
+  { label: 'Action 7', instruction: 'Press the transparent ACT12 key at bottom right.', signals: ['cmd7'] },
+  { label: 'Joystick up', instruction: 'Push the top-right planar stick upward, then return it to center.', signals: ['joyUp'] },
+  { label: 'Joystick right', instruction: 'Push the top-right planar stick right, then return it to center.', signals: ['joyRight'] },
+  { label: 'Joystick down', instruction: 'Push the top-right planar stick downward, then return it to center.', signals: ['joyDown'] },
+  { label: 'Joystick left', instruction: 'Push the top-right planar stick left, then return it to center.', signals: ['joyLeft'] },
+  { label: 'Dial left', instruction: 'Turn the top-left rotary dial one detent counterclockwise. The bottom-left circle is the firmware selector, not the dial.', signals: ['dialLeft'] },
+  { label: 'Dial right', instruction: 'Turn the top-left rotary dial one detent clockwise.', signals: ['dialRight'] },
+  { label: 'Dial press', instruction: 'Press the top-left rotary dial once.', signals: ['dialPress'] },
+]
+
+export const stepsForVariant = (variant: FlightVariant, route: BoardRoute = 'ashlr_layer') =>
+  route === 'hybrid_native' ? hybridNativeFlightSteps : variant === 'diagnostic' ? diagnosticFlightSteps : dailyFlightSteps
 
 export const flightStepComplete = (step: FlightStep, events: FlightEvent[]) => {
   const matched = events.filter((event) => event.matched && event.expectedSignals.join('|') === step.signals.join('|'))
@@ -40,8 +57,8 @@ export const flightStepComplete = (step: FlightStep, events: FlightEvent[]) => {
   return first.some((left) => second.some((right) => Math.abs(new Date(left.receivedAt).getTime() - new Date(right.receivedAt).getTime()) <= 250))
 }
 
-export const expectedSignalsAfter = (variant: FlightVariant, events: FlightEvent[]) =>
-  stepsForVariant(variant).find((step) => !flightStepComplete(step, events))?.signals ?? []
+export const expectedSignalsAfter = (variant: FlightVariant, events: FlightEvent[], route: BoardRoute = 'ashlr_layer') =>
+  stepsForVariant(variant, route).find((step) => !flightStepComplete(step, events))?.signals ?? []
 
 export const noSignalRecoveryNeeded = (
   active: boolean,
@@ -60,8 +77,9 @@ export const flightAcceptance = (
   boardConnected: boolean,
   shortcutCount: number,
   requiredShortcuts: number,
+  route: BoardRoute = 'ashlr_layer',
 ) => {
-  const steps = stepsForVariant(variant)
+  const steps = stepsForVariant(variant, route)
   const routesComplete = steps.every((step) => flightStepComplete(step, events))
   const problemCount = events.filter((event) => !event.matched).length
   const preflightReady = boardConnected && shortcutCount === requiredShortcuts

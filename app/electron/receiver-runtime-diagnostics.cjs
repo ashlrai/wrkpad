@@ -1,6 +1,6 @@
 const { createHash } = require('node:crypto')
 const { execFileSync } = require('node:child_process')
-const { closeSync, constants, fstatSync, lstatSync, openSync, readSync } = require('node:fs')
+const defaultFilesystem = require('node:fs')
 const path = require('node:path')
 
 const MAIN_EXECUTABLE_SUFFIX = `${path.sep}Ashlr Agent Board.app${path.sep}Contents${path.sep}MacOS${path.sep}Ashlr Agent Board`
@@ -64,20 +64,31 @@ function executablePathForAsar(asarPath) {
   return `${asarPath.slice(0, -BUNDLE_ASAR_SUFFIX.length)}${MAIN_EXECUTABLE_SUFFIX}`
 }
 
-function hashBoundedAsar(filePath) {
+function validFilesystem(filesystem) {
+  return Boolean(filesystem)
+    && typeof filesystem.lstatSync === 'function'
+    && typeof filesystem.openSync === 'function'
+    && typeof filesystem.fstatSync === 'function'
+    && typeof filesystem.readSync === 'function'
+    && typeof filesystem.closeSync === 'function'
+    && Number.isInteger(filesystem.constants?.O_RDONLY)
+}
+
+function hashBoundedAsar(filePath, filesystem = defaultFilesystem) {
   if (!validLocalPath(filePath) || path.basename(filePath) !== 'app.asar') return { status: 'unsafe', sha256: null }
+  if (!validFilesystem(filesystem)) return { status: 'unavailable', sha256: null }
   let descriptor
   try {
-    const pathStats = lstatSync(filePath)
+    const pathStats = filesystem.lstatSync(filePath)
     if (!pathStats.isFile() || pathStats.isSymbolicLink()) return { status: 'unsafe', sha256: null }
-    descriptor = openSync(filePath, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0))
-    const stats = fstatSync(descriptor)
+    descriptor = filesystem.openSync(filePath, filesystem.constants.O_RDONLY | (filesystem.constants.O_NOFOLLOW ?? 0))
+    const stats = filesystem.fstatSync(descriptor)
     if (!stats.isFile() || stats.size < 1 || stats.size > MAX_ASAR_BYTES) return { status: 'unsafe', sha256: null }
     const hash = createHash('sha256')
     const buffer = Buffer.alloc(Math.min(HASH_CHUNK_BYTES, stats.size))
     let offset = 0
     while (offset < stats.size) {
-      const bytesRead = readSync(descriptor, buffer, 0, Math.min(buffer.length, stats.size - offset), offset)
+      const bytesRead = filesystem.readSync(descriptor, buffer, 0, Math.min(buffer.length, stats.size - offset), offset)
       if (bytesRead <= 0) return { status: 'unavailable', sha256: null }
       hash.update(buffer.subarray(0, bytesRead))
       offset += bytesRead
@@ -86,14 +97,15 @@ function hashBoundedAsar(filePath) {
   } catch (error) {
     return { status: error?.code === 'ENOENT' ? 'missing' : 'unavailable', sha256: null }
   } finally {
-    if (descriptor !== undefined) closeSync(descriptor)
+    if (descriptor !== undefined) filesystem.closeSync(descriptor)
   }
 }
 
-function boundedAsarIdentity(filePath) {
+function boundedAsarIdentity(filePath, filesystem = defaultFilesystem) {
   if (!validLocalPath(filePath) || path.basename(filePath) !== 'app.asar') return { status: 'unsafe', identity: null }
+  if (!validFilesystem(filesystem)) return { status: 'unavailable', identity: null }
   try {
-    const stats = lstatSync(filePath, { bigint: true })
+    const stats = filesystem.lstatSync(filePath, { bigint: true })
     if (!stats.isFile() || stats.isSymbolicLink() || stats.size < 1n || stats.size > BigInt(MAX_ASAR_BYTES)) {
       return { status: 'unsafe', identity: null }
     }
@@ -116,16 +128,17 @@ function createCachedAsarHasher(options = {}) {
   const ttlMs = options.ttlMs ?? DEFAULT_HASH_CACHE_TTL_MS
   const maxEntries = options.maxEntries ?? DEFAULT_HASH_CACHE_MAX_ENTRIES
   const now = options.now ?? Date.now
-  const hashAsar = options.hashAsar ?? hashBoundedAsar
+  const filesystem = options.filesystem ?? defaultFilesystem
+  const hashAsar = options.hashAsar ?? ((filePath) => hashBoundedAsar(filePath, filesystem))
   if (!Number.isInteger(ttlMs) || ttlMs < 0 || ttlMs > MAX_HASH_CACHE_TTL_MS
     || !Number.isInteger(maxEntries) || maxEntries < 1 || maxEntries > MAX_HASH_CACHE_ENTRIES
-    || typeof now !== 'function' || typeof hashAsar !== 'function') {
+    || typeof now !== 'function' || typeof hashAsar !== 'function' || !validFilesystem(filesystem)) {
     throw new TypeError('Invalid bounded ASAR cache options')
   }
 
   const cache = new Map()
   return (filePath) => {
-    const before = boundedAsarIdentity(filePath)
+    const before = boundedAsarIdentity(filePath, filesystem)
     if (before.status !== 'available') return { status: before.status, sha256: null }
     let observedAt
     try {
@@ -151,7 +164,7 @@ function createCachedAsarHasher(options = {}) {
     }
     const normalized = normalizeHashResult(hashed)
     if (normalized.status !== 'available') return normalized
-    const after = boundedAsarIdentity(filePath)
+    const after = boundedAsarIdentity(filePath, filesystem)
     if (after.status !== 'available' || after.identity !== before.identity) {
       return { status: 'unavailable', sha256: null }
     }
@@ -299,7 +312,7 @@ function classifyReceiverRuntime(processText, options = {}) {
 }
 
 /**
- * Runs a fixed, anchored `/usr/bin/pgrep -fl` probe unless processText is
+ * Runs a fixed, anchored `/usr/bin/pgrep -a -f -l` probe unless processText is
  * supplied. An injected
  * run function receives the same fixed executable, argv, and bounded options and
  * must return a UTF-8 string (or null to report unavailable).
@@ -309,7 +322,10 @@ function inspectReceiverRuntime(options = {}) {
   if (processText === undefined) {
     try {
       const run = options.run ?? execFileSync
-      processText = run('/usr/bin/pgrep', ['-fl', RECEIVER_PROCESS_PATTERN], {
+      // macOS excludes all ancestors by default. This probe is Agent Board's
+      // child, so -a is required or the receiver falsely disappears from its
+      // own process snapshot.
+      processText = run('/usr/bin/pgrep', ['-a', '-f', '-l', RECEIVER_PROCESS_PATTERN], {
         encoding: 'utf8',
         timeout: 2_000,
         maxBuffer: MAX_PROCESS_OUTPUT_BYTES,
@@ -329,7 +345,7 @@ function inspectPackagedReceiverPeers(options = {}) {
   if (processText === undefined) {
     try {
       const run = options.run ?? execFileSync
-      processText = run('/usr/bin/pgrep', ['-fl', RECEIVER_PROCESS_PATTERN], {
+      processText = run('/usr/bin/pgrep', ['-a', '-f', '-l', RECEIVER_PROCESS_PATTERN], {
         encoding: 'utf8',
         timeout: 2_000,
         maxBuffer: MAX_PROCESS_OUTPUT_BYTES,

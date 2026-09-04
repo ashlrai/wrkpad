@@ -95,7 +95,7 @@ export function validateCanonicalCommands(root) {
 
   if (!support.includes('npm --prefix app run doctor')) failures.push('app/SUPPORT.md: root doctor command must use --prefix app')
   if (!readme.includes('cargo install --path . --locked --root "$HOME/.local"')) failures.push('README.md: stable user-local install command missing')
-  for (const route of ['ashlr_layer', 'codex_native']) {
+  for (const route of ['ashlr_layer', 'codex_native', 'hybrid_native']) {
     if (!readme.includes(`--route ${route}`)) failures.push(`README.md: ${route} preflight example missing`)
   }
   for (const script of ['doctor', 'agent:preflight', 'lint', 'test', 'build']) {

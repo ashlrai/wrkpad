@@ -12,7 +12,11 @@ const MAX_LOCAL_PATH_LENGTH = 4096
 const MAX_EXECUTABLE_ENTRIES = 64
 const MAX_HELPER_STABILITY_ATTEMPTS = 3
 const PROBE_TIMEOUT_MS = 5_000
-const TOTAL_PROBE_BUDGET_MS = 10_000
+// Deep signature and Gatekeeper assessment traverse the entire Electron bundle
+// and can legitimately outlive the cheap metadata probes. They remain bounded
+// individually and by one shared deadline so a stalled verifier still fails closed.
+const TRUST_PROBE_TIMEOUT_MS = 20_000
+const TOTAL_PROBE_BUDGET_MS = 60_000
 const RETRY_HELPER_STABILITY = Symbol('retry_helper_stability')
 const FIXED_EXECUTABLES = new Set([
   '/usr/bin/codesign',
@@ -76,20 +80,26 @@ function createTiming(now = () => performance.now()) {
   }
 }
 
-function remainingTimeout(timing) {
+function remainingTimeout(timing, commandTimeoutMs = PROBE_TIMEOUT_MS) {
   try {
     const current = timing.now()
     if (!Number.isFinite(current) || current < timing.last) return null
     timing.last = current
     const remaining = Math.floor(timing.deadline - current)
-    return remaining > 0 ? Math.min(PROBE_TIMEOUT_MS, remaining) : null
+    return remaining > 0 ? Math.min(commandTimeoutMs, remaining) : null
   } catch {
     return null
   }
 }
 
+function commandTimeout(executable, args) {
+  if (executable === '/usr/sbin/spctl') return TRUST_PROBE_TIMEOUT_MS
+  if (executable === '/usr/bin/codesign' && args[0] === '--verify') return TRUST_PROBE_TIMEOUT_MS
+  return PROBE_TIMEOUT_MS
+}
+
 function execute(runner, executable, args, timing) {
-  const timeout = remainingTimeout(timing)
+  const timeout = remainingTimeout(timing, commandTimeout(executable, args))
   if (timeout === null) return null
   try {
     const completed = normalizeRun(runner(executable, args, { timeout }))
@@ -276,6 +286,8 @@ module.exports = {
   INPUT_TEAM_ID,
   MAX_COMMAND_OUTPUT_BYTES,
   PROBE_TIMEOUT_MS,
+  TOTAL_PROBE_BUDGET_MS,
+  TRUST_PROBE_TIMEOUT_MS,
   defaultCandidates,
   inspectInputInstallation,
   runFixed,

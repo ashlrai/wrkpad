@@ -14,15 +14,24 @@ flowchart LR
   Main -->|fixed app open| Codex[ChatGPT / Codex Desktop]
   Main -->|fixed app open| Cmux[cmux / Claude Code]
   UI -->|allowlisted action ID| Main
+  Main -->|privacy-minimal snapshot| Compact[Sandboxed Compact Deck]
+  Compact -->|narrow compact action ID| Main
 ```
 
 ## Components
 
 ### React renderer
 
-`src/` renders the board twin, attention runway, Fleet brief, setup, and Flight Check. It requests only methods exposed by `electron/preload.cjs`.
+`src/` renders the board twin, attention runway, Fleet brief, setup, and Flight
+Check. A separate Compact Deck entry renders the movable hardware-optional
+six-slot surface. The main renderer requests only methods exposed by
+`electron/preload.cjs`; the Compact Deck has a separate narrow
+`electron/compact-preload.cjs` bridge.
 
-The browser window uses context isolation, disables Node integration, and enables Electron's sandbox. New windows, webviews, unexpected navigation, and renderer permission requests are denied. IPC handlers accept only the trusted main frame and configured local renderer URL.
+Both browser windows use context isolation, disable Node integration, and enable
+Electron's sandbox. New windows, webviews, unexpected navigation, and renderer
+permission requests are denied. Each IPC handler accepts only its expected
+window, trusted main frame, and configured local renderer URL.
 
 ### Preload and main process
 
@@ -35,6 +44,18 @@ revoke the affected authorization. Software-only Agent-slot focus remains
 available because it opens a fixed provider surface without executing a
 configured action. Renderer-supplied commands, executable paths, arguments, and
 app names are never executed.
+
+The Compact Deck receives exactly six bounded slot projections and hides titles
+unless the user enables them. Its numpad and remapped shortcuts are renderer
+window key events, not system-wide hooks; they work only while that deck has
+focus. Its main-process skill-action gate admits only the four server-owned safe
+copy specs for Amplify, Verify, Polish, and Advance. A separate fixed workflow
+allowlist admits only Voice, guarded Continue, and Attention: Voice and Attention
+return typed staged intents, while guarded Continue copies fixed text. Attention
+then resolves the current non-off slot by `error > needs_input > working > unread
+> idle` and lowest slot number before using the same fixed-app focus path as the
+main window. None of these paths pastes, submits, sends Enter, changes microphone
+permission, or claims exact Codex-task or cmux-pane focus.
 
 The declared board route is a private local preference with only three values:
 `unknown`, `codex_native`, and `ashlr_layer`. It never changes device state.
@@ -89,6 +110,19 @@ connection does not prove provider hook trust or receipt delivery.
 
 `wrkpad` converts supported Claude Code hook events into the same state grammar. Selecting a Claude slot runs `open -a cmux`. The app does not correlate a slot with an exact cmux pane and sends no terminal input. Claude Desktop can be opened separately.
 
+The main process also contains a source-tested, fixed-bundle-path cmux focus
+adapter. It accepts only a versioned privacy-safe locator, validates a fresh
+cross-session HMAC match and `identify` echo, pins the bounded socket identity
+admitted by `capabilities`, verifies the same-user socket device/inode and fixed
+cmux bundle identity, negotiates `system.identify`, `workspace.select`, and
+`surface.focus`, and allowlists only workspace/surface focus commands. Exact
+focus also requires one fresh, single-use human authorization receipt and an
+exact `password` access mode. Current HASP snapshots expose no locator, Agent
+Board has no authorization issuer or socket-password enrollment, and production
+calls therefore take the ordinary `open -a cmux` fallback without attempting
+socket access. The adapter contains no terminal read, write, send-key, paste,
+screen-capture, or prompt-submission command.
+
 ### Ashlr Hub
 
 Agent Board reduces the local Fleet receipt to daemon state, queue counts, proposal count, active goals, operating mode, blocker, next action, and guard state.
@@ -110,6 +144,8 @@ This is a status receipt, not proof of remote authority, provider authentication
 11. Native evidence polling may advance only the inferred initialization rung;
     it never records a Settings or physical observation and never accepts an
     attestation.
+12. Compact Deck bindings are window-scoped and its skill gate accepts only
+    server-owned `safe` + `copy` registry entries.
 
 ## Process and local-data boundaries
 

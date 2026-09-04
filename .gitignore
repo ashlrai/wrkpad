@@ -1,4 +1,7 @@
 /target/
+/dist-site/
+/site/assets/creator-micro-2.avif
+/site/assets/og-hardware.jpg
 /node_modules/
 /.wrkpad/
 *.log
@@ -6,3 +9,7 @@
 .DS_Store
 CLAUDE.local.md
 /.claude/settings.local.json
+!.agents/
+!.agents/skills/
+!.agents/skills/ashlr-delivery/
+!.agents/skills/ashlr-delivery/**

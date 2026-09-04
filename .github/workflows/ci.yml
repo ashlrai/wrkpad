@@ -38,6 +38,8 @@ jobs:
           node-version-file: .node-version
       - run: node --test tools/*.test.mjs
       - run: node tools/docs-check.mjs
+      - run: node tools/site-check.mjs
+      - run: node tools/site-build.mjs
 
   test:
     timeout-minutes: 25

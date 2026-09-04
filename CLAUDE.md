@@ -2,6 +2,9 @@
 
 ## Claude Code
 
+- Use the shared `$ashlr-delivery <mode>` contract from
+  `.agents/skills/ashlr-delivery/SKILL.md` for Amplify, Verify, Polish, or
+  Advance delivery work.
 - Run `/context` when instruction loading is uncertain; this file imports the
   same project contract used by Codex.
 - Claude Code lifecycle hooks can populate HASP. Claude Desktop chats do not

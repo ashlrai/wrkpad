@@ -32,7 +32,9 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
-      - run: npm audit --audit-level=high
+      # Lockfile auditing is centralized in security.yml. Keeping it out of
+      # this source job avoids npm's retiring quick-audit endpoint and gives
+      # dependency review, CodeQL, and source scans one authoritative workflow.
 
   package-macos:
     name: Agent Board package smoke

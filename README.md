@@ -5,6 +5,11 @@
 [![Security](https://github.com/ashlrai/wrkpad/actions/workflows/security.yml/badge.svg)](https://github.com/ashlrai/wrkpad/actions/workflows/security.yml)
 [![Licenses: MIT core and Apache-2.0 app](https://img.shields.io/badge/licenses-MIT%20core%20%7C%20Apache--2.0%20app-2f6feb)](#license)
 
+[Project landing page source](site/index.html) · [Machine-readable capabilities](site/capabilities.json)
+
+The checked-in landing page is source for local review; this branch does not
+claim that GitHub Pages or another hosted site has been deployed from it.
+
 **A local-first control plane and on-screen mission control for Work Louder
 Creator Micro 2, Codex, Claude Code, and agentic engineering fleets.**
 
@@ -18,21 +23,36 @@ or firmware lighting.
 > There is not yet a signed, notarized, immutable public macOS release. See the
 > [release evidence layers](docs/release.md) before making distribution claims.
 
-![Synthetic Ashlr Agent Board documentation view showing six text-labeled agent states, the black-cap legend, and the accurate Creator Micro 2 control geometry](docs/assets/agent-board-public-demo.png)
-
-_Captured from the real renderer with the repository's fixed-data public
-fixture. It contains no live sessions or personal paths; USB, physical RGB,
-provider receipt, and Fleet authority remain unverified. See
-[architecture and trust boundaries](app/docs/architecture.md)._
-
 ```text
-STICK | AG00 | AG01 | DIAL
-       AG02 | AG03 | AG04 | AG05
+DIAL  | AG00  | AG01  | STICK
+AG02  | AG03  | AG04  | AG05
+ACT06 | ACT07 | ACT08 | ACT09
+TOUCH | ACT10 | ACT11 | ACT12 (transparent)
 ```
+
+This matrix is the canonical control-group order. The
+[landing page](site/index.html#demo) includes an original, clearly synthetic
+CSS screen twin with black caps; it is an interaction guide, not vendor artwork
+or a dimensional product rendering. Real product photography remains linked
+only from Work Louder while reuse permission is unrecorded. See
+[architecture and trust boundaries](app/docs/architecture.md).
 
 The project is local-first and fail-closed. It preserves Codex and Claude's own
 permission systems, performs no HID writes, and contains no one-press push,
 merge, deploy, publish, delete, spend, credential, or permission-approval action.
+
+The recommended macOS configuration is a guarded
+[Dual Plane profile](app/docs/dual-plane-profile.md): Codex Native remains
+firmware layer 1, while layer 2 provides the stable mixed Codex + Claude Code
+workflow. Generation is offline; Input import, activation, and both physical
+acceptance checks remain explicit human operations.
+
+An opt-in [Hybrid Native experiment](app/docs/hybrid-native-profile.md) is also
+implemented in source. Its first layer leaves the six physical Agent keys
+Codex-only while routing the other fourteen signals to Agent Board; its second
+layer is the full 20-shortcut Ashlr Daily fallback. The generator and route are
+source-tested, but no import, board synchronization, 14+6 physical acceptance,
+signed build, or public release is claimed.
 
 ## Two cooperating components
 
@@ -59,11 +79,24 @@ marks missing observers and optional CLIs as unavailable.
 - Agent Board shows provider, task title, icon, text state, and color in the exact
   black-cap geometry; selecting a slot foregrounds Codex Desktop or cmux without
   sending a prompt or terminal input.
+- The movable Compact Deck gives people without the hardware the same six-slot
+  attention runway, window-scoped numpad controls, privacy switch, and four
+  provider-neutral delivery skills. It never installs a global keyboard hook.
+- Across the four daily lenses, ACT06–ACT09 keep stable Amplify, Verify, Polish,
+  and Advance muscle memory; ACT10 stages Voice, ACT11 copies a bounded next-step
+  brief for review, and transparent ACT12 opens the highest-priority observed
+  provider surface. Recovery deliberately replaces only ACT06–ACT09 with
+  guarded fleet controls.
 - On Ashlr Layer, Agent Board maps 20 shortcuts across five software lenses,
   guards consequential actions, and exports a hashed operator-guided Flight
   Check receipt. Codex Native and an unselected route keep mapped actions off.
-- Agent Board keeps Codex Native and the cross-provider Ashlr Layer as explicit,
-  local-only route declarations; neither is inferred or applied to the board.
+- The experimental `hybrid_native` policy registers only the fourteen
+  non-Agent shortcuts and evaluates a distinct 14-signal Flight Check. Its
+  offline profile still contains all twenty shared action definitions because
+  the unchanged layer-2 fallback references them.
+- Agent Board keeps Codex Native, cross-provider Ashlr Layer, and experimental
+  Hybrid Native as explicit local route declarations. None is inferred or
+  applied to the board.
 - A privacy-bounded native diagnostic distinguishes historical RPC failures
   from a fresh, inferred initialization sequence while keeping the manual
   Settings connection and physical acceptance separate from the shortcut route.
@@ -92,6 +125,8 @@ marks missing observers and optional CLIs as unavailable.
 - No automatic quitting or killing of ChatGPT Desktop, Work Louder Input,
   Logitech, Karabiner, or provider processes.
 - No exact Codex task or cmux pane focus.
+- Hybrid Native's six physical Agent keys remain Codex-only; the mixed screen
+  queue does not give those keys exact Claude Code or cmux pane selection.
 - No prompt submission from an Agent slot.
 - No claim that a planned color is visible through opaque black keycaps; the
   screen is the authoritative legend.
@@ -136,8 +171,9 @@ provider trusted or invoked it.
 
 ## Quick start: Agent Board
 
-Prerequisites: macOS, Node.js 22 or newer, npm, and Work Louder Input for real
-hardware shortcut routing.
+Prerequisites: macOS, Node.js 22 or newer, and npm. Work Louder Input is needed
+for the cross-provider **Ashlr Layer**, but the official Codex integration does
+not require it.
 
 ```bash
 cd app
@@ -150,15 +186,43 @@ npm run dev
 Follow the [desktop setup and Flight Check](app/docs/setup.md) before using the
 physical controls. `npm run package:mac` creates an unsigned, architecture-specific
 local directory build; it does not install, sign, notarize, or publish anything.
-For a Creator Micro 2 Pro, commission in wired mode: the current
-[Codex Micro guide](https://learn.chatgpt.com/docs/features/codex-micro) says a
-USB cable only charges while Bluetooth remains selected, so open the connection
-selector and choose the fourth channel until the underglow is white. The general
-[Creator Micro 2 setup](https://worklouder.cc/micro-setup) documents that fourth
-channel but conflicts about automatic USB switching; use the explicit selector
-for Codex commissioning. White underglow confirms only the board's
-firmware-selected wired mode. It does not prove macOS enumeration, Input
-integrity, receiver exclusivity, native Codex connection, or a physical receipt.
+
+The experimental Hybrid Native artifact is generated and checked offline with
+`npm run profile:generate-hybrid -- SOURCE.json OUTPUT.json` and
+`npm run profile:check-hybrid -- OUTPUT.json`. Read its
+[acceptance contract](app/docs/hybrid-native-profile.md) first; neither command
+imports a profile or writes the device.
+
+For a first native Codex test:
+
+1. Turn on the Creator Micro 2 Pro and connect a data-capable USB-C cable.
+2. Hold the bottom-left touch control for three seconds, then tap it until the
+   underglow is white. The current
+   [Codex Micro guide](https://learn.chatgpt.com/docs/features/codex-micro)
+   warns that a cable can charge while Bluetooth remains selected.
+3. Establish layer 1 without guessing. A short touch-control tap advances the
+   layer; it does not mean "go to layer 1." If a verified Input copy is being
+   used for setup, select layer 1 there, let the write finish, and fully quit
+   Input before opening ChatGPT. Otherwise test a harmless assigned Codex Agent
+   Key, and treat only the expected visible Codex response as operator evidence
+   that the native layer is active.
+4. In ChatGPT's device settings, confirm **Connected** and **Input Monitoring:
+   Granted**. If the permission or layer changed, fully quit and reopen ChatGPT.
+   These indicators prove discovery and permission state, not that a physical
+   key navigated a task.
+5. Open a normal task and double-tap a different assigned Agent Key within 350
+   milliseconds. The documented behavior is to switch tasks and foreground
+   ChatGPT; a single tap can switch without bringing ChatGPT forward.
+6. If the board is still silent, quit Karabiner or Logitech Options+ when it has
+   Input Monitoring, reconnect, and run `npm run doctor`. Follow the
+   [native-layer recovery guide](app/docs/codex-native-layer-recovery.md) before
+   considering a reset. Work Louder states that Input's **Reset settings**
+   deletes all profiles, layers, and actions, so back up first and make that
+   deletion an explicit operator decision.
+
+White underglow confirms only the firmware-selected wired transport. It does
+not prove macOS enumeration, receiver exclusivity, native Codex key routing, or
+a physical receipt.
 
 ## Development
 
@@ -170,6 +234,7 @@ without applying changes:
 ```bash
 node tools/agent-preflight.mjs inspect --route ashlr_layer --json
 node tools/agent-preflight.mjs inspect --route codex_native --json
+node tools/agent-preflight.mjs inspect --route hybrid_native --json
 ```
 
 Agents should read `requested_route`, `declared_route`, and `route_readiness`.
@@ -177,6 +242,11 @@ On `ashlr_layer`, also inspect the `input_profile` and `input_runtime` check
 entries. Read each next step's actor, safety, and `does_not_prove`, then follow
 the [Input-only reconciliation](app/docs/troubleshooting.md#input-only-reconciliation)
 rather than inventing a device or permission claim.
+
+For experimental `hybrid_native` work, require its own preflight result, the
+app's strict profile verifier and route tests, and the
+[Hybrid Native evidence contract](app/docs/hybrid-native-profile.md). Do not
+relabel either established route's result as Hybrid Native readiness.
 
 See the [agent operations runbook](docs/agent-operations.md) for the daily
 Codex/Claude workflow and human handoff gates.

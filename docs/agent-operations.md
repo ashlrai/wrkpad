@@ -14,7 +14,7 @@ file; instruction loading is session-scoped.
 
 | Route | Use it for | Owner | Acceptance gate |
 | --- | --- | --- | --- |
-| `ashlr_layer` | Daily Codex, Claude Code/cmux, and provider-neutral shortcuts | Work Louder Input emits shortcuts; Agent Board observes | Corrected Input profile, Input Monitoring, and 19-gesture Flight Check |
+| `ashlr_layer` | Daily Codex, Claude Code/cmux, and provider-neutral shortcuts | Work Louder Input emits shortcuts; Agent Board observes | Corrected Input profile, Input Monitoring, and 20-gesture Flight Check |
 | `codex_native` | Exclusive Codex thread keys and native lighting qualification | Codex Desktop vendor protocol | Successful `v.oai.rgbcfg`, then `v.oai.thstatus`, followed by physical acceptance |
 
 The routes can exist on the same desk, but they are not one readiness state. Do
@@ -59,7 +59,7 @@ proof of source identity, review, provenance, signing, or release.
 | Operation | Agent may run | Human required | Canonical procedure |
 | --- | --- | --- | --- |
 | Git/source inspection, doctors, status, tests, lint, build | Yes | No | `AGENTS.md` and preflight |
-| Generate a new offline profile artifact | Yes, in requested scope | Human reviews/imports/activates | [Agent Board setup](../app/docs/setup.md) |
+| Generate a new offline profile or fixed unofficial native-layer artifact | Yes, in requested scope | Human reviews/imports/activates | [Agent Board setup](../app/docs/setup.md), [native-layer recovery](../app/docs/codex-native-layer-recovery.md) |
 | Hook or LaunchAgent status and plan | Yes | Human authorizes exact apply plan | [Hook setup](hook-setup.md), [macOS service](macos-service.md) |
 | Codex hook trust and disposable provider receipt | No | Yes | [Hook runtime verification](hook-setup.md#runtime-verification) |
 | Input Monitoring or Input profile activation | No | Yes | [Agent Board setup](../app/docs/setup.md) |
@@ -112,11 +112,21 @@ proof of source identity, review, provenance, signing, or release.
    synchronization, permission, or physical acceptance. On the next launch,
    resume the numbered checklist in Setup.
 8. Arm Daily Flight Check. Wait for the screen to say actions are suppressed,
-   then have the operator complete all 19 gestures on the physical board.
+   then have the operator complete all 20 gestures on the physical board.
 9. Operate from Agent Board. Slot selection may foreground Codex Desktop or
    cmux; it does not prove exact Codex task or cmux pane focus and sends no
    prompt or terminal input.
-10. Use Ashlr Hub status/briefs as read-only evidence. Fleet pause/resume/stop
+10. Keep the daily action row stable across Attention, Pair, Fleet, and Proof:
+    Amplify, Verify, Polish, Advance, Voice, guarded Continue, and Attention.
+    The first four copy `$ashlr-delivery` invocations; Continue copies a bounded
+    prompt; neither path pastes or submits. Voice only stages a local intent.
+    Attention selects the highest-priority non-off slot using `error >
+    needs_input > working > unread > idle`, then foregrounds only ChatGPT or
+    cmux. Recovery deliberately substitutes guarded Fleet controls on the first
+    four switches. The hardware geometry remains dial left, planar
+    toggle/joystick right, six center Agent keys in a two-plus-four block, four
+    third-row actions, then touch, ACT10, ACT11, and transparent ACT12.
+11. Use Ashlr Hub status/briefs as read-only evidence. Fleet pause/resume/stop
    retains confirmation or hold; inbox decisions and production actions remain
    outside this daily shortcut path.
 
@@ -144,6 +154,15 @@ bootloader, or flashing. The human handoff must name:
 - recovery or rollback evidence, including an explicit warning when absent;
 - `rgbcfg` then `thstatus` acceptance;
 - profile reconciliation, all physical controls, reconnect, and sleep/wake.
+
+When the firmware RPCs succeed but every native control is silent, a missing
+`KV_OAI_*` layer is a separate configuration hypothesis. On explicit request,
+an agent may generate and validate the repository's fixed
+[unofficial layer artifact](../app/docs/codex-native-layer-recovery.md) offline.
+The agent must not import or activate it, edit Input's cache, write the device
+filesystem or HID channel, reset settings, or delete/transform a protected
+layer. A human-owned Input import and fresh physical Codex observations remain
+the acceptance gates.
 
 ## Agent handoff format
 

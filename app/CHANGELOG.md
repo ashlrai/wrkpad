@@ -6,6 +6,20 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 
 ### Fixed
 
+- Include the Agent Board ancestor in the bounded macOS receiver probe so a
+  packaged app can verify itself and register all twenty declared shortcut
+  endpoints instead of falsely reporting zero receivers.
+- Hash packaged receiver identity through Electron's raw filesystem interface
+  without changing process-global ASAR behavior during preload startup.
+- Require the exact single-layer Ashlr Daily mapping before readiness can pass;
+  a partial cache or silent physical key now stays visibly unqualified.
+- Offer a one-click, no-device-write route recovery when the observed Ashlr
+  shortcut profile is active but Agent Board is still declared Codex Native.
+- Replace ambiguous layer-selection and Dual Plane claims with an explicit
+  operator self-attestation, a visible native-response check, and the exact
+  five-plus-two native action-switch grouping. The attention runway now labels
+  a current snapshot without implying that native and Ashlr slot identities are
+  identical.
 - Keep both Codex Native and an unselected board route fail-closed for mapped
   actions while preserving software-only Agent-slot focus.
 - Read Codex Desktop's current and previous UTC log folders so native evidence
@@ -17,6 +31,35 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 
 ### Added
 
+- A fail-closed `profile:check` CLI for exact generated one-layer daily and
+  diagnostic Work Louder profiles, including adversarial schema and action-map
+  checks. A match proves only the selected JSON artifact.
+- Authoritative final shortcut-registration liveness, so a transient endpoint
+  loss cannot leave stale `20/20` ownership or permit callbacks from a released
+  generation.
+- Wider, still-bounded trust-probe budgets for deep Input.app signature and
+  Gatekeeper checks, while Electron keeps the verification work off its main
+  thread and continues to fail closed on timeouts.
+- An experimental `hybrid_native` source path: the offline generator creates
+  two layers and twenty shared action definitions, the mixed first layer
+  references only fourteen non-Agent shortcuts, and the route-specific Flight
+  Check excludes all six Codex-owned Agent keys. No Input import, physical
+  14+6 acceptance, exact Claude pane focus, or public release is claimed.
+- An offline-generated, verifier-enforced Dual Plane profile with protected
+  Codex Native controls in layer 1 and the provider-neutral Ashlr workflow in
+  layer 2. Multi-layer diagnostics verify the configured Ashlr mapping without
+  inventing the currently selected firmware layer.
+
+- A fixed-bundle-path, versioned cmux focus adapter substrate with bounded
+  capability and server-instance identity validation, fresh one-use human
+  authorization plus exact password-mode admission, cross-session and
+  stale-locator rejection, explicit outside-process denial handling, confirmed
+  child-process cleanup, and an application-foreground fallback.
+  Locator capture and socket-password enrollment remain unavailable, and the
+  allowlist contains no terminal read, write, paste, or key-injection command.
+- A fixed, clearly unofficial Creator Micro 2 Codex Native recovery layer,
+  deterministic offline generator, post-import validator, and rollback-first
+  manual runbook. No step imports, activates, resets, or writes the device.
 - Route-specific Setup flight plans that keep Codex Native prerequisites and
   evidence separate from Work Louder Input, Input Monitoring, and the Ashlr
   shortcut receiver path.
@@ -81,6 +124,12 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 
 ### Changed
 
+- Correct the unofficial native-layer recovery runbook for Input 0.18.4's
+  observed append-and-renumber import behavior: use a separate candidate
+  profile, retain the ordinary layer, move native bindings to the first visible
+  position, verify the exported content and order offline, and block activation
+  whenever fresh direct Input integrity differs from an earlier renderer result
+  or changes after launch.
 - After a successful native handoff preparation, Agent Board may remain open as
   a passive watcher with no registered shortcuts; its bounded refresh updates
   inferred initialization evidence only and never records operator observations.
@@ -96,8 +145,9 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 - Keep operator safety notices visible even when Fleet evidence is unavailable.
 - Separate USB detection, native firmware compatibility, route declaration,
   desktop endpoint registration, and physical acceptance in Setup and doctor.
-- Correct the screen twin and canonical layout to place the white joystick at
-  top-left and the black rotary dial at top-right.
+- Correct the screen twin and canonical layout to match the desk-verified board:
+  rotary dial at top-left, planar stick at top-right, separate ACT10 and ACT11
+  keys, and transparent ACT12 at bottom-right.
 - Refuse to arm Flight Check when the active Input receipt has a known reversed
   encoder, reserve Setup readiness for the exact corrected profile receipt, and
   keep daily and disposable diagnostic acceptance gates distinct.

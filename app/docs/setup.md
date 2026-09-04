@@ -44,6 +44,11 @@ Expected USB result: `Creator Micro 2 USB: Work Louder 303A:8298` on the desk-ve
 
 The doctor is read-only and cannot grant permissions or change board configuration. `npm run doctor -- --json` includes `manualChecks`, route-specific `modeGuidance`, and a prioritized `nextAction`. It inspects only a bounded tail of recent Codex Desktop logs and projects a reason code; raw log lines and paths never reach the renderer. Passing required checks does not prove native Codex connection, Input Monitoring, the active Input layer, or the physical Flight Check. If USB is absent, use [troubleshooting](troubleshooting.md#usb-device-is-not-detected).
 
+If ChatGPT later shows **Connected** and **Granted** while every native control
+remains silent, do not reset or reflash from that symptom. Use the separate,
+manual [unofficial Codex Native layer recovery](codex-native-layer-recovery.md)
+only after exporting rollback profiles and verifying the Input installation.
+
 ## 2. Declare the board route
 
 Agent Board stores one local expectation:
@@ -51,14 +56,24 @@ Agent Board stores one local expectation:
 - **Codex Native:** Codex is expected to handle vendor HID events and lighting.
 - **Ashlr Layer:** Work Louder Input is expected to emit the canonical desktop
   shortcuts for Codex, Claude Code/cmux, and Ashlr Fleet.
+- **Hybrid Native (experimental):** the six physical Agent keys are expected to
+  remain Codex-owned while Agent Board receives only the fourteen action,
+  joystick, and dial shortcuts from the mixed first layer.
 - **Not selected:** no physical route is inferred.
 
 This is labeled **Declared here — not detected**. Changing it writes the private
 Agent Board settings file and changes only Agent Board's runtime global-shortcut
-ownership: Codex Native and Not selected release the known shortcuts, while
-Ashlr Layer may register them after its ownership checks pass. It does not
+ownership: Codex Native and Not selected release the known shortcuts, Ashlr
+Layer may register all twenty, and Hybrid Native may register only the fourteen
+non-Agent shortcuts after its ownership checks pass. It does not
 change the board, firmware, Input or Codex configuration, another process,
 hooks, or `wrkpad` occupancy.
+
+Hybrid Native is implemented as an opt-in source experiment, not an accepted
+desk configuration. Generate, import, roll back, and test it only through the
+[Hybrid Native evidence contract](hybrid-native-profile.md). Its two-layer
+artifact contains twenty action definitions total; the mixed first layer
+references fourteen and leaves all six Agent keys Codex-only.
 
 ### Codex Native restart-safe handoff
 
@@ -92,13 +107,62 @@ Use **Prepare handoff** before the controller-isolation restart:
    A fresh ordered `v.oai.rgbcfg` → `v.oai.thstatus` → HID notification →
    radial notification sequence may advance the ladder to **Initialization
    inferred**. It does not complete the Settings or physical checks.
-5. Exercise the dial, joystick, all six Agent keys, all seven action switches,
-   the wide microphone cap, and the black-cap lighting. Check an observation
-   only after personally seeing that result on the physical board and in Codex.
-6. **Accept operator attestation** becomes available only when all seven groups
+5. Keep the board on the explicitly selected white wired channel and establish
+   firmware layer 1, which the current official
+   [Codex Micro guide](https://learn.chatgpt.com/docs/features/codex-micro)
+   assigns to ChatGPT. A short tap advances the layer; it does not identify or
+   select layer 1. Treat only the harmless visible native response in step 7 as
+   operator evidence, and do not touch the layer selector after that response.
+6. Isolate Agent-key navigation from commands before testing it. In ChatGPT's
+   Creator Micro settings, choose a chat-following Agent-key mode rather than a
+   Custom shortcut, action, or skill, and make at least two harmless existing
+   chats available to assigned, lit slots. A pinned ordering is the most
+   deterministic. Use the sidebar only to establish which chat is selected;
+   do not submit a prompt or invoke an approval for this check.
+7. Exercise the six center Agent keys using their physical two-plus-four
+   geometry: AG00 and AG01 sit between the left rotary dial and right planar
+   toggle/joystick; AG02 through AG05 are directly below. Choose a lit key
+   assigned to a chat other than the current chat, put another application in
+   front, and double-tap the key within 350 ms. ChatGPT should select that chat
+   and come to the foreground. With ChatGPT visible, single-tap a different
+   assigned key; a single tap selects its chat without bringing ChatGPT forward.
+   Pressing the already selected chat can have no visible navigation effect,
+   and an unassigned or unlit slot does not prove failure. Leave an unassigned
+   slot pending rather than claiming it passed.
+8. Exercise the left rotary dial, right planar toggle/joystick, the five safely
+   isolated native action switches ACT06 through ACT09 plus transparent ACT12,
+   separate ACT10 and ACT11 bottom-row keys, and black-cap lighting. Do not press an
+   approval, rejection, or other consequential native command against live work
+   merely to complete this receipt. Leave that group pending when a harmless
+   context cannot be established.
+9. Keep Agent Board passive throughout the native check. After a prepared
+   handoff it owns no Ashlr global shortcuts and opens no board HID handle, so a
+   physical press will not animate its board twin or prove a native event there.
+   Judge the result in ChatGPT and on the physical board, then record only the
+   observation you personally made.
+10. **Accept operator attestation** becomes available only when all seven groups
    are checked and the initialization is fresh, ordered, newer than the
    preparation, and bound to the same VID:PID class and fixed-path ChatGPT
    metadata.
+
+#### Per-control native recovery report
+
+Setup also provides a separate **Prove what the key actually did** report for
+diagnosing a connected-but-inactive native board. Record ChatGPT Settings as
+connected/granted, failed/ungranted, or not checked, then record a bounded result
+for the left dial, right planar toggle/joystick, each of AG00–AG05, each of
+ACT06–ACT12, and lighting. The UI calls these 16 control groups because the
+dial's three motions and joystick's four directions are grouped; this is not the
+20-gesture Ashlr Layer Flight Check.
+
+`no_response` or `unexpected_target` produces a reported failure.
+`not_configured` and `skipped` keep the report incomplete. Only
+connected/granted plus an observed response for all 16 groups produces the
+`operator_accepted` label. The private mode-`0600` receipt is bound to the
+current declared route, VID:PID class, and ChatGPT version/build and contains no
+task title, identifier, prompt, transcript, path, or raw log. It is a human
+report, not HID proof, and it does not replace the restart-safe initialization
+handoff above or the Ashlr Layer Flight Check below.
 
 Acceptance is saved in two fail-closed phases. If Agent Board closes or local
 storage stops between staging and final promotion, Setup shows **Acceptance
@@ -227,13 +291,17 @@ Open **System Settings → Privacy & Security → Input Monitoring** and enable 
 
 Map the physical controls to [the canonical shortcuts](controls.md#action-switches-and-motion-controls).
 
-The daily layer has 19 gestures: six Agent keys, six visible action caps, four joystick directions, and dial left/right/press. The desktop reserves 20 shortcut endpoints because the Mic cap covers two switches. Assign the Mic shortcut to ACT10 and set ACT11 to `None` for daily use. Never give the two hidden halves different daily actions.
+The daily layer has 20 independently observable gestures: six Agent keys, seven action keys, four joystick directions, and dial left/right/press. ACT10 and ACT11 are separate bottom-row switches and must have separate mappings. ACT12 is the transparent Attention key.
 
-The Setup screen's `20/20 desktop endpoints registered` result proves only that Electron registered all expected global shortcuts. It does not inspect Input's active profile, prove that the mapping reached the board, or complete this setup step. The ordered physical Flight Check is the acceptance gate for the active layer.
+The Setup screen's `20/20 desktop endpoints registered` result proves only that Electron registered all expected global shortcuts. It does not inspect Input's active profile, prove that the mapping reached the board, or complete this setup step. **OS callbacks observed** is a separate privacy-safe counter that records only an allowlisted control ID, time, and allowed/rejected delivery result—even when Flight Check is blocked or inactive. The ordered physical Flight Check remains the acceptance gate for the active layer.
+
+While Flight Check is active, the main process owns the bounded event record and the renderer reconciles it once per second. A renderer subscription gap therefore cannot erase a received Flight signal. Any misroute or event-buffer overflow latches the run invalid until a deliberate restart, even after older display events age out. Callback telemetry and a Flight receipt are still different evidence: the former proves that macOS invoked a registered accelerator, while the latter additionally requires the current safety gates and exact ordered gesture sequence.
 
 Agent Board also reads a bounded, fixed-path copy of Input's Creator Micro 2
 cache and reports only the sanitized active profile, its layer when uniquely
-observable, and encoder health.
+observable, and encoder health. A diagnostic count describes expected bindings
+that match; it is never called an exact `20/20` mapping when unexpected encoder
+cells, joystick sectors, or other structure are also present.
 That receipt can identify the known reversed dial mapping, but it still does not
 prove Input synchronized the device or that the firmware emitted a gesture.
 
@@ -241,6 +309,24 @@ Treat these as three separate states: the profile shown in Input's header for
 editing, the profile marked current in Input and its cache, and the profile/layer
 actually synchronized and emitting on hardware. The cache diagnostic can
 support the second state; only Flight Check supports the third.
+
+Input's runtime layer index and the cached keymap layer ID are different
+namespaces. In the inspected vendor client, the selected layer is translated
+before the device request (`layerSelectedIndex = selectedLayerIndex - 1`), so a
+runtime `layer_index` of `1` can correspond to cached layer ID `0`. Doctor keeps
+`cannot find specific profile index` evidence advisory and never reports a
+missing cached layer from a direct numeric comparison. Use deterministic cache
+content classification and a fresh physical Flight Check to choose a repair.
+
+Matching profile and layer labels are also insufficient. If those labels are
+**Ashlr Agent Board Corrected** and **Ashlr Daily** but strict content
+classification fails, Doctor reports `active_profile_content_drift`. When the
+bounded cache permits it, the receipt includes a matching-signal count and
+specific disabled controls—for example, `19/20` with `ACT11` unbound. The same
+deterministic check is enforced again by the Electron main process before
+Flight Check begins. Replace
+the incomplete profile with a strictly verified 20-signal artifact; selecting
+the same incomplete profile as current cannot restore a missing binding.
 
 Open the profile chooser and use **Set as current profile** for **Ashlr Agent
 Board Corrected**, then verify its **Ashlr Daily** layer. Input
@@ -268,7 +354,14 @@ To create and activate the daily profile safely:
 
 ```bash
 npm run profile:generate -- source-profile.json ashlr-agent-board.json daily
+npm run profile:check -- ashlr-agent-board.json daily
 ```
+
+`profile:check` fails closed unless the selected file is the exact generated
+one-layer variant: bounded root schema, profile and layer identity, all 20
+action macros, key/encoder/joystick mappings, lighting schema, and empty
+unsupported action groups. A `match` proves only that JSON file; it does not
+prove import, activation, device synchronization, or physical behavior.
 
 3. Inspect the generated **Ashlr Agent Board Corrected** profile name, **Ashlr
    Daily** layer, Mic mapping, and
@@ -309,6 +402,7 @@ or activate the result, send HID packets, or write firmware.
 | --- | --- | --- | --- |
 | Ashlr Layer daily | Input, Agent Board, ChatGPT/Codex, Claude Code, Claude Desktop, and cmux | Input emits shortcuts; Agent Board receives them | Cross-provider shortcuts and hook state; no native Codex RGB claim |
 | Codex Native qualification | ChatGPT Desktop plus Agent Board in passive Codex Native mode; Input remains quit | Codex vendor protocol; Agent Board unregisters all shortcuts and reads bounded evidence without opening the device | Inferred initialization plus explicit operator attestation; not cryptographic device proof |
+| Hybrid Native experiment | ChatGPT Desktop and exactly one Agent Board receiver; Input remains quit after human import and post-import verification | ChatGPT is intended to own the six Agent keys; Agent Board registers the other fourteen shortcuts | Requires separate 14-signal and six-key physical acceptance; screen slots do not provide exact Claude pane focus |
 | Firmware qualification | Signed Input app only after all other board/HID controllers quit | Input updater | Download, install, restored profile, and post-update acceptance remain separate |
 
 Declaring `ashlr_layer` does not disable Codex's native device client. Daily
@@ -342,15 +436,22 @@ Open the architecture directory created under `release/`, then select a working 
 
 ## Run Flight Check
 
+The established Ashlr Layer check below expects twenty signals. The experimental
+Hybrid Native route has a separate fourteen-signal order—`ACT06` through
+`ACT12`, joystick up/right/down/left, then dial counterclockwise/clockwise/press—and
+must be paired with the separate six-key Codex observation in
+[its acceptance contract](hybrid-native-profile.md). Never use `20/20` as proof
+of Hybrid Native or `14/14` as proof of its native Agent keys.
+
 1. Open **Flight Check** and choose **Daily profile**.
 2. Wait until the app says **Actions suppressed**.
-3. Use only the physical board while following each gesture prompt. The white
-   control at top-left is the joystick, the black control at top-right is the
-   rotary dial, and the bottom-left circle with three LEDs is the layer and
+3. Use only the physical board while following each gesture prompt. The rotary
+   dial is at the left of the first row; the planar toggle/joystick is at the
+   right. The bottom-left circle with three LEDs is the layer and
    communication-mode touch sensor—not a Flight Check gesture.
 4. Confirm USB is present, Setup says **One receiver · shortcut ownership
    available**, 20 desktop shortcuts are registered, and misroutes remain zero.
-5. Export a receipt only after all 19 daily signals pass.
+5. Export a receipt only after all 20 daily signals pass.
 6. Stop Flight Check or return to Operate to release the interlock.
 
 During Flight Check, the Electron main process disables mapped actions and Agent-slot focus. Mouse clicks on the board twin do not count. Keyboard input can generate the same shortcuts, so keep hands off the keyboard during acceptance.
@@ -359,19 +460,20 @@ A passing receipt proves only that expected global shortcuts were observed in or
 
 Receipts are written with mode `0600` and include a SHA-256 over the canonical payload. Store them privately and do not commit them.
 
-## Diagnostic Mic test
+## Diagnostic bottom-row test
 
 1. Generate the disposable diagnostic profile from an ordinary export with
-   `npm run profile:generate -- source.json diagnostic.json diagnostic`.
+   `npm run profile:generate -- source.json diagnostic.json diagnostic`, then
+   require `npm run profile:check -- diagnostic.json diagnostic` to match.
 2. In an exclusive Input-only window, import and activate **Ashlr Flight Check
    Corrected - diagnostic**, then verify **Ashlr Diagnostic**. This performs the
    same two Input writes and restart/reconciliation checks as the daily profile.
 3. Reopen Agent Board and require the exact diagnostic profile receipt before
    starting **20-signal diagnostic**. The daily profile cannot arm this check.
-4. Press the wide cap once; both signals must arrive within 250 milliseconds.
+4. Press ACT10, then ACT11. Each must arrive as its own ordered signal.
 5. Deactivate the diagnostic profile afterward.
-6. Restore **Ashlr Agent Board Corrected** / **Ashlr Daily**, where ACT11 is
-   `None`, and verify its fresh read-only receipt before daily use.
+6. Restore **Ashlr Agent Board Corrected** / **Ashlr Daily**, where ACT10 is
+   Voice and ACT11 is guarded Continue, and verify its fresh read-only receipt before daily use.
 
 ## Optional agent and Fleet receipts
 

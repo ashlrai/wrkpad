@@ -1,15 +1,22 @@
+const { HYBRID_NATIVE_ROUTE, HYBRID_NATIVE_SIGNAL_IDS } = require('./board-route-policy.cjs')
+
 const diagnosticSteps = [
   { signals: ['dialLeft'], required: 3 }, { signals: ['dialRight'], required: 3 }, { signals: ['dialPress'] },
   { signals: ['agent1'] }, { signals: ['agent2'] },
   { signals: ['joyUp'] }, { signals: ['joyRight'] }, { signals: ['joyDown'] }, { signals: ['joyLeft'] },
   { signals: ['agent3'] }, { signals: ['agent4'] }, { signals: ['agent5'] }, { signals: ['agent6'] },
   { signals: ['cmd1'] }, { signals: ['cmd2'] }, { signals: ['cmd3'] }, { signals: ['cmd4'] },
-  { signals: ['cmd5', 'cmd6'], pairWindowMs: 250 }, { signals: ['cmd7'] },
+  { signals: ['cmd5'] }, { signals: ['cmd6'] }, { signals: ['cmd7'] },
 ]
-const dailySteps = diagnosticSteps.map((step) => step.signals.includes('cmd6') ? { signals: ['cmd5'] } : step)
+const dailySteps = diagnosticSteps
+const hybridNativeSteps = Object.freeze(HYBRID_NATIVE_SIGNAL_IDS.map((signal) => Object.freeze({ signals: Object.freeze([signal]) })))
 
-function evaluateFlightSignals(variant, rawEvents) {
-  const steps = variant === 'diagnostic' ? diagnosticSteps : dailySteps
+function evaluateFlightSignals(variant, rawEvents, boardRoute = 'ashlr_layer') {
+  const steps = boardRoute === HYBRID_NATIVE_ROUTE
+    ? hybridNativeSteps
+    : boardRoute === 'ashlr_layer'
+      ? variant === 'diagnostic' ? diagnosticSteps : dailySteps
+      : []
   let stepIndex = 0; let captured = []
   const problems = []; const acceptedEvents = []
   for (const event of rawEvents) {
@@ -30,14 +37,14 @@ function evaluateFlightSignals(variant, rawEvents) {
   }
   const missingSignals = steps.slice(stepIndex).flatMap((step) => step.signals)
   return {
-    status: stepIndex === steps.length && problems.length === 0 ? 'passed' : stepIndex === 0 && rawEvents.length === 0 ? 'incomplete' : 'failed',
+    status: steps.length > 0 && stepIndex === steps.length && problems.length === 0 ? 'passed' : stepIndex === 0 && rawEvents.length === 0 ? 'incomplete' : 'failed',
     completedGestures: stepIndex,
     expectedGestures: steps.length,
-    expectedSignals: variant === 'diagnostic' ? 20 : 19,
+    expectedSignals: new Set(steps.flatMap((step) => step.signals)).size,
     receivedSignals: [...new Set(acceptedEvents.map((event) => event.signalId))],
     missingSignals,
     problems,
   }
 }
 
-module.exports = { dailySteps, diagnosticSteps, evaluateFlightSignals }
+module.exports = { dailySteps, diagnosticSteps, evaluateFlightSignals, hybridNativeSteps }

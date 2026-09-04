@@ -37,13 +37,37 @@ const appDoctorRaw = {
   inputRuntime: { status: 'not_observed', profileIndex: null, layerIndex: null, observedAt: null, fresh: false },
 }
 
-test('agent preflight output conforms to its public schema for both routes', () => {
-  for (const route of ['ashlr_layer', 'codex_native']) {
+test('agent preflight output conforms to its public schema for every route', () => {
+  for (const route of ['ashlr_layer', 'codex_native', 'hybrid_native']) {
+    const doctor = route === 'hybrid_native' ? {
+      ...appDoctorRaw,
+      route,
+      checks: [
+        { name: 'Creator Micro 2 USB', category: 'required', ok: true },
+        { name: 'Work Louder Input', category: 'required', ok: true },
+        { name: 'ChatGPT desktop', category: 'required', ok: true },
+      ],
+      inputInstallation: { status: 'verified', version: '0.18.4' },
+      receiverRuntime: {
+        status: 'exclusive', instanceCount: 1, distinctBuildCount: 1,
+        currentAsarSha256: 'b'.repeat(64), candidateAsarSha256: null, candidateMatchesCurrent: null,
+      },
+      inputApplication: { status: 'not_running' },
+      inputProfile: {
+        cacheStatus: 'available', dailyProfileMatch: false, dailyLayerMatch: false,
+        encoderDirection: 'unavailable', dailyProfileReady: false,
+        hybridProfileMatch: true, hybridLayersMatch: true, hybridProfileReady: true,
+      },
+      readiness: {
+        ...appDoctorRaw.readiness,
+        hybridNative: { status: 'manual', reason: 'separate_physical_acceptance_required' },
+      },
+    } : appDoctorRaw
     const output = buildPreflight({
       route,
       source,
       stable: null,
-      appDoctorRaw,
+      appDoctorRaw: doctor,
       runCommand: () => ({ ok: false, stdout: '', code: 1 }),
       observedAt: '2026-09-01T20:00:00.000Z',
     })

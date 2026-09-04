@@ -14,8 +14,8 @@ versions from colliding.
 | Test verified | Tests, lint, build, and relevant hardware tests pass at one full SHA | Package exists |
 | Artifact built | Architecture-specific app and checksum from the verified SHA | Signing, notarization, or launch |
 | Distribution ready | Signature, notarization, Gatekeeper check, provenance, rollback | Provider or physical acceptance |
-| Integration configured | Route-specific controller checks pass: verified Input and one Agent Board receiver for Ashlr Layer, or Input closed with Codex as the sole intended controller for Codex Native; apps, tools, hooks, and permissions are present | Exclusive HID ownership, valid shortcut, provider, or physical receipt |
-| Physical accepted | Fresh Flight Check passes on the actual board and daily layer | Native RGB or firmware qualification |
+| Integration configured | Route-specific controller checks pass: verified Input and one Agent Board receiver for Ashlr Layer; Input closed with Codex as the sole intended controller for Codex Native; or an exact post-import two-layer profile, Input closed, and fourteen registered non-Agent shortcuts for experimental Hybrid Native | Exclusive HID ownership, valid shortcut, provider, or physical receipt |
+| Physical accepted | Fresh route-specific acceptance passes on the actual board: 20 signals for Ashlr Layer, the native operator check for Codex Native, or both 14 shortcuts and 6 Codex-owned Agent keys for Hybrid Native | Native RGB or firmware qualification |
 | Provider accepted | Real Codex, Claude/cmux, `wrkpad`, and Fleet workflows pass | User acceptance |
 | User accepted | Named workflow and usability criteria pass with a real operator | General availability |
 
@@ -132,6 +132,14 @@ Rollback artifact/tag:
 
 Never publish full local paths, prompts, transcripts, tokens, or raw private receipts.
 
-## Current v0.1.0 boundary
+## Current v0.2.0 boundary
 
-The package version is `0.1.0`. Source and local packaging can be verified, but signing, notarization, updates, exact task/pane focus, and physical RGB are not implemented. Treat v0.1.0 as unreleased until the distribution gate has an immutable record.
+The desktop package version is `0.2.0`; the Rust core remains `0.1.0`. The
+experimental Hybrid Native generator, strict verifier, fourteen-shortcut route,
+and Flight Check evaluator are implemented in source, but no imported profile,
+device synchronization, combined 14+6 physical acceptance, or public artifact
+is recorded. Source and local packaging can be verified, but signing,
+notarization, updates, exact task/pane focus, and physical RGB are not
+implemented. Treat both components as unreleased until the distribution gate
+has an immutable record. Checked-in landing-page source does not establish a
+GitHub Pages deployment.

@@ -17,6 +17,9 @@ const requiredProbes = {
     activeProfile: 'Ashlr Agent Board Corrected',
     activeLayer: 'Ashlr Daily',
     encoderDirection: 'correct',
+    configuredLayers: [
+      { name: 'Ashlr Daily', mapping: 'ashlr_daily', encoderDirection: 'correct' },
+    ],
   },
   inputRuntime: {
     status: 'not_observed', profileIndex: null, layerIndex: null, observedAt: null, fresh: false,
@@ -31,6 +34,17 @@ const missingOptionalProbes = {
   claude: { ok: false, detail: 'unavailable' },
   ashlr: { ok: false, detail: 'unavailable' },
   logitech: { ok: true, detail: 'not running' },
+}
+
+const hybridInputProfile = {
+  cacheStatus: 'available',
+  activeProfile: 'Ashlr Hybrid Dual Plane (UNOFFICIAL)',
+  activeLayer: null,
+  encoderDirection: 'unavailable',
+  configuredLayers: [
+    { name: 'Ashlr Hybrid Native (UNOFFICIAL)', mapping: 'hybrid_native', encoderDirection: 'correct' },
+    { name: 'Ashlr Daily', mapping: 'ashlr_daily', encoderDirection: 'correct' },
+  ],
 }
 
 test('recognizes both documented Creator Micro 2 identities without broad USB matching', () => {
@@ -85,6 +99,27 @@ test('missing Work Louder Input fails doctor and leads with installation', () =>
   assert.equal(result.ok, false)
   assert.equal(result.checks[1].severity, 'error')
   assert.match(result.nextAction, /Install the signed Work Louder Input app/)
+})
+
+test('does not call a partial or silent-key Ashlr cache ready', () => {
+  const result = evaluateDoctor({
+    ...requiredProbes,
+    ...missingOptionalProbes,
+    boardRoute: 'ashlr_layer',
+    inputProfile: {
+      ...requiredProbes.inputProfile,
+      configuredLayers: [{ name: 'Ashlr Daily', mapping: 'unknown', encoderDirection: 'correct', dailySignalCount: 19, unboundControls: ['ACT11'] }],
+    },
+  })
+
+  assert.equal(result.inputProfile.dailyProfileReady, false)
+  assert.equal(result.readiness.ashlrLayer.status, 'blocked')
+  assert.equal(result.readiness.ashlrLayer.reason, 'active_profile_content_drift')
+  assert.equal(result.inputProfile.dailySignalCount, 19)
+  assert.deepEqual(result.inputProfile.unboundControls, ['ACT11'])
+  assert.match(result.modeGuidance.ashlrLayer, /19\/20 expected bindings match; ACT11 is unbound/)
+  assert.match(result.nextAction, /strictly verified 20-signal/)
+  assert.match(result.nextAction, /Setting the same incomplete profile current is not a repair/)
 })
 
 test('required Input check passes only an exact verified installation receipt', () => {
@@ -157,7 +192,8 @@ test('Codex Native treats Input integrity as advisory during a connection retry'
     name: 'Work Louder Input', ok: false, detail: 'Input.app has the known modified signed resource v0.18.4',
     category: 'optional', severity: 'warning', blocking: false, code: 'known_resource_mutation',
   })
-  assert.match(result.nextAction, /prepare Agent Board’s passive Codex Native handoff successfully/)
+  assert.match(result.nextAction, /declare Ashlr Layer in Agent Board to register the 20 observed shortcut endpoints/)
+  assert.match(result.modeGuidance.codexNative, /passive and registers zero endpoints/)
   assert.doesNotMatch(result.nextAction, /replace|repair|re-sign/)
   assert.doesNotMatch(JSON.stringify(result), /Users|private|secret|window-info-retriever/)
 })
@@ -170,6 +206,7 @@ test('Codex Native requires verified Input only before a fresh firmware qualific
     chatgpt: { ok: true, detail: 'installed' },
     nativeCodex: { ok: false, code: 'firmware_rpc_missing', detail: 'RPC 404', fresh: true },
     inputInstallation: { status: 'invalid_signature', version: '0.18.4' },
+    inputProfile: { cacheStatus: 'missing', activeProfile: null, activeLayer: null, encoderDirection: 'unavailable' },
   })
 
   assert.equal(result.ok, true)
@@ -264,6 +301,7 @@ test('native route guidance does not promote Ashlr receiver recovery over native
     boardRoute: 'codex_native',
     chatgpt: { ok: true, detail: 'installed' },
     nativeCodex: { ok: false, code: 'firmware_rpc_missing', detail: 'RPC 404', fresh: true },
+    inputProfile: { cacheStatus: 'missing', activeProfile: null, activeLayer: null, encoderDirection: 'unavailable' },
     receiverRuntime: {
       status: 'contended_same_build', instanceCount: 2, distinctBuildCount: 1,
       currentAsarSha256: receiverHash, candidateAsarSha256: receiverHash, candidateMatchesCurrent: true,
@@ -303,6 +341,82 @@ test('Codex Native exposes its own ordered manual acceptance checks', () => {
   assert.doesNotMatch(JSON.stringify(result.manualChecks), /Input layer|Flight Check/)
 })
 
+test('Hybrid Native projects exact profile and quit-Input gates without claiming native acceptance', () => {
+  const result = evaluateDoctor({
+    ...requiredProbes,
+    ...missingOptionalProbes,
+    boardRoute: 'hybrid_native',
+    chatgpt: { ok: true, detail: 'installed' },
+    inputApplication: { status: 'not_running', privateProcess: '/Users/example/Input' },
+    inputProfile: hybridInputProfile,
+  })
+
+  assert.equal(result.route, 'hybrid_native')
+  assert.equal(result.ok, true)
+  assert.deepEqual(result.inputApplication, { status: 'not_running' })
+  assert.equal(result.inputProfile.hybridProfileMatch, true)
+  assert.equal(result.inputProfile.hybridLayersMatch, true)
+  assert.equal(result.inputProfile.hybridProfileReady, true)
+  assert.deepEqual(result.readiness.hybridNative, {
+    status: 'manual', reason: 'separate_physical_acceptance_required',
+  })
+  assert.deepEqual(result.manualChecks.map((check) => check.id), [
+    'input-monitoring',
+    'hybrid-layer',
+    'hybrid-non-agent-flight-check',
+    'hybrid-native-agent-acceptance',
+  ])
+  assert.match(result.manualChecks[2].detail, /cmd1, cmd2, cmd3, cmd4, cmd5, cmd6, cmd7, joyUp, joyRight, joyDown, joyLeft, dialLeft, dialRight, dialPress/)
+  assert.match(result.manualChecks[2].detail, /does not test the six native Agent keys/)
+  assert.match(result.manualChecks[3].detail, /Separately verify/)
+  assert.doesNotMatch(JSON.stringify(result), /privateProcess|Users|firmware qualification|all native controls accepted/)
+})
+
+test('Hybrid Native fails closed when Input is running, unavailable, or profile evidence drifts', () => {
+  for (const [overrides, reason, next] of [
+    [{ inputApplication: { status: 'running', raw: '/Users/private' } }, 'input_application_running', /Fully quit Work Louder Input manually/],
+    [{ inputApplication: { status: 'unavailable', raw: 'secret' } }, 'input_application_probe_unavailable', /confirm it is no longer running/],
+    [{ inputProfile: { ...hybridInputProfile, configuredLayers: [...hybridInputProfile.configuredLayers].reverse() } }, 'hybrid_profile_requires_activation', /exact hybrid profile current with its hybrid layer first/],
+    [{ inputProfile: { ...hybridInputProfile, activeProfile: 'Private forged profile' } }, 'hybrid_profile_requires_activation', /exact hybrid profile current/],
+  ]) {
+    const result = evaluateDoctor({
+      ...requiredProbes,
+      ...missingOptionalProbes,
+      boardRoute: 'hybrid_native',
+      chatgpt: { ok: true, detail: 'installed' },
+      inputApplication: { status: 'not_running' },
+      inputProfile: hybridInputProfile,
+      ...overrides,
+    })
+    assert.equal(result.readiness.hybridNative.status, 'blocked')
+    assert.equal(result.readiness.hybridNative.reason, reason)
+    assert.match(result.nextAction, next)
+    assert.doesNotMatch(JSON.stringify(result), /Users|private|secret|forged/)
+  }
+})
+
+test('Hybrid Native requires USB, verified Input, and ChatGPT without promoting native firmware work', () => {
+  for (const probes of [
+    { board: { ok: false, detail: 'not detected' } },
+    { inputInstallation: { status: 'invalid_signature', version: '0.18.4' } },
+    { chatgpt: { ok: false, detail: 'missing' } },
+  ]) {
+    const result = evaluateDoctor({
+      ...requiredProbes,
+      ...missingOptionalProbes,
+      boardRoute: 'hybrid_native',
+      chatgpt: { ok: true, detail: 'installed' },
+      inputApplication: { status: 'not_running' },
+      inputProfile: hybridInputProfile,
+      ...probes,
+    })
+    assert.equal(result.ok, false)
+    assert.equal(result.readiness.hybridNative.status, 'blocked')
+    assert.equal(result.readiness.hybridNative.reason, 'required_prerequisite_missing')
+    assert.doesNotMatch(result.nextAction, /guarded vendor firmware qualification|prepare Agent Board’s passive Codex Native handoff|verify Settings → Creator Micro/i)
+  }
+})
+
 test('available optional integrations are reported as passing', () => {
   const result = evaluateDoctor({
     ...requiredProbes,
@@ -327,6 +441,7 @@ test('native firmware RPC failure receives specific nonblocking recovery guidanc
     boardRoute: 'codex_native',
     chatgpt: { ok: true, detail: 'installed' },
     nativeCodex: { ok: false, code: 'firmware_rpc_missing', detail: 'RPC 404', fresh: true },
+    inputProfile: { cacheStatus: 'missing', activeProfile: null, activeLayer: null, encoderDirection: 'unavailable' },
   })
 
   assert.equal(result.ok, true)
@@ -381,6 +496,8 @@ test('doctor identifies the known reversed dial without exposing profile labels'
     dailyLayerMatch: false,
     encoderDirection: 'reversed',
     dailyProfileReady: false,
+    dailySignalCount: null,
+    unboundControls: [],
   })
 })
 
@@ -401,8 +518,32 @@ test('doctor projects recent unresolved Input evidence without raw logs or a cur
     codexProtocolTraffic: { status: 'log_unavailable', observedAt: null, fresh: false },
   })
   assert.equal(result.readiness.ashlrLayer.reason, 'recent_unresolved_profile_layer_observed')
-  assert.match(result.modeGuidance.ashlrLayer, /may predate the current cache/)
+  assert.match(result.modeGuidance.ashlrLayer, /runtime layer index is offset from the cached layer ID/)
   assert.doesNotMatch(JSON.stringify(result), /private log text/)
+})
+
+test('doctor keeps vendor runtime layer indexes advisory while deterministic content drift blocks', () => {
+  const result = evaluateDoctor({
+    ...requiredProbes,
+    ...missingOptionalProbes,
+    boardRoute: 'ashlr_layer',
+    inputProfile: {
+      ...requiredProbes.inputProfile,
+      configuredLayers: [{ name: 'Ashlr Daily', mapping: 'unknown', encoderDirection: 'correct', dailySignalCount: 19, unboundControls: ['ACT11'] }],
+    },
+    inputRuntime: {
+      status: 'unresolved_profile_layer', profileIndex: 2, layerIndex: 1,
+      observedAt: '2026-09-01T19:33:00.000Z', fresh: true,
+    },
+  })
+
+  assert.equal(result.inputProfile.dailyProfileReady, false)
+  assert.equal(result.readiness.ashlrLayer.status, 'blocked')
+  assert.equal(result.readiness.ashlrLayer.reason, 'active_profile_content_drift')
+  assert.match(result.modeGuidance.ashlrLayer, /19\/20 expected bindings match/)
+  assert.match(result.nextAction, /strictly verified 20-signal/)
+  assert.match(result.nextAction, /same incomplete profile current is not a repair/)
+  assert.match(result.nextAction, /Agent Board changed nothing/)
 })
 
 test('deterministic cache repair outranks advisory log evidence', () => {
@@ -443,7 +584,9 @@ test('doctor projects recurring Codex-protocol traffic as manual co-presence evi
   assert.equal(result.readiness.ashlrLayer.reason, 'recurring_codex_protocol_traffic')
   assert.match(result.modeGuidance.ashlrLayer, /co-presence evidence, not ownership/)
   assert.match(result.nextAction, /human must establish an Input-only window/)
-  assert.doesNotMatch(JSON.stringify(result), /456|private log text/)
+  assert.equal(Object.hasOwn(result.inputRuntime.codexProtocolTraffic, 'rpcId'), false)
+  assert.equal(Object.hasOwn(result.inputRuntime.codexProtocolTraffic, 'raw'), false)
+  assert.doesNotMatch(JSON.stringify(result), /private log text/)
 })
 
 test('malformed recurring traffic cannot become a fresh advisory', () => {

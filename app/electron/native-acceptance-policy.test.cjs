@@ -12,6 +12,8 @@ test('native acceptance handlers stay behind trusted renderer IPC', () => {
     'board:prepareNativeAcceptance',
     'board:acceptNativeAcceptance',
     'board:clearNativeAcceptance',
+    'board:getNativeControlCheck',
+    'board:saveNativeControlCheck',
   ]) {
     assert.match(mainSource, new RegExp(`ipcMain\\.handle\\('${channel}', trustedIpc\\(`))
     assert.match(preloadSource, new RegExp(`ipcRenderer\\.invoke\\('${channel}'`))
@@ -20,6 +22,7 @@ test('native acceptance handlers stay behind trusted renderer IPC', () => {
 
 test('native preparation requires declared route, USB identity, and bounded Desktop metadata', () => {
   assert.match(mainSource, /if \(settings\.boardRoute === 'codex_native'\) \{[\s\S]*shortcutState = synchronizeShortcutOwnership\(settings\.boardRoute\)[\s\S]*passiveRouteVerified = shortcutState\.released === true && shortcutsAreReleased\(\)/)
+  assert.doesNotMatch(mainSource, /settings\.boardRoute === 'hybrid_native'[\s\S]*passiveRouteVerified/)
   assert.match(mainSource, /shortcutsAreReleased\(\)[\s\S]*globalShortcut\.isRegistered\(accelerator\)/)
   assert.match(mainSource, /currentContext = passiveRouteVerified && board && chatgpt\.status === 'installed'/)
   assert.match(mainSource, /device: \{ vidPid: board\.vidPid \}/)

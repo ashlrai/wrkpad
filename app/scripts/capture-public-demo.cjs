@@ -74,7 +74,7 @@ async function capture() {
       banner.innerHTML = '<strong style="color:#8fa3ff">SYNTHETIC DOCUMENTATION VIEW</strong><span>No live sessions, personal paths, device writes, RGB, or Fleet authority.</span>';
       document.body.prepend(banner);
       const visibleText = document.body.innerText;
-      const requiredText = ['BLACK-CAP LEGEND', 'Ready to review', 'Available', 'Screen is authoritative now', 'USB absent', 'OBSERVER UNAVAILABLE'];
+      const requiredText = ['BLACK-CAP LEGEND', 'Ready to review', 'Available', 'Screen is authoritative now', 'USB identity not observed', 'Agent session feed unavailable'];
       return {
         contentHeight: Math.ceil(document.documentElement.scrollHeight),
         slotCount: document.querySelectorAll('.attention-slot').length,

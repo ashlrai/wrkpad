@@ -3,26 +3,33 @@
 import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { constants, accessSync, lstatSync, readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { homedir, platform } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(HERE, '..')
+const require = createRequire(import.meta.url)
+const { HYBRID_NATIVE_ROUTE, HYBRID_NATIVE_SIGNAL_IDS } = require('../app/electron/board-route-policy.cjs')
 const APP_DOCTOR = join(REPO_ROOT, 'app', 'scripts', 'doctor.mjs')
 const MAX_OUTPUT_BYTES = 256 * 1024
-const ROUTES = new Set(['ashlr_layer', 'codex_native'])
+const ROUTES = new Set(['ashlr_layer', 'codex_native', HYBRID_NATIVE_ROUTE])
 const INPUT_RUNTIME_STATUSES = new Set(['unresolved_profile_layer', 'not_observed', 'log_missing', 'log_unsafe', 'log_unavailable'])
 const CODEX_PROTOCOL_TRAFFIC_STATUSES = new Set(['recurring_unresolved_response', 'not_observed', 'log_missing', 'log_unsafe', 'log_unavailable'])
 const ASHLR_REQUIRED_DOCTOR_CHECK_NAMES = new Set(['Creator Micro 2 USB', 'Work Louder Input'])
 const NATIVE_REQUIRED_DOCTOR_CHECK_NAMES = new Set(['Creator Micro 2 USB', 'ChatGPT desktop'])
+const HYBRID_REQUIRED_DOCTOR_CHECK_NAMES = new Set(['Creator Micro 2 USB', 'Work Louder Input', 'ChatGPT desktop'])
 const INPUT_CACHE_STATUSES = new Set(['available', 'missing', 'invalid', 'unsafe'])
 const INPUT_ENCODER_DIRECTIONS = new Set(['correct', 'reversed', 'unrecognized', 'unavailable'])
 const INPUT_INSTALLATION_STATUSES = new Set(['verified', 'missing', 'multiple_installations', 'unsafe', 'invalid_metadata', 'publisher_unrecognized', 'invalid_signature', 'known_resource_mutation', 'gatekeeper_rejected', 'probe_unavailable'])
 const RECEIVER_RUNTIME_STATUSES = new Set(['not_running', 'exclusive', 'contended_same_build', 'contended_distinct_builds', 'unavailable'])
 const READINESS_STATUSES = new Set(['pass', 'manual', 'blocked'])
 const NATIVE_REASONS = new Set(['native_prerequisite_missing', 'firmware_rpc_missing', 'historical_firmware_rpc_missing', 'recent_native_connection_observed', 'native_connection_requires_verification'])
-const ASHLR_REASONS = new Set(['required_prerequisite_missing', 'receiver_contended_same_build', 'receiver_contended_distinct_builds', 'receiver_probe_unavailable', 'receiver_not_running', 'encoder_direction_reversed', 'input_profile_requires_activation', 'recent_unresolved_profile_layer_observed', 'recurring_codex_protocol_traffic', 'physical_acceptance_required'])
+const ASHLR_REASONS = new Set(['required_prerequisite_missing', 'receiver_contended_same_build', 'receiver_contended_distinct_builds', 'receiver_probe_unavailable', 'receiver_not_running', 'encoder_direction_reversed', 'input_profile_requires_activation', 'active_profile_content_drift', 'recent_unresolved_profile_layer_observed', 'recurring_codex_protocol_traffic', 'physical_acceptance_required'])
+const INPUT_CONTROL_IDS = new Set(['AG00', 'AG01', 'AG02', 'AG03', 'AG04', 'AG05', 'ACT06', 'ACT07', 'ACT08', 'ACT09', 'ACT10', 'ACT11', 'ACT12'])
+const HYBRID_REASONS = new Set(['required_prerequisite_missing', 'receiver_contended_same_build', 'receiver_contended_distinct_builds', 'receiver_probe_unavailable', 'receiver_not_running', 'input_application_running', 'input_application_probe_unavailable', 'hybrid_profile_requires_activation', 'separate_physical_acceptance_required'])
+const INPUT_APPLICATION_STATUSES = new Set(['running', 'not_running', 'unavailable'])
 const boundedHash = (value) => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value) ? value : null
 const boundedVersion = (value) => typeof value === 'string' && /^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$/.test(value) ? value : null
 const boundedIsoTimestamp = (value) => {
@@ -170,7 +177,7 @@ function projectAppDoctor(raw) {
     const matches = checks.filter((item) => item?.name === name)
     return matches.length === 1 && matches[0].ok === true
   }
-  const declaredRoute = ['ashlr_layer', 'codex_native'].includes(raw.route) ? raw.route : 'unknown'
+  const declaredRoute = ['ashlr_layer', 'codex_native', HYBRID_NATIVE_ROUTE].includes(raw.route) ? raw.route : 'unknown'
   const rawInputInstallation = raw.inputInstallation && typeof raw.inputInstallation === 'object' ? raw.inputInstallation : null
   const projectedInputStatus = INPUT_INSTALLATION_STATUSES.has(rawInputInstallation?.status) ? rawInputInstallation.status : 'probe_unavailable'
   const inputVersion = boundedVersion(rawInputInstallation?.version)
@@ -213,7 +220,9 @@ function projectAppDoctor(raw) {
   }
   const expectedRequiredNames = declaredRoute === 'codex_native'
     ? NATIVE_REQUIRED_DOCTOR_CHECK_NAMES
-    : ASHLR_REQUIRED_DOCTOR_CHECK_NAMES
+    : declaredRoute === HYBRID_NATIVE_ROUTE
+      ? HYBRID_REQUIRED_DOCTOR_CHECK_NAMES
+      : ASHLR_REQUIRED_DOCTOR_CHECK_NAMES
   const requiredReady = required.length === expectedRequiredNames.size
     && requiredNames.size === expectedRequiredNames.size
     && [...expectedRequiredNames].every((name) => requiredNames.has(name))
@@ -223,6 +232,10 @@ function projectAppDoctor(raw) {
   const ashlrPrerequisitesReady = usbReady
     && uniqueCheckReady('Work Louder Input')
     && inputInstallation.status === 'verified'
+  const hybridPrerequisitesReady = declaredRoute === HYBRID_NATIVE_ROUTE
+    && requiredReady
+    && ashlrPrerequisitesReady
+    && uniqueCheckReady('ChatGPT desktop')
   const rawRuntime = raw.inputRuntime && typeof raw.inputRuntime === 'object' ? raw.inputRuntime : null
   const runtimeStatus = rawRuntime && INPUT_RUNTIME_STATUSES.has(rawRuntime.status) ? rawRuntime.status : rawRuntime ? 'invalid' : null
   const runtimeProfileIndex = Number.isInteger(rawRuntime?.profileIndex) && rawRuntime.profileIndex >= 0 && rawRuntime.profileIndex <= 31 ? rawRuntime.profileIndex : null
@@ -247,6 +260,23 @@ function projectAppDoctor(raw) {
   const dailyProfileMatch = rawProfile?.dailyProfileMatch === true
   const dailyLayerMatch = rawProfile?.dailyLayerMatch === true
   const dailyProfileReady = cacheStatus === 'available' && dailyProfileMatch && dailyLayerMatch && encoderDirection === 'correct'
+    && rawProfile?.dailyProfileReady === true
+  const dailySignalCount = Number.isInteger(rawProfile?.dailySignalCount) && rawProfile.dailySignalCount >= 0 && rawProfile.dailySignalCount <= 20
+    ? rawProfile.dailySignalCount
+    : null
+  const unboundControls = Array.isArray(rawProfile?.unboundControls)
+    && rawProfile.unboundControls.length <= 13
+    && rawProfile.unboundControls.every((control) => INPUT_CONTROL_IDS.has(control))
+    ? [...new Set(rawProfile.unboundControls)]
+    : []
+  const unexpectedBindings = rawProfile?.unexpectedBindings === true
+  const hybridProfileMatch = rawProfile?.hybridProfileMatch === true
+  const hybridLayersMatch = rawProfile?.hybridLayersMatch === true
+  const hybridProfileReady = cacheStatus === 'available' && hybridProfileMatch && hybridLayersMatch
+    && rawProfile?.hybridProfileReady === true
+  const inputApplicationStatus = INPUT_APPLICATION_STATUSES.has(raw.inputApplication?.status)
+    ? raw.inputApplication.status
+    : 'unavailable'
   const projectedNativeStatus = READINESS_STATUSES.has(raw.readiness?.codexNative?.status) ? raw.readiness.codexNative.status : 'unknown'
   const projectedNativeReason = NATIVE_REASONS.has(raw.readiness?.codexNative?.reason) ? raw.readiness.codexNative.reason : 'native_readiness_unavailable'
   const nativeFresh = raw.readiness?.codexNative?.fresh === true
@@ -263,6 +293,27 @@ function projectAppDoctor(raw) {
   const nativeReason = nativeShapeValid ? projectedNativeReason : 'native_readiness_unavailable'
   const ashlrStatus = READINESS_STATUSES.has(raw.readiness?.ashlrLayer?.status) ? raw.readiness.ashlrLayer.status : 'manual'
   const ashlrReason = ASHLR_REASONS.has(raw.readiness?.ashlrLayer?.reason) ? raw.readiness.ashlrLayer.reason : 'physical_acceptance_required'
+  const projectedHybridStatus = READINESS_STATUSES.has(raw.readiness?.hybridNative?.status) ? raw.readiness.hybridNative.status : 'unknown'
+  const projectedHybridReason = HYBRID_REASONS.has(raw.readiness?.hybridNative?.reason)
+    ? raw.readiness.hybridNative.reason
+    : 'hybrid_readiness_unavailable'
+  const expectedHybridReason = !hybridPrerequisitesReady
+    ? 'required_prerequisite_missing'
+    : ['contended_same_build', 'contended_distinct_builds', 'unavailable'].includes(receiverRuntime.status)
+      ? receiverRuntime.status === 'contended_same_build'
+        ? 'receiver_contended_same_build'
+        : receiverRuntime.status === 'contended_distinct_builds' ? 'receiver_contended_distinct_builds' : 'receiver_probe_unavailable'
+      : receiverRuntime.status === 'not_running'
+        ? 'receiver_not_running'
+        : inputApplicationStatus === 'running'
+          ? 'input_application_running'
+          : inputApplicationStatus !== 'not_running'
+            ? 'input_application_probe_unavailable'
+            : !hybridProfileReady ? 'hybrid_profile_requires_activation' : 'separate_physical_acceptance_required'
+  const expectedHybridStatus = expectedHybridReason === 'separate_physical_acceptance_required' ? 'manual' : 'blocked'
+  const hybridShapeValid = projectedHybridStatus === expectedHybridStatus && projectedHybridReason === expectedHybridReason
+  const hybridStatus = hybridShapeValid ? projectedHybridStatus : 'blocked'
+  const hybridReason = hybridShapeValid ? projectedHybridReason : 'hybrid_readiness_unavailable'
   return {
     declaredRoute,
     inputProfile: rawProfile ? {
@@ -271,7 +322,14 @@ function projectAppDoctor(raw) {
       dailyLayerMatch,
       encoderDirection,
       dailyProfileReady,
+      dailySignalCount,
+      unboundControls,
+      ...(unexpectedBindings ? { unexpectedBindings: true } : {}),
+      hybridProfileMatch,
+      hybridLayersMatch,
+      hybridProfileReady,
     } : null,
+    inputApplication: { status: inputApplicationStatus },
     inputRuntime: rawRuntime ? {
       status: projectedRuntimeStatus,
       profileIndex: runtimeProfileIndex,
@@ -289,11 +347,14 @@ function projectAppDoctor(raw) {
     requiredReady,
     nativePrerequisitesReady,
     ashlrPrerequisitesReady,
+    hybridPrerequisitesReady,
     nativeStatus,
     nativeReason,
     nativeFresh: nativeShapeValid && nativeFresh,
     ashlrStatus,
     ashlrReason,
+    hybridStatus,
+    hybridReason,
   }
 }
 
@@ -329,7 +390,9 @@ export function buildPreflight({
   const appDoctor = projectAppDoctor(appDoctorRaw)
   const routePrerequisitesReady = route === 'codex_native'
     ? appDoctor?.nativePrerequisitesReady === true
-    : appDoctor?.ashlrPrerequisitesReady === true
+    : route === HYBRID_NATIVE_ROUTE
+      ? appDoctor?.hybridPrerequisitesReady === true
+      : appDoctor?.ashlrPrerequisitesReady === true
   const coreDoctor = runStableJson(stable, binary.matches_local_build, ['doctor', '--json'], runCommand)
   const service = runStableJson(stable, binary.matches_local_build, ['service', 'status', '--json'], runCommand)
   const codexHooks = runStableJson(stable, binary.matches_local_build, ['hooks', 'status', '--provider', 'codex', '--scope', 'user', '--json'], runCommand)
@@ -364,7 +427,7 @@ export function buildPreflight({
     check(
       'agent_board_doctor',
       routePrerequisitesReady ? 'pass' : appDoctor ? 'blocked' : 'warn',
-      appDoctor ? `${route === 'codex_native' ? 'native' : 'Ashlr Layer'} desktop prerequisites ${routePrerequisitesReady ? 'passed' : 'did not pass'}` : 'desktop doctor output unavailable or incompatible',
+      appDoctor ? `${route === 'codex_native' ? 'native' : route === HYBRID_NATIVE_ROUTE ? 'Hybrid Native' : 'Ashlr Layer'} desktop prerequisites ${routePrerequisitesReady ? 'passed' : 'did not pass'}` : 'desktop doctor output unavailable or incompatible',
       appDoctor ? 'desktop prerequisites are evaluated for the requested route and remain separate from physical acceptance' : 'run the desktop doctor directly for bounded diagnostics',
     ),
     check(
@@ -399,16 +462,20 @@ export function buildPreflight({
     ),
   ]
   const ashlrPrerequisitesReady = appDoctor?.ashlrPrerequisitesReady === true
+  const hybridPrerequisitesReady = appDoctor?.hybridPrerequisitesReady === true
   const inputInstallationReady = appDoctor?.inputInstallation?.status === 'verified'
   const knownInputResourceMutation = appDoctor?.inputInstallation?.status === 'known_resource_mutation'
   const ashlrReceiverReady = appDoctor?.receiverRuntime?.status === 'exclusive'
+  const hybridInputQuit = appDoctor?.inputApplication?.status === 'not_running'
   let ashlrProfileObserved = false
   let ashlrProfileReady = false
   let ashlrInputOnlyWindowNeeded = false
+  let hybridProfileObserved = false
+  let hybridProfileReady = false
 
   checks.push(check(
     'input_installation_integrity',
-    inputInstallationReady ? 'pass' : route === 'ashlr_layer' ? 'blocked' : 'warn',
+    inputInstallationReady ? 'pass' : route === 'codex_native' ? 'warn' : 'blocked',
     `status=${appDoctor?.inputInstallation?.status ?? 'probe_unavailable'}; version=${appDoctor?.inputInstallation?.version ?? 'unavailable'}`,
     inputInstallationReady
       ? 'the exact vendor publisher, bundle signature, and Gatekeeper assessment passed'
@@ -430,6 +497,7 @@ export function buildPreflight({
     const codexTraffic = runtime?.codexProtocolTraffic
     ashlrInputOnlyWindowNeeded = codexTraffic?.status === 'recurring_unresolved_response' && codexTraffic.fresh === true
     const codexTrafficUnavailable = ['log_missing', 'log_unsafe', 'log_unavailable', 'invalid'].includes(codexTraffic?.status)
+    const contentDrift = appDoctor?.ashlrReason === 'active_profile_content_drift'
     checks.push(check(
       'receiver_ownership',
       ashlrReceiverReady ? 'pass' : 'blocked',
@@ -442,9 +510,11 @@ export function buildPreflight({
     ))
     checks.push(check(
       'input_profile',
-      profile?.dailyProfileReady ? 'pass' : profile?.encoderDirection === 'reversed' ? 'blocked' : 'warn',
-      profile ? `cache=${profile.cacheStatus}; daily_profile_match=${profile.dailyProfileMatch}; daily_layer_match=${profile.dailyLayerMatch}; encoder=${profile.encoderDirection}` : 'bounded Input profile evidence unavailable',
-      profile?.dailyProfileReady
+      contentDrift || profile?.encoderDirection === 'reversed' ? 'blocked' : profile?.dailyProfileReady ? 'pass' : 'warn',
+      profile ? `cache=${profile.cacheStatus}; daily_profile_match=${profile.dailyProfileMatch}; daily_layer_match=${profile.dailyLayerMatch}; encoder=${profile.encoderDirection}; expected_bindings=${profile.dailySignalCount ?? 'unknown'}/20; unexpected_bindings=${profile.unexpectedBindings === true}; unbound=${profile.unboundControls?.join(',') || 'none_observed'}` : 'bounded Input profile evidence unavailable',
+      contentDrift
+        ? 'the cached profile labels match but its exact content is incomplete; replace it with a strictly verified 20-signal profile rather than selecting the same profile again'
+        : profile?.dailyProfileReady
         ? 'the read-only cache matches the corrected daily profile; a board write and physical dial route are not yet proven'
         : profile?.encoderDirection === 'reversed' ? 'the read-only cache identifies the known reversed dial mapping' : 'activate the corrected daily profile in Work Louder Input before Flight Check',
     ))
@@ -455,7 +525,7 @@ export function buildPreflight({
         ? `reason=unresolved_profile_layer; profile_index=${runtime.profileIndex ?? 'unknown'}; layer_index=${runtime.layerIndex ?? 'unknown'}; fresh=${runtime.fresh}`
         : runtimeUnavailable ? `reason=${runtime.status}; bounded Input runtime evidence unavailable` : runtime ? `reason=${runtime.status}; no recent unresolved combination projected` : 'bounded Input runtime evidence unavailable',
       runtime?.status === 'unresolved_profile_layer' && runtime.fresh
-        ? 'Input recently logged an unresolved index combination; it may predate the current cache and does not prove current device state'
+        ? "Input recently logged an unresolved index combination; the vendor runtime layer index is offset from the cached layer ID, so it does not prove a missing cache layer or current device state"
         : runtimeUnavailable ? 'runtime evidence is unavailable or unsafe; do not infer an error-free Input session' : runtime ? 'no recent unresolved Input profile/layer event requires an advisory' : 'run the desktop doctor directly for bounded Input runtime evidence',
     ))
     checks.push(check(
@@ -473,6 +543,57 @@ export function buildPreflight({
       appDoctor?.ashlrStatus === 'blocked' ? 'blocked' : 'manual',
       `Ashlr Layer: ${appDoctor?.ashlrReason ?? 'daily profile and Flight Check require verification'}`,
       'Input profile activation, macOS permission, and the physical Flight Check remain human acceptance gates',
+      'human',
+      'permission',
+    ))
+  } else if (route === HYBRID_NATIVE_ROUTE) {
+    const profile = appDoctor?.inputProfile
+    hybridProfileObserved = Boolean(profile)
+    hybridProfileReady = profile?.hybridProfileReady === true
+    checks.push(check(
+      'hybrid_shortcut_policy',
+      HYBRID_NATIVE_SIGNAL_IDS.length === 14
+        && HYBRID_NATIVE_SIGNAL_IDS.every((signal) => !/^agent[1-6]$/u.test(signal)) ? 'pass' : 'blocked',
+      `expected=14; ordered=${HYBRID_NATIVE_SIGNAL_IDS.join(',')}`,
+      'this static policy identifies only the non-agent shortcut plane; it does not prove registration, a physical signal, or any native Agent key',
+    ))
+    checks.push(check(
+      'receiver_ownership',
+      ashlrReceiverReady ? 'pass' : 'blocked',
+      `status=${appDoctor?.receiverRuntime?.status ?? 'unavailable'}; instances=${appDoctor?.receiverRuntime?.instanceCount ?? 0}; builds=${appDoctor?.receiverRuntime?.distinctBuildCount ?? 0}`,
+      ashlrReceiverReady
+        ? 'one hashed Agent Board receiver may own exactly the 14 non-agent shortcuts'
+        : 'hybrid shortcut ownership fails closed; fully quit every Agent Board copy manually, then reopen one reviewed build',
+      ashlrReceiverReady ? 'agent' : 'human',
+      ashlrReceiverReady ? 'read' : 'local_write',
+    ))
+    checks.push(check(
+      'input_application',
+      hybridInputQuit ? 'pass' : 'blocked',
+      `status=${appDoctor?.inputApplication?.status ?? 'unavailable'}`,
+      hybridInputQuit
+        ? 'Work Louder Input was not observed running; this does not prove profile synchronization, shortcut receipt, or native acceptance'
+        : 'Hybrid operation fails closed until a human fully quits Work Louder Input and the bounded process probe reports not_running',
+      hybridInputQuit ? 'agent' : 'human',
+      hybridInputQuit ? 'read' : 'local_write',
+    ))
+    checks.push(check(
+      'input_profile',
+      hybridProfileReady ? 'pass' : 'blocked',
+      profile
+        ? `cache=${profile.cacheStatus}; hybrid_profile_match=${profile.hybridProfileMatch}; hybrid_layers_match=${profile.hybridLayersMatch}`
+        : 'bounded Input profile evidence unavailable',
+      hybridProfileReady
+        ? 'the bounded cache matches the exact two-layer hybrid profile; active firmware layer, device synchronization, and physical controls remain unproven'
+        : 'the exact hybrid profile and ordered hybrid-first/daily-second layers are required before Flight Check',
+    ))
+    checks.push(check(
+      'route_readiness',
+      appDoctor?.hybridStatus === 'manual' ? 'manual' : 'blocked',
+      `Hybrid Native: ${appDoctor?.hybridReason ?? 'hybrid_readiness_unavailable'}`,
+      appDoctor?.hybridStatus === 'manual'
+        ? 'the exact 14 non-agent Flight Check and the six native Agent keys require separate human acceptance; neither implies the other'
+        : 'hybrid prerequisites are incomplete; no physical or native acceptance can be inferred',
       'human',
       'permission',
     ))
@@ -526,7 +647,7 @@ export function buildPreflight({
       { executable: 'cargo', args: ['build', '--release', '--locked'], cwd: '$REPO_ROOT' },
     ))
   }
-  nextSteps.push(route === 'ashlr_layer' && !inputInstallationReady
+  nextSteps.push(route !== 'codex_native' && !inputInstallationReady
     ? nextStep(
       'restore_signed_input', 'human', 'local_write', knownInputResourceMutation
         ? ['fully quit Work Louder Input', 'preserve a stopped-state profile backup before replacement', 'replace the modified app with one official signed Work Louder Input release', 'rerun the read-only doctor before reopening board controllers or considering firmware']
@@ -571,7 +692,44 @@ export function buildPreflight({
               'the named daily shortcut route emitted all expected physical gestures',
               'native Codex RGB, firmware compatibility, provider authority, or consequential-action approval',
             )
-      : !routePrerequisitesReady
+      : route === HYBRID_NATIVE_ROUTE
+        ? !hybridPrerequisitesReady
+          ? nextStep(
+            'resolve_hybrid_prerequisites', 'human', 'local_write', ['connect the Creator Micro 2 over USB', 'install one verified signed Work Louder Input app', 'install and open ChatGPT desktop', 'rerun the read-only desktop doctor'],
+            'the bounded USB, Input-installation, and ChatGPT prerequisites are available',
+            'exact profile state, Input process isolation, shortcut ownership, either physical acceptance plane, firmware compatibility, or release readiness',
+          )
+          : !ashlrReceiverReady
+            ? nextStep(
+              'reconcile_agent_board_receivers', 'human', 'local_write', ['save current work', 'fully quit every Agent Board copy manually', 'reopen one reviewed exact build'],
+              'one hashed Agent Board receiver is available to own only the 14 non-agent shortcuts',
+              'Input process isolation, profile activation, physical shortcut receipt, six native Agent keys, native RGB, or release readiness',
+            )
+            : !hybridInputQuit
+              ? nextStep(
+                'quit_input_for_hybrid_operation', 'human', 'local_write', ['save profile work', 'fully quit Work Louder Input manually', 'rerun the bounded process probe'],
+                'Work Louder Input is no longer observed running while Agent Board owns the non-agent shortcut plane',
+                'profile synchronization, exact shortcut registration, physical receipt, native Agent keys, firmware compatibility, or release readiness',
+              )
+              : !hybridProfileObserved
+                ? nextStep(
+                  'inspect_hybrid_input_profile', 'agent', 'read', [],
+                  'the bounded desktop doctor projects sanitized hybrid profile evidence',
+                  'profile activation, device synchronization, active firmware layer, physical controls, native acceptance, or firmware compatibility',
+                  { executable: 'node', args: ['app/scripts/doctor.mjs', '--json'], cwd: '$REPO_ROOT' },
+                )
+                : !hybridProfileReady
+                  ? nextStep(
+                    'reconcile_hybrid_input_profile', 'human', 'device_write', ['ordinary profile export saved as rollback', 'Codex, Agent Board, and competing controllers fully quit', 'Work Louder Input is the only board controller during configuration', 'hybrid layer placed first and daily layer second', 'Work Louder Input fully quit again before Agent Board reopens'],
+                    'the exact hybrid profile is imported, current, ordered, and still selected after Input relaunch',
+                    'device synchronization, active firmware layer, Input Monitoring permission, 14-control physical receipt, six native Agent keys, native RGB, or firmware compatibility',
+                  )
+                  : nextStep(
+                    'complete_hybrid_non_agent_flight_check', 'human', 'permission', ['exact hybrid profile observed', 'Work Louder Input verified not running', 'one reviewed Agent Board receiver', 'Input Monitoring granted', 'actions suppressed'],
+                    `the ordered 14-control shortcut plane emitted ${HYBRID_NATIVE_SIGNAL_IDS.join(', ')}`,
+                    'the six native Agent keys, ChatGPT Settings connection, native RGB, firmware compatibility, provider authority, or consequential-action approval',
+                  )
+        : !routePrerequisitesReady
         ? nextStep(
           'resolve_native_prerequisites', 'human', 'local_write', ['connect the Creator Micro 2 over USB', 'install and open ChatGPT desktop', 'rerun the read-only desktop doctor'],
           'the bounded native USB and ChatGPT desktop prerequisites are available',
@@ -597,6 +755,18 @@ export function buildPreflight({
           'a fresh Codex Settings and physical-control receipt replaces historical or missing native evidence',
           'firmware compatibility, Ashlr Layer readiness, provider authority, or release readiness',
         ))
+
+  if (route === HYBRID_NATIVE_ROUTE
+    && hybridPrerequisitesReady
+    && ashlrReceiverReady
+    && hybridInputQuit
+    && hybridProfileReady) {
+    nextSteps.push(nextStep(
+      'verify_hybrid_native_agent_keys', 'human', 'local_write', ['Work Louder Input fully quit', 'ChatGPT desktop open', 'Creator Micro 2 connected', 'no non-Agent Flight Check claim reused as native evidence'],
+      'the operator separately observes each of the six native Agent keys selecting its assigned ChatGPT task',
+      'the 14 non-agent shortcut plane, full native dial/joystick/action behavior, native RGB, firmware compatibility, provider authority, or release readiness',
+    ))
+  }
 
   const overall = checks.some((item) => item.status === 'blocked')
     ? 'blocked'

@@ -94,7 +94,19 @@ shortcut receipt, USB ownership, or physical acceptance.
 6. Look for another app that already owns the same global shortcut.
 7. Restart Agent Board after permission or ownership changes.
 
-All 20 desktop shortcuts must register even though daily use emits 19 signals; ACT11 remains `None` on the daily layer.
+All 20 desktop shortcuts must register and all 20 physical signals must be tested. ACT10 and ACT11 are independent bottom-row switches.
+
+If all endpoints register but no physical signal is received, watch **OS
+callbacks observed** and press the same accelerator on the Mac keyboard. This
+counter remains available when Flight Check is blocked or inactive. An allowed
+laptop callback followed by a silent board control points back to the board's
+active profile or emitted report. A rejected callback points to route or
+ownership revalidation. No callback from either input requires receiver-level
+diagnosis; `20/20 registered` alone is not delivery evidence. The counter stores
+only an allowlisted control ID, timestamp, aggregate count, and delivery result.
+It is reset and labeled for each shortcut-ownership route/generation, so an old
+Ashlr callback cannot be presented as evidence for a later Hybrid or passive
+native route.
 
 ## Input-only reconciliation
 
@@ -140,9 +152,11 @@ cache is wrong, or Agent Board shows recent unresolved-index log evidence:
 9. Run a fresh physical Flight Check without simulating shortcuts from the
    keyboard.
 
-Recent unresolved-index evidence may predate the current cache, so it is an
-advisory rather than proof of the current board state. Do not reset, delete or
-transform a protected `KV_OAI_*` layer, or flash firmware from that evidence.
+Recent unresolved-index evidence is advisory rather than proof of the current
+board state. The vendor runtime layer index is offset from the cached layer ID,
+so those numbers cannot establish that a cached layer is missing. Do not reset,
+delete or transform a protected `KV_OAI_*` layer, or flash firmware from that
+evidence.
 
 If Setup reports recurring Codex-protocol responses reaching Input, treat that
 as current controller co-presence only. It does not identify HID ownership or
@@ -150,10 +164,10 @@ prove why a shortcut was silent, but it does mean the Input-only reconciliation
 window is not exclusive. End Flight Check and establish the human-guided
 Input-only window above; Agent Board does not quit applications automatically.
 
-If Flight Check receives zero raw signals, use the top-right black rotary dial.
-The top-left white control is the joystick. The bottom-left circle is the
-layer/communication-mode touch sensor, not the dial and not a Flight Check
-gesture. If the correct control still emits nothing, do not
+If Flight Check receives zero raw signals, use the rotary dial at the left of
+the first row. The planar toggle/joystick is at the right. The bottom-left
+circle is the layer/communication-mode touch sensor, not the dial and not a
+Flight Check gesture. If the correct control still emits nothing, do not
 simulate the shortcut from the keyboard. Complete the Input-only reconciliation
 above, then confirm the fresh check still records `0` raw receipts.
 
@@ -189,6 +203,35 @@ that route verifies its known Ashlr shortcuts are unregistered and uses bounded
 read-only operating-system and log observation.
 Detected-only or Connection failed does not count. Codex and Input can hold nonexclusive HID handles, but
 they do not share a cross-process RPC or lighting lease.
+
+If both labels pass but **every** key, dial, and joystick action is silent,
+inspect an exported profile for the native bindings before reconnecting or
+flashing again. A Creator Micro 2 can remain visible to ChatGPT while its
+active layer contains ordinary `KC_*` or Ashlr `KA_*` actions instead of the
+firmware-owned `KV_OAI_*` notifications. Follow the bounded
+[unofficial Codex Native layer recovery](codex-native-layer-recovery.md). It
+requires a verified Input installation, complete profile backups, manual
+**Import layer**, offline post-import validation, and fresh physical
+acceptance. It never authorizes Reset Settings, a cache edit, or a raw device
+write.
+
+Do not compare Input's runtime `layer_index` directly with cached keymap layer
+IDs. The inspected vendor client translates the selected layer before the
+device request (`layerSelectedIndex = selectedLayerIndex - 1`); runtime layer
+`1` can therefore correspond to cache layer ID `0`. An unresolved profile/layer
+log remains advisory and never proves that a cache layer is absent. Diagnose the
+cache from its exact mapping and prove device delivery through a new physical
+Flight Check.
+
+Treat Doctor reason `active_profile_content_drift` as a separate stop
+condition. The cache-current profile and layer names match the Ashlr convention,
+but at least one of the 20 exact bindings does not. Doctor reports a bounded
+match count and known disabled controls when derivable, such as `19/20` and
+`ACT11` unbound. The Electron main process enforces that exact-content gate
+again before Flight Check. Do not use **Set as current profile** as the repair: replace the
+incomplete profile with a strictly verified artifact, synchronize it manually
+through Input alone, fully quit Input, rerun Doctor, and require a fresh physical
+receipt.
 
 After a firmware update, fully quit and reopen ChatGPT Desktop before drawing a
 new conclusion. An app process that started before the update may have only the
@@ -226,9 +269,62 @@ operation while it is running; do not infer success from a disabled button.
 Clearing the handoff is safe recovery for a stale or mismatched receipt. It
 does not clear Codex settings, disconnect USB, revert firmware, or change Input.
 
-## The wide Mic cap fires twice
+### Connected and Granted, but an Agent key appears inactive
 
-The cap spans ACT10 and ACT11. Map Mic to ACT10 and set ACT11 to `None` for daily use. Use the [diagnostic Mic test](setup.md#diagnostic-mic-test) only on a disposable layer.
+**Connection: Connected** and **Input Monitoring: Granted** establish the
+device and permission prerequisites shown by ChatGPT. They do not prove the
+active firmware layer, an Agent-slot assignment, a key event, or visible chat
+navigation.
+
+The current official
+[Codex Micro guide](https://learn.chatgpt.com/docs/features/codex-micro) defines
+two different Agent-key gestures: one tap selects the assigned chat without
+bringing ChatGPT forward, while two taps within 350 ms select it and bring
+ChatGPT forward. A single tap can therefore look inactive when another app is
+in front or when the key already represents the selected chat.
+
+1. Keep the board on firmware layer 1 and explicitly select the white wired
+   channel. Do not short-tap the bottom-left layer/connection touch sensor while
+   diagnosing Agent keys.
+2. Keep Work Louder Input quit. Leave Agent Board open only after a successful
+   prepared **Codex Native** handoff; it then remains a passive evidence watcher
+   with no Ashlr shortcuts or board HID handle. Its board twin will not animate
+   in response to native key presses.
+3. In ChatGPT's Creator Micro settings, select a chat-following Agent-key mode,
+   preferably a stable pinned order for this test. Do not use a Custom shortcut,
+   action, skill, approval, or rejection as the diagnostic.
+4. Make two harmless existing chats available to assigned, lit Agent slots. Use
+   the ChatGPT sidebar to identify the currently selected chat without sending
+   a prompt.
+5. Choose an assigned key for a different chat. The six Agent keys are the
+   center two-plus-four block: two between the left rotary dial and right planar
+   toggle/joystick, and four directly below.
+6. Put another application in front, then double-tap the chosen key within
+   350 ms. The expected visible result is ChatGPT coming forward with the
+   assigned chat selected.
+7. With ChatGPT visible, single-tap a different assigned key. The expected
+   result is the other chat becoming selected. The gesture itself does not
+   request foreground focus unless ChatGPT's optional single-tap focus setting
+   is enabled.
+
+Do not count the current chat, an unassigned or unlit slot, or Agent Board's
+unchanged board twin as a failed event. If a known-safe dial or joystick
+navigation works but assigned Agent keys do not, recheck the Agent-key mode,
+assignments, and layer. If no native control responds, fully quit and reopen
+ChatGPT once with Input quit and Agent Board passive or quit, then recheck
+Karabiner-Elements or Logitech Options+ Input Monitoring conflicts. One
+apparently inactive press is not evidence that firmware regressed and does not
+justify reflashing.
+
+Use Setup's **Prove what the key actually did** report to preserve each bounded
+outcome. Record `not_configured` for an ineligible slot instead of converting it
+to success or failure. The report groups the dial and joystick into 16 native
+control groups; it is an operator report, not HID proof or the 20-gesture Ashlr
+Layer Flight Check.
+
+## ACT10 and ACT11 produce the same result
+
+The two bottom switches were mapped to the same legacy action. Map ACT10 to Voice and ACT11 to guarded Continue, then use the [diagnostic bottom-row test](setup.md#diagnostic-bottom-row-test) to verify they arrive independently.
 
 ## Flight Check records a misroute
 

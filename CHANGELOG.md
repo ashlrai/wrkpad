@@ -15,6 +15,10 @@ All notable changes will be documented here. The project follows semantic versio
   Gitleaks checks for public pull requests.
 - Ashlr Agent Board as the Apache-2.0 `app/` desktop companion, with independent
   `agent-board-v*` release tags and source/package/security gates.
+- An opt-in, source-tested Hybrid Native experiment with an offline two-layer
+  profile generator/verifier, Codex-only Agent keys, fourteen Agent Board
+  shortcuts, and a route-specific Flight Check. Input import, device sync,
+  combined 14+6 physical acceptance, and public release remain unproven.
 
 - Native Rust CLI/TUI and reusable library modules.
 - Read-only device-family doctor and competing-owner diagnostics.
@@ -39,6 +43,10 @@ All notable changes will be documented here. The project follows semantic versio
 
 ### Changed
 
+- Make first-run and Dual Plane onboarding explicit that a short touch advances
+  the firmware layer, current builds cannot observe the selected layer, and the
+  Claude/cmux route currently provides application foregrounding rather than
+  exact pane focus.
 - Consolidate volatile Creator Micro 2 desk observations into a dated
   post-flash evidence record, including firmware `0.6.2`, the changed HID
   descriptor, successful firmware RPC responses, repeated Input resource
@@ -64,6 +72,17 @@ All notable changes will be documented here. The project follows semantic versio
 
 ### Fixed
 
+- Fix packaged macOS shortcut ownership by including the Agent Board ancestor
+  in receiver discovery and replacing process-global ASAR toggling with
+  race-free raw archive inspection. The live acceptance target is one hashed
+  receiver and twenty registered endpoints before any physical pass is claimed.
+- Keep partial or silent-key Input profiles out of Ashlr readiness and expose a
+  reversible no-device-write route fallback for an already observed Ashlr map.
+- Keep a provider session on one private slot when its working directory is
+  added, omitted, or changed between lifecycle hooks.
+- For an existing private binding, reject older non-duplicate lifecycle events
+  before they can regress newer agent state, metadata, slot assignment,
+  revision, or event history.
 - Keep macOS USB parsers and Unix durability helpers out of unsupported platform
   builds so strict Linux and Windows lint gates remain portable.
 - Permanently invalidate the current physical-acceptance run when any live gate

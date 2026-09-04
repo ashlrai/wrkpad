@@ -251,6 +251,34 @@ test('cached hasher is bounded, refuses unsafe inputs, and detects mutation duri
   }
 })
 
+test('cached receiver identity uses the injected raw filesystem without process-global ASAR state', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'receiver-runtime-raw-asar-'))
+  try {
+    const current = createBuild(root, 'current', 'current-build')
+    const nativeFilesystem = require('node:fs')
+    const calls = { lstat: 0, open: 0, fstat: 0, read: 0, close: 0 }
+    const rawFilesystem = {
+      constants: nativeFilesystem.constants,
+      lstatSync(...args) { calls.lstat += 1; return nativeFilesystem.lstatSync(...args) },
+      openSync(...args) { calls.open += 1; return nativeFilesystem.openSync(...args) },
+      fstatSync(...args) { calls.fstat += 1; return nativeFilesystem.fstatSync(...args) },
+      readSync(...args) { calls.read += 1; return nativeFilesystem.readSync(...args) },
+      closeSync(...args) { calls.close += 1; return nativeFilesystem.closeSync(...args) },
+    }
+    const hasher = createCachedAsarHasher({ filesystem: rawFilesystem })
+    assert.deepEqual(hasher(current.asarPath), { status: 'available', sha256: current.sha256 })
+    assert.equal(calls.open, 1)
+    assert.equal(calls.fstat, 1)
+    assert.equal(calls.read, 1)
+    assert.equal(calls.close, 1)
+    assert.equal(calls.lstat, 3)
+    assert.throws(() => createCachedAsarHasher({ filesystem: {} }), /Invalid bounded ASAR cache options/)
+    assert.deepEqual(hashBoundedAsar(current.asarPath, {}), { status: 'unavailable', sha256: null })
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test('rejects mismatched current identity and unbounded candidate paths', () => {
   const root = mkdtempSync(path.join(tmpdir(), 'receiver-runtime-'))
   try {
@@ -316,7 +344,7 @@ test('runs only the fixed bounded receiver probe and treats runner failure as un
     })
     assert.equal(classified.status, 'exclusive')
     assert.equal(received.executable, '/usr/bin/pgrep')
-    assert.deepEqual(received.args, ['-fl', RECEIVER_PROCESS_PATTERN])
+    assert.deepEqual(received.args, ['-a', '-f', '-l', RECEIVER_PROCESS_PATTERN])
     assert.equal(received.options.maxBuffer, MAX_PROCESS_OUTPUT_BYTES)
     assert.equal(inspectReceiverRuntime({ run: () => { throw Object.assign(new Error('no matches'), { status: 1 }) } }).status, 'not_running')
     assert.equal(inspectReceiverRuntime({ run: () => null }).status, 'unavailable')
@@ -360,7 +388,7 @@ test('development peer probe uses only the fixed bounded process command and fai
     })
     assert.deepEqual(peers, { status: 'present', instanceCount: 1 })
     assert.equal(received.executable, '/usr/bin/pgrep')
-    assert.deepEqual(received.args, ['-fl', RECEIVER_PROCESS_PATTERN])
+    assert.deepEqual(received.args, ['-a', '-f', '-l', RECEIVER_PROCESS_PATTERN])
     assert.equal(received.options.maxBuffer, MAX_PROCESS_OUTPUT_BYTES)
     assert.deepEqual(inspectPackagedReceiverPeers({ run: () => { throw Object.assign(new Error('none'), { status: 1 }) } }), { status: 'none', instanceCount: 0 })
     assert.deepEqual(inspectPackagedReceiverPeers({ run: () => null }), { status: 'unavailable', instanceCount: 0 })

@@ -8,8 +8,8 @@
   "properties": {
     "schema": { "const": "dev.wrkpad.agent-preflight/v1" },
     "observed_at": { "type": "string", "format": "date-time" },
-    "requested_route": { "enum": ["ashlr_layer", "codex_native"] },
-    "declared_route": { "enum": ["ashlr_layer", "codex_native", "unknown"] },
+    "requested_route": { "enum": ["ashlr_layer", "codex_native", "hybrid_native"] },
+    "declared_route": { "enum": ["ashlr_layer", "codex_native", "hybrid_native", "unknown"] },
     "read_only": { "const": true },
     "source": {
       "type": "object",

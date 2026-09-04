@@ -1,20 +1,28 @@
-const { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, shell } = require('electron')
+const { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, screen, shell } = require('electron')
+const originalFilesystem = require('original-fs')
 const { spawn } = require('node:child_process')
 const { createHash, randomUUID } = require('node:crypto')
-const { renameSync, writeFileSync } = require('node:fs')
+const { existsSync, lstatSync, mkdirSync, renameSync, writeFileSync } = require('node:fs')
 const path = require('node:path')
 const { ACTION_SPECS, executeSpec } = require('./action-registry.cjs')
+const { requireCompactAction, requireCompactWorkflowAction } = require('./compact-action-policy.cjs')
+const { readCompactDeckBounds, readCompactDeckSettings, validateCompactDeckSettings, writeCompactDeckSettings } = require('./compact-deck-settings.cjs')
+const { projectCompactActionResult, projectCompactSnapshot } = require('./compact-snapshot.cjs')
 const { detectCreatorMicro2 } = require('./creator-micro-identity.cjs')
 const { inspectCodexMicroLogs } = require('./codex-micro-diagnostics.cjs')
 const { inspectChatGptInstallationAsync } = require('./chatgpt-installation.cjs')
 const { createInputInstallationInspector } = require('./input-installation-async.cjs')
 const { inspectInputProfile } = require('./input-profile-diagnostics.cjs')
 const { inspectInputRuntime } = require('./input-runtime-diagnostics.cjs')
+const { inspectInputApplicationRuntime } = require('./input-application-runtime.cjs')
 const { createCachedAsarHasher, inspectPackagedReceiverPeers, inspectReceiverRuntime, shouldRegisterShortcuts } = require('./receiver-runtime-diagnostics.cjs')
+const { createCmuxFocusAdapter } = require('./cmux-focus-adapter.cjs')
+const { hasFreshExactDualPlaneAshlrAttestation } = require('./dual-plane-attestation.cjs')
 const { writeGeneratedProfile } = require('./input-profile-generator.cjs')
 const { buildRecoveryChecklist, observeRecoveryArtifact, readRecoveryReceipt, recoveryChecklistText, recoveryReceiptPath, removeRecoveryReceipt, writeRecoveryReceipt } = require('./recovery-receipt.cjs')
 const { acceptNativeAcceptance, evaluateNativeAcceptance, prepareNativeAcceptance, readNativeAcceptanceReceipt, removeNativeAcceptanceReceipt, stageNativeAcceptance, writeNativeAcceptanceReceipt } = require('./native-acceptance-receipt.cjs')
 const { createNativeAcceptanceOperationCoordinator } = require('./native-acceptance-operations.cjs')
+const { createNativeControlCheck, readNativeControlCheck, writeNativeControlCheck } = require('./native-control-check.cjs')
 const { holdSatisfied } = require('./approval-guard.cjs')
 const { evaluateFlightSignals } = require('./flight-receipt.cjs')
 const { createFlightSession } = require('./flight-session.cjs')
@@ -25,7 +33,9 @@ const { appForProvider, collectMissionControl } = require('./mission-control.cjs
 const { configuredRendererUrl, trustedRendererUrl } = require('./renderer-trust.cjs')
 const { appSettingsPath, readWorkspaceSettings, saveBoardRouteSettings, saveWorkspaceSettings, validBoardRoute } = require('./settings.cjs')
 const { passiveRouteActionResult, routeAllowsConfiguredActions } = require('./action-route-policy.cjs')
+const { routeAllowsShortcutDelivery, routeOwnsShortcuts, shortcutSignalsForRoute } = require('./board-route-policy.cjs')
 const { createShortcutCallbackGuard, createShortcutOwnershipController } = require('./shortcut-ownership.cjs')
+const { createShortcutObservability, projectFlightSnapshot } = require('./shortcut-observability.cjs')
 const { resolveTool } = require('./tool-resolver.cjs')
 
 const PROFILE_IDS = new Set(['codex', 'claude', 'fleet', 'ship', 'emergency'])
@@ -35,20 +45,73 @@ const HOTKEYS = {
   joyUp:'Control+Alt+Command+Up',joyRight:'Control+Alt+Command+Right',joyDown:'Control+Alt+Command+Down',joyLeft:'Control+Alt+Command+Left',
   dialLeft:'Control+Alt+Command+Q',dialRight:'Control+Alt+Command+W',dialPress:'Control+Alt+Command+R',
 }
-let mainWindow; let rendererUrl; let currentProfile = 'codex'; let signalSequence = 0; let shortcutRegistrations = []
+let mainWindow; let rendererUrl; let compactWindow; let compactRendererUrl; let compactSnapshotTimer; let compactBoundsTimer; let currentProfile = 'codex'; let signalSequence = 0; let shortcutRegistrations = []
 let missionCache = null; let missionCacheAt = 0; let missionInFlight = null
 const approvals = new Map()
 const flightSession = createFlightSession()
 const flightOperations = createFlightOperationCoordinator(flightSession)
-const cachedReceiverAsarHash = createCachedAsarHasher({ ttlMs: 30_000, maxEntries: 32 })
+let activeFlightAdmission = null
+let flightAdmissionMutation = 0
+const flightAdmissionSuppressions = new Set()
+const mappedActionOperations = new Set()
+const cachedReceiverAsarHash = createCachedAsarHasher({ ttlMs: 30_000, maxEntries: 32, filesystem: originalFilesystem })
 const inspectInputInstallationAsync = createInputInstallationInspector()
 const shortcutCallbackGuard = createShortcutCallbackGuard()
+const shortcutObservability = createShortcutObservability({ signalIds: Object.keys(HOTKEYS) })
+const cmuxFocusAdapter = createCmuxFocusAdapter({ foreground: () => openFixedApp('cmux') })
+
+function resetFlightState() {
+  flightAdmissionMutation += 1
+  activeFlightAdmission = null
+  flightOperations.reset()
+}
+
+function flightActionsSuppressed() {
+  return flightSession.isActive() || flightAdmissionSuppressions.size > 0
+}
+
+function flightInterlockResult(message = 'Mapped actions are disabled until hardware acceptance ends.') {
+  return { ok:false, title:'Flight Check interlock', message, timestamp:new Date().toISOString() }
+}
+
+async function runMappedAction(operation, denied = () => flightInterlockResult()) {
+  if (flightActionsSuppressed()) return denied()
+  const lease = Symbol('mapped-action')
+  mappedActionOperations.add(lease)
+  try {
+    return await operation()
+  } finally {
+    mappedActionOperations.delete(lease)
+  }
+}
+
+function requireMappedActionsIdle() {
+  if (mappedActionOperations.size > 0) throw new Error('Wait for the current mapped action to finish, then start Flight Check again')
+}
 
 function settingsPath() { return appSettingsPath(app.getPath('appData')) }
+function compactSettingsPath() { return path.join(path.dirname(settingsPath()), 'compact-deck.json') }
 function handoffPath() { return recoveryReceiptPath(settingsPath()) }
 function readSettings() { return readWorkspaceSettings(settingsPath(), app.getPath('home')) }
-function saveWorkspace(workspace) { saveWorkspaceSettings(settingsPath(), workspace, app.getPath('home')) }
-function saveBoardRoute(boardRoute) { saveBoardRouteSettings(settingsPath(), boardRoute, app.getPath('home')) }
+function ensureSettingsDirectory() {
+  const directory = path.dirname(settingsPath())
+  if (!existsSync(directory)) mkdirSync(directory, { mode: 0o700 })
+  const status = lstatSync(directory)
+  if (!status.isDirectory() || status.isSymbolicLink()) throw new Error('Agent Board settings directory is unsafe')
+  return directory
+}
+function saveWorkspace(workspace) { ensureSettingsDirectory(); saveWorkspaceSettings(settingsPath(), workspace, app.getPath('home')) }
+function saveBoardRoute(boardRoute) { ensureSettingsDirectory(); saveBoardRouteSettings(settingsPath(), boardRoute, app.getPath('home')) }
+
+function compactWorkArea(bounds) {
+  const display = bounds ? screen.getDisplayMatching(bounds) : screen.getPrimaryDisplay()
+  return display.workArea
+}
+
+function readCompactSettings(bounds) {
+  const targetBounds = bounds ?? readCompactDeckBounds(compactSettingsPath())
+  return readCompactDeckSettings(compactSettingsPath(), compactWorkArea(targetBounds))
+}
 
 function publicChatGptDesktopStatus(inspection) {
   if (inspection?.status === 'installed') return { status: 'metadata_observed', version: inspection.version, build: inspection.build }
@@ -114,10 +177,109 @@ function createWindow() {
   mainWindow.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false))
   mainWindow.loadURL(rendererUrl)
   mainWindow.on('closed', () => {
-    flightOperations.reset()
+    resetFlightState()
     approvals.clear()
     mainWindow = null
   })
+}
+
+function stopCompactSnapshotFeed() {
+  if (compactSnapshotTimer) clearInterval(compactSnapshotTimer)
+  compactSnapshotTimer = null
+}
+
+async function sendCompactSnapshot() {
+  const target = compactWindow
+  if (!target || target.isDestroyed() || !target.isVisible()) return
+  const mission = await missionControl(true)
+  if (target !== compactWindow || target.isDestroyed() || !target.isVisible()) return
+  const preferences = readCompactSettings(target.getBounds())
+  const snapshot = projectCompactSnapshot(mission, { showTitles: preferences.showTitles })
+  target.webContents.send('compact:snapshot', snapshot)
+}
+
+function queueCompactSnapshot() {
+  void sendCompactSnapshot().catch(() => {})
+}
+
+function startCompactSnapshotFeed() {
+  stopCompactSnapshotFeed()
+  queueCompactSnapshot()
+  compactSnapshotTimer = setInterval(queueCompactSnapshot, 10_000)
+}
+
+function persistCompactBoundsNow() {
+  if (!compactWindow || compactWindow.isDestroyed()) return
+  try {
+    const bounds = compactWindow.getBounds()
+    const current = readCompactSettings(bounds)
+    writeCompactDeckSettings(compactSettingsPath(), { ...current, bounds }, compactWorkArea(bounds))
+  } catch {}
+}
+
+function persistCompactBounds() {
+  if (!compactWindow || compactWindow.isDestroyed()) return
+  if (compactBoundsTimer) clearTimeout(compactBoundsTimer)
+  compactBoundsTimer = setTimeout(() => {
+    compactBoundsTimer = null
+    persistCompactBoundsNow()
+  }, 250)
+}
+
+function createCompactWindow() {
+  if (compactWindow && !compactWindow.isDestroyed()) return compactWindow
+  const preferences = readCompactSettings()
+  compactRendererUrl = app.isPackaged
+    ? configuredRendererUrl(undefined, path.join(__dirname, '..', 'dist-renderer', 'compact.html'))
+    : new URL('compact.html', rendererUrl).href
+  compactWindow = new BrowserWindow({
+    ...preferences.bounds,
+    minWidth: 340,
+    minHeight: 240,
+    show: false,
+    frame: false,
+    transparent: true,
+    resizable: true,
+    alwaysOnTop: preferences.alwaysOnTop,
+    skipTaskbar: true,
+    title: 'Ashlr Compact Deck',
+    backgroundColor: '#00000000',
+    webPreferences: { preload: path.join(__dirname, 'compact-preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, partition: 'ashlr-compact-deck' },
+  })
+  compactWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  compactWindow.webContents.on('will-navigate', (event, targetUrl) => {
+    if (!trustedRendererUrl(targetUrl, compactRendererUrl)) event.preventDefault()
+  })
+  compactWindow.webContents.on('will-attach-webview', (event) => event.preventDefault())
+  compactWindow.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false))
+  compactWindow.once('ready-to-show', () => {
+    compactWindow?.show()
+    compactWindow?.focus()
+  })
+  compactWindow.on('show', startCompactSnapshotFeed)
+  compactWindow.on('hide', stopCompactSnapshotFeed)
+  compactWindow.on('move', persistCompactBounds)
+  compactWindow.on('resize', persistCompactBounds)
+  compactWindow.on('close', persistCompactBoundsNow)
+  compactWindow.on('closed', () => {
+    stopCompactSnapshotFeed()
+    if (compactBoundsTimer) clearTimeout(compactBoundsTimer)
+    compactBoundsTimer = null
+    compactWindow = null
+  })
+  const loadingWindow = compactWindow
+  void loadingWindow.loadURL(compactRendererUrl).catch(() => {
+    if (compactWindow === loadingWindow && !loadingWindow.isDestroyed()) loadingWindow.destroy()
+  })
+  return compactWindow
+}
+
+function showCompactDeck() {
+  const window = createCompactWindow()
+  if (window.webContents.isLoadingMainFrame()) return
+  if (window.isMinimized()) window.restore()
+  window.show()
+  window.focus()
 }
 
 function trustedIpc(handler) {
@@ -130,45 +292,107 @@ function trustedIpc(handler) {
   }
 }
 
-function registerShortcuts() {
+function trustedCompactIpc(handler) {
+  return (event, ...args) => {
+    const frame = event.senderFrame
+    if (!compactWindow || event.sender !== compactWindow.webContents || !frame || frame !== event.sender.mainFrame || !trustedRendererUrl(frame.url, compactRendererUrl)) {
+      throw new Error('Rejected IPC from an untrusted Compact Deck renderer')
+    }
+    return handler(event, ...args)
+  }
+}
+
+function registerShortcuts(boardRoute) {
   shortcutCallbackGuard.invalidate()
+  shortcutObservability.beginGeneration(boardRoute, true)
   const registrations = []
-  for (const [control, accelerator] of Object.entries(HOTKEYS)) {
-    const registered = globalShortcut.register(accelerator, shortcutCallbackGuard.bind(() => {
-      const envelope = {
-      schemaVersion: 1,
-      sequence: ++signalSequence,
-      signalId: control,
-      source: 'global-shortcut',
-      accelerator,
-      receivedAt: new Date().toISOString(),
-      monotonicNs: process.hrtime.bigint().toString(),
+  for (const control of shortcutSignalsForRoute(boardRoute)) {
+    const accelerator = HOTKEYS[control]
+    if (typeof accelerator !== 'string') throw new Error('Shortcut route contains an unknown signal')
+    const deliver = shortcutCallbackGuard.bind((observation) => {
+      let deliveryAllowed = false
+      let currentRoute = null
+      try {
+        currentRoute = readSettings().boardRoute
+        const inputApplication = boardRoute === 'hybrid_native' ? inspectInputApplicationRuntime() : null
+        deliveryAllowed = routeAllowsShortcutDelivery(boardRoute, currentRoute, inputApplication)
+      } catch {}
+      if (!deliveryAllowed) {
+        shortcutCallbackGuard.invalidate()
+        try { synchronizeShortcutOwnership('unknown') } catch {
+          shortcutRegistrations = []
+          try { globalShortcut.unregisterAll() } catch {}
+          resetFlightState()
+          approvals.clear()
+        }
+        // Ownership rotation must not erase the callback that triggered the
+        // fail-closed transition. Re-record only its allowlisted metadata in
+        // the released generation; delivery remains rejected.
+        shortcutObservability.observe(control)
+        return
       }
-      flightSession.record(envelope)
+      shortcutObservability.allow(observation)
+      const envelope = {
+        schemaVersion: 1,
+        sequence: ++signalSequence,
+        signalId: control,
+        source: 'global-shortcut',
+        accelerator,
+        receivedAt: observation?.receivedAt ?? new Date().toISOString(),
+        monotonicNs: process.hrtime.bigint().toString(),
+      }
+      const recordedForFlight = flightSession.record(envelope)
+      if (recordedForFlight && activeFlightAdmission && currentRoute) {
+        const evaluation = evaluateFlightSignals(activeFlightAdmission.variant, flightSession.snapshot().rawEvents, currentRoute)
+        if (evaluation.problems.length > 0) flightSession.invalidate()
+      }
       mainWindow?.webContents.send('board:control', envelope)
-    }))
+    })
+    const registered = globalShortcut.register(accelerator, () => {
+      // This receipt is deliberately captured before the callback guard and
+      // route revalidation. Its default rejected outcome therefore remains
+      // truthful if either gate suppresses delivery.
+      deliver(shortcutObservability.observe(control))
+    })
     registrations.push({ signalId: control, accelerator, registered })
   }
   return registrations
 }
 
+function publicFlightSnapshot() {
+  return projectFlightSnapshot(flightSession.snapshot(), HOTKEYS)
+}
+
 function inspectCurrentReceiverRuntime() {
+  const inputApplication = inspectInputApplicationRuntime()
   if (!app.isPackaged) {
     const peers = inspectPackagedReceiverPeers()
     if (peers.status === 'none') {
-      return { status: 'exclusive', instanceCount: 1, distinctBuildCount: 1, currentAsarSha256: null, candidateAsarSha256: null, candidateMatchesCurrent: null }
+      return { status: 'exclusive', instanceCount: 1, distinctBuildCount: 1, currentAsarSha256: null, candidateAsarSha256: null, candidateMatchesCurrent: null, inputApplication }
     }
-    return { status: 'unavailable', instanceCount: peers.status === 'present' ? peers.instanceCount + 1 : 0, distinctBuildCount: 0, currentAsarSha256: null, candidateAsarSha256: null, candidateMatchesCurrent: null }
+    return { status: 'unavailable', instanceCount: peers.status === 'present' ? peers.instanceCount + 1 : 0, distinctBuildCount: 0, currentAsarSha256: null, candidateAsarSha256: null, candidateMatchesCurrent: null, inputApplication }
   }
-  return inspectReceiverRuntime({ currentPid: process.pid, hashAsar: cachedReceiverAsarHash })
+  return {
+    ...inspectReceiverRuntime({ currentPid: process.pid, hashAsar: cachedReceiverAsarHash }),
+    inputApplication,
+  }
 }
 
-function receiverOwnsShortcuts(runtime) {
-  return app.isPackaged ? shouldRegisterShortcuts(runtime) : runtime?.status === 'exclusive'
+function currentPackagedAsarSha256() {
+  if (!app.isPackaged) return null
+  const hashed = cachedReceiverAsarHash(app.getAppPath())
+  return hashed.status === 'available' ? hashed.sha256 : null
 }
 
-function registrationsAreActive(registrations) {
-  if (registrations.length !== Object.keys(HOTKEYS).length) return false
+function receiverOwnsShortcuts(runtime, boardRoute) {
+  const receiverReady = app.isPackaged ? shouldRegisterShortcuts(runtime) : runtime?.status === 'exclusive'
+  return receiverReady && (boardRoute !== 'hybrid_native' || runtime?.inputApplication?.status === 'not_running')
+}
+
+function registrationsAreActive(registrations, boardRoute) {
+  const expectedSignals = shortcutSignalsForRoute(boardRoute)
+  if (registrations.length !== expectedSignals.length) return false
+  if (!registrations.every((registration, index) => registration?.signalId === expectedSignals[index])) return false
   try {
     return registrations.every(({ accelerator, registered }) => registered === true && globalShortcut.isRegistered(accelerator))
   } catch {
@@ -186,27 +410,40 @@ function shortcutsAreReleased() {
 
 const shortcutOwnership = createShortcutOwnershipController({
   clearApprovals: () => approvals.clear(),
-  expectedRegistrationCount: Object.keys(HOTKEYS).length,
+  expectedRegistrationCount: (boardRoute) => shortcutSignalsForRoute(boardRoute).length,
   inspectRuntime: inspectCurrentReceiverRuntime,
   registerShortcuts,
   registrationsAreActive,
-  resetFlight: () => flightOperations.reset(),
+  resetFlight: resetFlightState,
   runtimeOwnsShortcuts: receiverOwnsShortcuts,
+  routeOwnsShortcuts,
   shortcutsAreReleased,
   unregisterAll: () => globalShortcut.unregisterAll(),
 })
 
 function synchronizeShortcutOwnership(boardRoute) {
-  if (boardRoute !== 'ashlr_layer') shortcutCallbackGuard.invalidate()
+  if (!routeOwnsShortcuts(boardRoute)) {
+    shortcutCallbackGuard.invalidate()
+    shortcutObservability.beginGeneration(boardRoute)
+  }
   try {
-    const state = shortcutOwnership.synchronize(boardRoute)
+    shortcutOwnership.synchronize(boardRoute)
+    const state = shortcutOwnership.finalize(boardRoute)
     shortcutRegistrations = state.registrations
-    if (boardRoute === 'ashlr_layer' && registrationsAreActive(shortcutRegistrations)) shortcutCallbackGuard.enable()
+    const active = state.active === true
+    if (active) shortcutCallbackGuard.enable()
     else shortcutCallbackGuard.invalidate()
+    const scope = active
+      ? boardRoute
+      : routeOwnsShortcuts(boardRoute)
+        ? `${boardRoute}_released`
+        : ['codex_native', 'unknown'].includes(boardRoute) ? boardRoute : 'unknown'
+    shortcutObservability.beginGeneration(scope)
     return state
   } catch (error) {
     shortcutRegistrations = []
     shortcutCallbackGuard.invalidate()
+    shortcutObservability.beginGeneration(routeOwnsShortcuts(boardRoute) ? `${boardRoute}_released` : 'unknown')
     throw error
   }
 }
@@ -238,7 +475,7 @@ function inspectCurrentInputInstallation(force = false) {
   return inspectInputInstallationAsync({ home: app.getPath('home'), force })
 }
 
-async function verifyFlightGates(variant, forceInput = true) {
+async function verifyFlightGates(variant, forceInput = true, dualPlaneAshlrLayerSelected = false) {
   const home = app.getPath('home')
   const inputInstallation = await inspectCurrentInputInstallation(forceInput)
   const board = await boardConnected()
@@ -249,14 +486,36 @@ async function verifyFlightGates(variant, forceInput = true) {
   const currentReceiverRuntime = synchronizeShortcutOwnership(settings.boardRoute).runtime
   return evaluateFlightGates({
     variant,
+    dualPlaneAshlrLayerSelected: dualPlaneAshlrLayerSelected === true,
     boardRoute: settings.boardRoute,
     usbDetected: Boolean(board),
     inputInstallation,
     inputProfile: inspectInputProfile(home, board?.storageId),
     receiverRuntime: currentReceiverRuntime,
+    inputApplication: currentReceiverRuntime.inputApplication,
     shortcutRegistrations,
-    expectedSignals: Object.keys(HOTKEYS),
   })
+}
+
+function inputProfileFingerprint(admission) {
+  const profile = admission?.evidence?.inputProfile
+  if (!profile || typeof profile !== 'object') return null
+  return JSON.stringify({
+    activeProfile: profile.activeProfile,
+    activeLayer: profile.activeLayer,
+    encoderDirection: profile.encoderDirection,
+    configuredLayers: profile.configuredLayers,
+  })
+}
+
+async function verifyBoundFlightGates(variant) {
+  const bound = activeFlightAdmission
+  if (!bound || bound.variant !== variant) throw new Error('Flight admission is not bound to this run')
+  const admission = await verifyFlightGates(variant, true, bound.dualPlaneAshlrLayerSelected)
+  if (admission.ready !== true || inputProfileFingerprint(admission) !== bound.inputProfileFingerprint) {
+    throw new Error('Flight admission identity changed')
+  }
+  return admission
 }
 
 async function missionControl(force = false) {
@@ -279,6 +538,46 @@ function openFixedApp(name) {
     child.once('error', () => finish(false))
     child.once('close', (code) => finish(code === 0))
   })
+}
+
+async function focusAgentFromSnapshot(slot, snapshot) {
+  if (flightActionsSuppressed()) return { ok:false,title:'Flight Check interlock',message:'Agent focus is disabled until hardware acceptance ends.',timestamp:new Date().toISOString() }
+  if (!Number.isInteger(slot) || slot < 1 || slot > 6) return { ok:false,title:'Slot unavailable',message:'Choose one of the six agent slots.',timestamp:new Date().toISOString() }
+  const agent = snapshot.agents.find((candidate) => candidate.slot === slot)
+  if (!agent?.provider || agent.state === 'off') return { ok:false,title:`Agent ${slot} is empty`,message:'This slot has no live provider receipt yet. Start or resume a session, then try again.',timestamp:new Date().toISOString() }
+  if (agent.provider === 'claude') {
+    // HASP v1 intentionally exposes no raw session or cmux locator. The adapter
+    // therefore preserves app foregrounding until a privacy-safe locator source
+    // and separately human-enabled socket capability are available.
+    const focused = await cmuxFocusAdapter.focus(null)
+    if (!focused.opened) return { ok:false,title:'Could not open cmux',message:'The provider app was not available. No fallback terminal or command was launched.',timestamp:new Date().toISOString() }
+    const message = focused.exact
+      ? 'cmux accepted the validated workspace and surface focus request. Visible pane selection remains an operator check, and no terminal input was sent.'
+      : 'cmux is foregrounded. Agent Board cannot select or verify an exact pane without a fresh privacy-safe locator and human-enabled socket capability, so no terminal input was sent.'
+    return { ok:true,title:'Opened cmux',message,timestamp:new Date().toISOString() }
+  }
+  const appName = appForProvider(agent.provider)
+  if (!appName) return { ok:false,title:'Focus unavailable',message:'This session does not advertise a safe local focus target.',timestamp:new Date().toISOString() }
+  const opened = await openFixedApp(appName)
+  if (!opened) return { ok:false,title:`Could not open ${appName}`,message:'The provider app was not available. No fallback terminal or command was launched.',timestamp:new Date().toISOString() }
+  const message = 'Codex Desktop is foregrounded. Agent Board cannot select or verify an exact task, so no prompt or approval was submitted.'
+  return { ok:true,title:`Opened ${appName}`,message,timestamp:new Date().toISOString() }
+}
+
+async function focusAgentSlotResult(slot) {
+  if (!Number.isInteger(slot) || slot < 1 || slot > 6) return focusAgentFromSnapshot(slot, { agents: [] })
+  return focusAgentFromSnapshot(slot, await missionControl(true))
+}
+
+async function focusHighestPriorityAgentResult() {
+  if (flightActionsSuppressed()) return focusAgentFromSnapshot(null, { agents: [] })
+  // Attention must resolve and focus from the same new HASP read. Never reuse
+  // the renderer cache or an earlier in-flight refresh for this action.
+  const mission = await collectMissionControl(app.getPath('home'))
+  if (mission.agentSource !== 'observer_online') return { ok:false,title:'Attention unavailable',message:'A fresh valid six-slot agent snapshot is required before Attention can focus a provider.',timestamp:new Date().toISOString() }
+  const slot = projectCompactSnapshot(mission).attentionSlot
+  if (slot === null) return { ok:false,title:'No focusable agent needs attention',message:'No active Codex or Claude Code slot is available to focus.',timestamp:new Date().toISOString() }
+  return focusAgentFromSnapshot(slot, mission)
 }
 
 ipcMain.handle('board:getStatus', trustedIpc(async () => {
@@ -315,15 +614,18 @@ ipcMain.handle('board:getStatus', trustedIpc(async () => {
     workspace: settings.workspace,
     shortcutCount: shortcutRegistrations.filter((registration) => registration.registered).length,
     shortcutRegistrations,
+    shortcutTelemetry: shortcutObservability.snapshot(),
     workspaceSnapshot,
     receiverIdentity: {
       appVersion: app.getVersion(),
       packaged: app.isPackaged,
-      appAsarSha256: currentReceiverRuntime.currentAsarSha256,
+      appAsarSha256: currentReceiverRuntime.currentAsarSha256 ?? currentPackagedAsarSha256(),
     },
     receiverRuntime: currentReceiverRuntime,
+    inputApplication: currentReceiverRuntime.inputApplication,
   }
 }))
+ipcMain.handle('board:getFlightSnapshot', trustedIpc(() => publicFlightSnapshot()))
 ipcMain.handle('board:getMissionControl', trustedIpc(() => missionControl()))
 ipcMain.handle('board:getRecoveryGuide', trustedIpc(() => {
   const handoff = readRecoveryReceipt(handoffPath())
@@ -334,43 +636,152 @@ ipcMain.handle('board:getNativeAcceptance', trustedIpc(() => nativeAcceptanceOpe
 ipcMain.handle('board:prepareNativeAcceptance', trustedIpc(() => nativeAcceptanceOperations.prepare()))
 ipcMain.handle('board:acceptNativeAcceptance', trustedIpc((_event, attestations) => nativeAcceptanceOperations.accept(attestations)))
 ipcMain.handle('board:clearNativeAcceptance', trustedIpc(() => nativeAcceptanceOperations.clear()))
+ipcMain.handle('board:getNativeControlCheck', trustedIpc(async () => {
+  const { currentContext } = await collectNativeAcceptanceEvidence()
+  if (!currentContext) return null
+  return readNativeControlCheck(settingsPath(), { currentContext })
+}))
+ipcMain.handle('board:saveNativeControlCheck', trustedIpc(async (_event, report) => {
+  const { currentContext } = await collectNativeAcceptanceEvidence()
+  if (!currentContext) throw new Error('Native control check requires the current passive Codex Native context')
+  const now = new Date()
+  const receipt = createNativeControlCheck({
+    context: currentContext,
+    settings: report?.settings,
+    outcomes: report?.outcomes,
+    reportedAt: now.toISOString(),
+  }, { now })
+  return writeNativeControlCheck(settingsPath(), receipt, { currentContext, now })
+}))
 ipcMain.handle('board:setBoardRoute', trustedIpc((_event, boardRoute) => {
+  if (flightActionsSuppressed()) throw new Error('End Flight Check before changing shortcut ownership')
   if (!validBoardRoute(boardRoute)) throw new TypeError('Unsupported board route declaration')
   return nativeAcceptanceOperations.mutateContext(() => {
-    if (boardRoute !== 'ashlr_layer') {
-      const shortcutState = synchronizeShortcutOwnership(boardRoute)
+    const currentRoute = readSettings().boardRoute
+    if (currentRoute !== boardRoute || !routeOwnsShortcuts(boardRoute)) {
+      const shortcutState = synchronizeShortcutOwnership('unknown')
       if (shortcutState.released !== true) throw new Error('Shortcut release could not be verified')
     }
     saveBoardRoute(boardRoute)
-    if (boardRoute === 'ashlr_layer') synchronizeShortcutOwnership(boardRoute)
+    flightAdmissionMutation += 1
+    activeFlightAdmission = null
+    if (routeOwnsShortcuts(boardRoute)) synchronizeShortcutOwnership(boardRoute)
     return boardRoute
   })
 }))
-ipcMain.handle('board:focusAgentSlot', trustedIpc(async (_event, slot) => {
-  if (flightSession.isActive()) return { ok:false,title:'Flight Check interlock',message:'Agent focus is disabled until hardware acceptance ends.',timestamp:new Date().toISOString() }
-  if (!Number.isInteger(slot) || slot < 1 || slot > 6) return { ok:false,title:'Slot unavailable',message:'Choose one of the six physical agent slots.',timestamp:new Date().toISOString() }
-  const snapshot = await missionControl(true)
-  const agent = snapshot.agents.find((candidate) => candidate.slot === slot)
-  if (!agent?.provider || agent.state === 'off') return { ok:false,title:`Agent ${slot} is empty`,message:'This slot has no live provider receipt yet. Start or resume a session, then try again.',timestamp:new Date().toISOString() }
-  const appName = appForProvider(agent.provider)
-  if (!appName) return { ok:false,title:'Focus unavailable',message:'This session does not advertise a safe local focus target.',timestamp:new Date().toISOString() }
-  const opened = await openFixedApp(appName)
-  if (!opened) return { ok:false,title:`Could not open ${appName}`,message:'The provider app was not available. No fallback terminal or command was launched.',timestamp:new Date().toISOString() }
-  const message = agent.provider === 'claude'
-    ? 'cmux is foregrounded. Exact pane correlation is not available in the installed cmux build, so no terminal input was sent.'
-    : 'Codex Desktop is foregrounded. No prompt, approval, or task was submitted.'
-  return { ok:true,title:`Opened ${appName} for ${agent.title}`,message,timestamp:new Date().toISOString() }
+ipcMain.handle('board:focusAgentSlot', trustedIpc((_event, slot) => runMappedAction(() => focusAgentSlotResult(slot))))
+ipcMain.handle('board:focusAttention', trustedIpc(() => runMappedAction(() => focusHighestPriorityAgentResult())))
+ipcMain.handle('board:showCompactDeck', trustedIpc(() => {
+  showCompactDeck()
+  return { ok: true }
+}))
+
+ipcMain.handle('compact:getSnapshot', trustedCompactIpc(async () => {
+  const mission = await missionControl(true)
+  const preferences = readCompactSettings(compactWindow?.getBounds())
+  return projectCompactSnapshot(mission, { showTitles: preferences.showTitles })
+}))
+ipcMain.handle('compact:focusAgentSlot', trustedCompactIpc((_event, slot) => runMappedAction(
+  async () => projectCompactActionResult(await focusAgentSlotResult(slot)),
+  () => projectCompactActionResult(flightInterlockResult('Compact actions are disabled until hardware acceptance ends.')),
+)))
+ipcMain.handle('compact:focusAttention', trustedCompactIpc(async () => {
+  return runMappedAction(async () => {
+    requireCompactWorkflowAction('stage_attention', ACTION_SPECS)
+    await executeSpec('stage_attention', readSettings().workspace, { clipboard, home: app.getPath('home') })
+    return projectCompactActionResult(await focusHighestPriorityAgentResult())
+  }, () => projectCompactActionResult(flightInterlockResult('Compact actions are disabled until hardware acceptance ends.')))
+}))
+ipcMain.handle('compact:runSkillAction', trustedCompactIpc(async (_event, actionId) => {
+  return runMappedAction(async () => {
+    requireCompactAction(actionId, ACTION_SPECS)
+    return projectCompactActionResult(await executeSpec(actionId, readSettings().workspace, { clipboard, home: app.getPath('home') }))
+  }, () => projectCompactActionResult(flightInterlockResult('Compact actions are disabled until hardware acceptance ends.')))
+}))
+ipcMain.handle('compact:runWorkflowAction', trustedCompactIpc(async (_event, actionId) => {
+  return runMappedAction(async () => {
+    requireCompactWorkflowAction(actionId, ACTION_SPECS)
+    return projectCompactActionResult(await executeSpec(actionId, readSettings().workspace, { clipboard, home: app.getPath('home') }))
+  }, () => projectCompactActionResult(flightInterlockResult('Compact actions are disabled until hardware acceptance ends.')))
+}))
+ipcMain.handle('compact:getPreferences', trustedCompactIpc(() => readCompactSettings(compactWindow?.getBounds())))
+ipcMain.handle('compact:savePreferences', trustedCompactIpc((_event, candidate) => {
+  const bounds = compactWindow?.getBounds()
+  const workArea = compactWorkArea(bounds)
+  const previous = readCompactSettings(bounds)
+  const next = validateCompactDeckSettings({ ...candidate, bounds }, workArea)
+  try {
+    compactWindow?.setAlwaysOnTop(next.alwaysOnTop)
+    app.setLoginItemSettings({ openAtLogin: next.openAtLaunch, args: ['--compact-deck'] })
+    const saved = writeCompactDeckSettings(compactSettingsPath(), next, workArea)
+    queueCompactSnapshot()
+    return saved
+  } catch (error) {
+    try { compactWindow?.setAlwaysOnTop(previous.alwaysOnTop) } catch {}
+    try { app.setLoginItemSettings({ openAtLogin: previous.openAtLaunch, args: ['--compact-deck'] }) } catch {}
+    throw error
+  }
+}))
+ipcMain.handle('compact:hide', trustedCompactIpc(() => {
+  compactWindow?.hide()
+  return { ok: true }
 }))
 ipcMain.handle('board:setProfile', trustedIpc((_event, profile) => { if (PROFILE_IDS.has(profile)) currentProfile = profile; return currentProfile }))
-ipcMain.handle('board:setFlightCheck', trustedIpc(async (_event, active, variant) => {
-  const state = active === true
-    ? await flightOperations.start(() => verifyFlightGates(variant, true))
-    : flightOperations.stop()
+ipcMain.handle('board:setFlightCheck', trustedIpc(async (_event, active, variant, attestation) => {
+  const mutation = ++flightAdmissionMutation
+  const dualPlaneAshlrLayerSelected = active === true && hasFreshExactDualPlaneAshlrAttestation(attestation)
+  let admission = null
+  let state
+  if (active === true) {
+    const suppression = Symbol('flight-admission')
+    flightAdmissionSuppressions.add(suppression)
+    approvals.clear()
+    try {
+      requireMappedActionsIdle()
+      state = await flightOperations.start(async () => {
+        admission = await verifyFlightGates(variant, true, dualPlaneAshlrLayerSelected)
+        return admission
+      })
+    } finally {
+      flightAdmissionSuppressions.delete(suppression)
+    }
+  } else {
+    state = flightOperations.stop()
+  }
+  if (mutation === flightAdmissionMutation) {
+    activeFlightAdmission = state.acknowledged && state.active && admission?.ready === true
+      ? {
+          variant,
+          startedAt: state.startedAt,
+          attestedAt: dualPlaneAshlrLayerSelected ? attestation.attestedAt : null,
+          dualPlaneAshlrLayerSelected,
+          inputProfileFingerprint: inputProfileFingerprint(admission),
+        }
+      : null
+  }
   if (state.acknowledged && state.active) approvals.clear()
   return state
 }))
 ipcMain.handle('board:restartFlightCheck', trustedIpc(async (_event, variant) => {
-  const state = await flightOperations.restart(() => verifyFlightGates(variant, true))
+  const mutation = ++flightAdmissionMutation
+  const prior = activeFlightAdmission
+  if (prior?.dualPlaneAshlrLayerSelected) {
+    throw new Error('End the check, re-establish native layer 1, move exactly once to Ashlr layer 2, and provide a fresh attestation')
+  }
+  const suppression = Symbol('flight-restart')
+  flightAdmissionSuppressions.add(suppression)
+  approvals.clear()
+  let state
+  try {
+    state = await flightOperations.restart(() => verifyBoundFlightGates(variant))
+  } finally {
+    flightAdmissionSuppressions.delete(suppression)
+  }
+  if (mutation === flightAdmissionMutation) {
+    activeFlightAdmission = state.acknowledged && state.active && prior
+      ? { ...prior, startedAt: state.startedAt }
+      : null
+  }
   if (state.acknowledged && state.active) approvals.clear()
   return state
 }))
@@ -380,7 +791,7 @@ ipcMain.handle('board:chooseWorkspace', trustedIpc(async () => {
   saveWorkspace(result.filePaths[0]); return result.filePaths[0]
 }))
 ipcMain.handle('board:createCorrectedInputProfile', trustedIpc(async () => {
-  if (flightSession.isActive()) {
+  if (flightActionsSuppressed()) {
     return { status: 'failed', message: 'End Flight Check before creating a repair artifact. No file or device setting changed.' }
   }
   const source = await dialog.showOpenDialog(mainWindow, {
@@ -468,23 +879,24 @@ ipcMain.handle('board:saveFlightReceipt', trustedIpc(async (_event, receipt) => 
   if (Buffer.byteLength(JSON.stringify(receipt), 'utf8') > 200_000) return null
   if (!Array.isArray(receipt.receivedSignals) || !Array.isArray(receipt.missingSignals) || !Array.isArray(receipt.events)) return null
   if (receipt.events.length > 100 || receipt.receivedSignals.length > 20 || receipt.missingSignals.length > 20) return null
-  const allowedSignals = new Set(Object.keys(HOTKEYS))
+  const allowedSignals = new Set(shortcutSignalsForRoute(readSettings().boardRoute))
+  if (!allowedSignals.size) return null
   if (![...receipt.receivedSignals, ...receipt.missingSignals].every((signal) => allowedSignals.has(signal))) return null
   if (!receipt.events.every((item) => item && allowedSignals.has(item.signal) && typeof item.receivedAt === 'string')) return null
   const variant = receipt.profileKind === 'diagnostic' ? 'diagnostic' : 'daily'
   const suggestedName = `ashlr-agent-board-flight-check-${new Date().toISOString().replace(/[:.]/g, '-')}.json`
   return saveBoundFlightReceipt({
     coordinator: flightOperations,
-    verifyGates: () => verifyFlightGates(variant, true),
+    verifyGates: () => verifyBoundFlightGates(variant),
     chooseDestination: async () => {
       const result = await dialog.showSaveDialog(mainWindow, { title: 'Save Flight Check receipt', defaultPath: path.join(app.getPath('documents'), suggestedName), filters: [{ name: 'JSON receipt', extensions: ['json'] }] })
       return result.canceled || !result.filePath ? null : result.filePath
     },
     buildDocument: ({ flight, admission }) => {
-      const evaluation = evaluateFlightSignals(variant, flight.rawEvents)
+      const evaluation = evaluateFlightSignals(variant, flight.rawEvents, admission.evidence.boardRoute)
       const usbDetected = admission.evidence.usbDetected
       const registeredCount = shortcutRegistrations.filter((item) => item.registered).length
-      const status = evaluation.status === 'passed' && admission.ready ? 'passed' : evaluation.status === 'incomplete' ? 'incomplete' : 'failed'
+      const status = evaluation.status === 'passed' && admission.ready && flight.invalidated !== true ? 'passed' : evaluation.status === 'incomplete' && flight.invalidated !== true ? 'incomplete' : 'failed'
       const payload = {
         schema: 'ai.ashlr.agent-board.flight-check/v2',
         receiptId: randomUUID(),
@@ -494,7 +906,15 @@ ipcMain.handle('board:saveFlightReceipt', trustedIpc(async (_event, receipt) => 
         exportedAt: new Date().toISOString(),
         appVersion: app.getVersion(),
         device: { expectedName: 'Creator Micro 2', usbDetected },
-        configuration: { registrations: shortcutRegistrations, registeredCount, admission: admission.evidence, gates: admission.gates },
+        configuration: {
+          registrations: shortcutRegistrations,
+          registeredCount,
+          admission: admission.evidence,
+          gates: admission.gates,
+          dualPlaneLayerAttestation: activeFlightAdmission?.dualPlaneAshlrLayerSelected
+            ? { source: 'operator', attestedAt: activeFlightAdmission.attestedAt }
+            : null,
+        },
         evaluation,
         rawEvents: flight.rawEvents,
         disclaimer: 'Operator-guided global-shortcut receipt; not a cryptographic device-identity attestation.',
@@ -516,7 +936,7 @@ ipcMain.handle('board:requestAction', trustedIpc(async (_event, actionId) => {
     approvals.clear()
     return passiveRouteActionResult()
   }
-  if (flightSession.isActive()) return { ok:false,title:'Flight Check interlock',message:'Mapped actions are disabled until hardware acceptance ends.',timestamp:new Date().toISOString() }
+  if (flightActionsSuppressed()) return flightInterlockResult()
   const spec = ACTION_SPECS[actionId]
   if (!spec) return { ok:false,title:'Action unavailable',message:'This action is not allowlisted.',timestamp:new Date().toISOString() }
   if (spec.safety !== 'safe') {
@@ -533,7 +953,7 @@ ipcMain.handle('board:requestAction', trustedIpc(async (_event, actionId) => {
     })
     return { ok:true,title:'Confirmation required',message:'Review the consequence before continuing.',needsConfirmation:true,token,timestamp:new Date().toISOString() }
   }
-  return executeSpec(actionId, settings.workspace, { clipboard, home: app.getPath('home') })
+  return runMappedAction(() => executeSpec(actionId, settings.workspace, { clipboard, home: app.getPath('home') }))
 }))
 ipcMain.handle('board:beginHold', trustedIpc((_event, actionId, token) => {
   const settings = readSettings()
@@ -542,7 +962,7 @@ ipcMain.handle('board:beginHold', trustedIpc((_event, actionId, token) => {
     return false
   }
   const approval = approvals.get(token)
-  if (!approval || approval.actionId !== actionId || approval.safety !== 'hold' || approval.webContentsId !== _event.sender.id || approval.boardRoute !== settings.boardRoute || approval.expires < Date.now() || flightSession.isActive()) return false
+  if (!approval || approval.actionId !== actionId || approval.safety !== 'hold' || approval.webContentsId !== _event.sender.id || approval.boardRoute !== settings.boardRoute || approval.expires < Date.now() || flightActionsSuppressed()) return false
   approval.holdStartedAt = Date.now()
   return true
 }))
@@ -561,13 +981,13 @@ ipcMain.handle('board:confirmAction', trustedIpc(async (_event, actionId, token)
   const approval = approvals.get(token); approvals.delete(token)
   const settings = readSettings()
   if (!routeAllowsConfiguredActions(settings)) return passiveRouteActionResult()
-  if (flightSession.isActive()) return { ok:false,title:'Flight Check interlock',message:'The pending approval was canceled when hardware acceptance began.',timestamp:new Date().toISOString() }
+  if (flightActionsSuppressed()) return flightInterlockResult('The pending approval was canceled when hardware acceptance began.')
   if (!approval || approval.actionId !== actionId || approval.expires < Date.now()) return { ok:false,title:'Approval expired',message:'Select the action again to create a fresh authorization.',timestamp:new Date().toISOString() }
   if (approval.webContentsId !== _event.sender.id) return { ok:false,title:'Approval rejected',message:'The confirmation came from a different window.',timestamp:new Date().toISOString() }
-  if (approval.boardRoute !== settings.boardRoute) return { ok:false,title:'Board route changed',message:'Review the action again after selecting the Ashlr Layer route.',timestamp:new Date().toISOString() }
+  if (approval.boardRoute !== settings.boardRoute) return { ok:false,title:'Board route changed',message:'Review the action again after confirming the current active action route.',timestamp:new Date().toISOString() }
   if (approval.workspace !== settings.workspace) return { ok:false,title:'Workspace changed',message:'Review the action again for the newly selected working directory.',timestamp:new Date().toISOString() }
   if (approval.safety === 'hold' && !holdSatisfied(approval)) return { ok:false,title:'Hold incomplete',message:'Keep holding continuously until the authorization indicator completes.',timestamp:new Date().toISOString() }
-  return executeSpec(actionId, approval.workspace, { clipboard, home: app.getPath('home') })
+  return runMappedAction(() => executeSpec(actionId, approval.workspace, { clipboard, home: app.getPath('home') }))
 }))
 
 app.setName('Ashlr Agent Board')
@@ -576,14 +996,27 @@ const hasSingleInstanceLock = app.requestSingleInstanceLock()
 if (!hasSingleInstanceLock) {
   app.quit()
 } else {
-  app.on('second-instance', () => {
+  app.on('second-instance', (_event, commandLine) => {
+    if (commandLine.includes('--compact-deck')) { showCompactDeck(); return }
     if (!mainWindow) return
     if (mainWindow.isMinimized()) mainWindow.restore()
     mainWindow.show()
     mainWindow.focus()
   })
-  app.whenReady().then(() => { createWindow(); synchronizeShortcutOwnership(readSettings().boardRoute) })
+  app.whenReady().then(() => {
+    ensureSettingsDirectory()
+    createWindow()
+    synchronizeShortcutOwnership(readSettings().boardRoute)
+    if (process.argv.includes('--compact-deck') || readCompactSettings().openAtLaunch) showCompactDeck()
+  }).catch(() => app.quit())
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
-  app.on('will-quit', () => { flightOperations.reset(); globalShortcut.unregisterAll() })
+  app.on('will-quit', () => {
+    persistCompactBoundsNow()
+    stopCompactSnapshotFeed()
+    if (compactBoundsTimer) clearTimeout(compactBoundsTimer)
+    compactBoundsTimer = null
+    resetFlightState()
+    globalShortcut.unregisterAll()
+  })
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
 }

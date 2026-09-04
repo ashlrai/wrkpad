@@ -57,6 +57,7 @@ test('board route accepts only declared local modes', () => {
   assert.equal(validBoardRoute('unknown'), true)
   assert.equal(validBoardRoute('codex_native'), true)
   assert.equal(validBoardRoute('ashlr_layer'), true)
+  assert.equal(validBoardRoute('hybrid_native'), true)
   assert.equal(validBoardRoute('takeover'), false)
   assert.equal(validBoardRoute(''), false)
 })
@@ -76,6 +77,11 @@ test('workspace and board-route updates preserve each other', () => {
     assert.deepEqual(readWorkspaceSettings(filePath, '/safe/fallback'), {
       workspace: '/Users/example/two',
       boardRoute: 'ashlr_layer',
+    })
+    saveBoardRouteSettings(filePath, 'hybrid_native', '/Users/example/two')
+    assert.deepEqual(readWorkspaceSettings(filePath, '/safe/fallback'), {
+      workspace: '/Users/example/two',
+      boardRoute: 'hybrid_native',
     })
     assert.equal(statSync(filePath).mode & 0o777, 0o600)
   } finally {

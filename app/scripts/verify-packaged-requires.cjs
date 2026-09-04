@@ -6,7 +6,12 @@ const path = require('node:path')
 const asar = require('@electron/asar')
 
 const STATIC_RELATIVE_REQUIRE = /\brequire\(\s*(['"])(\.{1,2}\/[^'"]+)\1\s*\)/g
-const RUNTIME_ENTRIES = ['electron/main.cjs', 'electron/preload.cjs', 'electron/input-installation-worker-entry.cjs']
+const RUNTIME_ENTRIES = [
+  'electron/main.cjs',
+  'electron/preload.cjs',
+  'electron/compact-preload.cjs',
+  'electron/input-installation-worker-entry.cjs',
+]
 
 function staticRelativeRequires(source) {
   return [...source.matchAll(STATIC_RELATIVE_REQUIRE)].map((match) => match[2])
