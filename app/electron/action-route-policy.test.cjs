@@ -62,7 +62,7 @@ test('main Attention resolves atomically from a fresh validated snapshot', () =>
   const handler = source.match(/ipcMain\.handle\('board:focusAttention'[\s\S]*?\n\}\)\)/)?.[0] ?? ''
   const implementation = source.match(/async function focusHighestPriorityAgentResult\(\) \{[\s\S]*?\n\}/)?.[0] ?? ''
   const preload = readFileSync(path.join(__dirname, 'preload.cjs'), 'utf8')
-  assert.match(handler, /trustedIpc\(\(\) => focusHighestPriorityAgentResult\(\)\)/)
+  assert.match(handler, /trustedIpc\(\(\) => runMappedAction\(\(\) => focusHighestPriorityAgentResult\(\)\)\)/)
   assert.match(preload, /focusAttention: \(\) => ipcRenderer\.invoke\('board:focusAttention'\)/)
   assert.match(implementation, /collectMissionControl\(app\.getPath\('home'\)\)/)
   assert.doesNotMatch(implementation, /missionControl\(/)

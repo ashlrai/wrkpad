@@ -25,6 +25,12 @@ const EXPECTED_DAILY_BASE_KEYS = Object.freeze([
   Object.freeze(['KC_A', 'KC_B', 'KC_C', 'KC_D']),
   Object.freeze(['KC_E', 'KC_F', 'KC_G']),
 ])
+const DAILY_BASE_CONTROL_IDS = Object.freeze([
+  Object.freeze(['AG00', 'AG01']),
+  Object.freeze(['AG02', 'AG03', 'AG04', 'AG05']),
+  Object.freeze(['ACT06', 'ACT07', 'ACT08', 'ACT09']),
+  Object.freeze(['ACT10', 'ACT11', 'ACT12']),
+])
 const EXPECTED_NATIVE_BASE_KEYS = Object.freeze([
   Object.freeze(['KV_OAI_AG00', 'KV_OAI_AG01']),
   Object.freeze(['KV_OAI_AG02', 'KV_OAI_AG03', 'KV_OAI_AG04', 'KV_OAI_AG05']),
@@ -51,36 +57,73 @@ function referencedKeycode(value) {
 
 function classifyLayer(layer, macros) {
   const name = sanitizeLabel(layer?.name)
-  const rawBase = Array.isArray(layer?.layout?.base) ? layer.layout.base : layer?.layout?.keymap
+  const layout = layer?.layout
+  const hasBaseProperty = Object.hasOwn(layout ?? {}, 'base')
+  const hasKeymapProperty = Object.hasOwn(layout ?? {}, 'keymap')
+  const hasBase = hasBaseProperty && Array.isArray(layout?.base)
+  const hasKeymap = hasKeymapProperty && Array.isArray(layout?.keymap)
+  const exactBaseContainer = hasBaseProperty !== hasKeymapProperty && (hasBase || hasKeymap)
+  const hasUnexpectedBindingContainer = Object.hasOwn(layout ?? {}, 'buttons')
+    || Object.hasOwn(layout?.joystick ?? {}, 'buttons')
+  const rawBase = hasBase ? layout.base : layout?.keymap
   const resolvedBase = Array.isArray(rawBase) ? rawBase.map((row) => Array.isArray(row) ? row.map((cell) => {
     const reference = referencedKeycode(cell)
     if (typeof reference !== 'string') return null
-    if (reference.startsWith('KV_OAI_')) return reference
+    if (reference.startsWith('KV_OAI_') || reference === 'KC_NONE') return reference
     return macroTapKey(macroForReference(reference, macros))
   }) : null) : []
   const encoder = layer?.layout?.encoders?.[0]
+  const exactEncoderContainer = Array.isArray(layer?.layout?.encoders) && layer.layout.encoders.length === 1
   const encoderDirection = classifyEncoderDirection(encoder, macros)
   const encoderKeycodes = Array.isArray(encoder) ? encoder.map(referencedKeycode) : []
+  const resolvedEncoder = Array.isArray(encoder) ? encoder.map((cell) => {
+    const reference = referencedKeycode(cell)
+    return reference === 'KC_NONE' ? reference : macroTapKey(macroForReference(reference, macros))
+  }) : []
   const joystick = layer?.layout?.joystick
   const normalizedSectors = Array.isArray(joystick?.sectors) ? joystick.sectors.map((sector) => {
     const reference = sector?.k
     const key = reference === 'KC_NONE' ? reference : macroTapKey(macroForReference(reference, macros))
     return { key, a1: sector?.a1, a2: sector?.a2 }
   }) : []
+  const exactDailySectorShapes = Array.isArray(joystick?.sectors)
+    && joystick.sectors.every((sector) => sector && typeof sector === 'object' && !Array.isArray(sector)
+      && JSON.stringify(Object.keys(sector).sort()) === JSON.stringify(['a1', 'a2', 'k']))
   const exactDailyJoystick = joystick?.type === 'RADIAL'
+    && exactDailySectorShapes
     && JSON.stringify(normalizedSectors) === JSON.stringify(EXPECTED_DAILY_JOYSTICK)
   const exactNativeControls = joystick?.type === 'VENDOR'
     && Array.isArray(joystick.sectors)
     && joystick.sectors.length === 0
     && JSON.stringify(encoderKeycodes) === JSON.stringify(EXPECTED_NATIVE_ENCODER_KEYS)
-  const mapping = JSON.stringify(resolvedBase) === JSON.stringify(EXPECTED_DAILY_BASE_KEYS) && encoderDirection === 'correct' && exactDailyJoystick
+  const exactBindingContainers = exactBaseContainer && exactEncoderContainer && !hasUnexpectedBindingContainer
+  const mapping = exactBindingContainers && JSON.stringify(resolvedBase) === JSON.stringify(EXPECTED_DAILY_BASE_KEYS) && encoderDirection === 'correct' && exactDailyJoystick
     ? 'ashlr_daily'
-    : JSON.stringify(resolvedBase) === JSON.stringify(EXPECTED_HYBRID_BASE_KEYS) && encoderDirection === 'correct' && exactDailyJoystick
+    : exactBindingContainers && JSON.stringify(resolvedBase) === JSON.stringify(EXPECTED_HYBRID_BASE_KEYS) && encoderDirection === 'correct' && exactDailyJoystick
       ? 'hybrid_native'
-    : JSON.stringify(resolvedBase) === JSON.stringify(EXPECTED_NATIVE_BASE_KEYS) && exactNativeControls
+    : exactBindingContainers && JSON.stringify(resolvedBase) === JSON.stringify(EXPECTED_NATIVE_BASE_KEYS) && exactNativeControls
       ? 'codex_native'
       : 'unknown'
-  return { name, mapping, encoderDirection }
+  const baseGeometryMatches = resolvedBase.length === EXPECTED_DAILY_BASE_KEYS.length
+    && resolvedBase.every((row, rowIndex) => Array.isArray(row) && row.length === EXPECTED_DAILY_BASE_KEYS[rowIndex].length)
+  const dailyBaseSignalCount = baseGeometryMatches
+    ? resolvedBase.reduce((count, row, rowIndex) => count + row.filter((key, columnIndex) => key === EXPECTED_DAILY_BASE_KEYS[rowIndex][columnIndex]).length, 0)
+    : 0
+  const unboundControls = baseGeometryMatches
+    ? resolvedBase.flatMap((row, rowIndex) => row.flatMap((key, columnIndex) => key === 'KC_NONE' ? [DAILY_BASE_CONTROL_IDS[rowIndex][columnIndex]] : []))
+    : []
+  const dailyEncoderSignalCount = resolvedEncoder.filter((key, index) => key === EXPECTED_ENCODER_KEYS.correct[index]).length
+  const dailyJoystickSignalCount = joystick?.type === 'RADIAL'
+    ? [0, 2, 4, 6].filter((index) => JSON.stringify(normalizedSectors[index]) === JSON.stringify(EXPECTED_DAILY_JOYSTICK[index])).length
+    : 0
+  const matchedExpectedBindings = dailyBaseSignalCount + dailyEncoderSignalCount + dailyJoystickSignalCount
+  const unexpectedBindings = mapping === 'unknown' && matchedExpectedBindings === 20
+  return {
+    name, mapping, encoderDirection,
+    dailySignalCount: unexpectedBindings ? null : matchedExpectedBindings,
+    unboundControls,
+    ...(unexpectedBindings ? { unexpectedBindings: true } : {}),
+  }
 }
 
 function sanitizeLabel(value) {
@@ -131,7 +174,7 @@ function classifyEncoderDirection(encoder, macros) {
 
 function classifyInputKeymap(raw) {
   if (!raw || typeof raw !== 'object' || !Array.isArray(raw.profiles) || raw.profiles.length > 32) return unavailable('invalid')
-  if (!Number.isInteger(raw.activeProfileId)) return unavailable('invalid')
+  if (!Number.isInteger(raw.activeProfileId) || raw.activeProfileId < 0 || raw.activeProfileId > 31) return unavailable('invalid')
   const profile = raw.profiles.find((candidate) => candidate && candidate.id === raw.activeProfileId)
   if (!profile || !Array.isArray(profile.layers) || profile.layers.length < 1 || profile.layers.length > 16) return unavailable('invalid')
 

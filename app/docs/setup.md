@@ -293,11 +293,15 @@ Map the physical controls to [the canonical shortcuts](controls.md#action-switch
 
 The daily layer has 20 independently observable gestures: six Agent keys, seven action keys, four joystick directions, and dial left/right/press. ACT10 and ACT11 are separate bottom-row switches and must have separate mappings. ACT12 is the transparent Attention key.
 
-The Setup screen's `20/20 desktop endpoints registered` result proves only that Electron registered all expected global shortcuts. It does not inspect Input's active profile, prove that the mapping reached the board, or complete this setup step. The ordered physical Flight Check is the acceptance gate for the active layer.
+The Setup screen's `20/20 desktop endpoints registered` result proves only that Electron registered all expected global shortcuts. It does not inspect Input's active profile, prove that the mapping reached the board, or complete this setup step. **OS callbacks observed** is a separate privacy-safe counter that records only an allowlisted control ID, time, and allowed/rejected delivery result—even when Flight Check is blocked or inactive. The ordered physical Flight Check remains the acceptance gate for the active layer.
+
+While Flight Check is active, the main process owns the bounded event record and the renderer reconciles it once per second. A renderer subscription gap therefore cannot erase a received Flight signal. Any misroute or event-buffer overflow latches the run invalid until a deliberate restart, even after older display events age out. Callback telemetry and a Flight receipt are still different evidence: the former proves that macOS invoked a registered accelerator, while the latter additionally requires the current safety gates and exact ordered gesture sequence.
 
 Agent Board also reads a bounded, fixed-path copy of Input's Creator Micro 2
 cache and reports only the sanitized active profile, its layer when uniquely
-observable, and encoder health.
+observable, and encoder health. A diagnostic count describes expected bindings
+that match; it is never called an exact `20/20` mapping when unexpected encoder
+cells, joystick sectors, or other structure are also present.
 That receipt can identify the known reversed dial mapping, but it still does not
 prove Input synchronized the device or that the firmware emitted a gesture.
 
@@ -305,6 +309,24 @@ Treat these as three separate states: the profile shown in Input's header for
 editing, the profile marked current in Input and its cache, and the profile/layer
 actually synchronized and emitting on hardware. The cache diagnostic can
 support the second state; only Flight Check supports the third.
+
+Input's runtime layer index and the cached keymap layer ID are different
+namespaces. In the inspected vendor client, the selected layer is translated
+before the device request (`layerSelectedIndex = selectedLayerIndex - 1`), so a
+runtime `layer_index` of `1` can correspond to cached layer ID `0`. Doctor keeps
+`cannot find specific profile index` evidence advisory and never reports a
+missing cached layer from a direct numeric comparison. Use deterministic cache
+content classification and a fresh physical Flight Check to choose a repair.
+
+Matching profile and layer labels are also insufficient. If those labels are
+**Ashlr Agent Board Corrected** and **Ashlr Daily** but strict content
+classification fails, Doctor reports `active_profile_content_drift`. When the
+bounded cache permits it, the receipt includes a matching-signal count and
+specific disabled controls—for example, `19/20` with `ACT11` unbound. The same
+deterministic check is enforced again by the Electron main process before
+Flight Check begins. Replace
+the incomplete profile with a strictly verified 20-signal artifact; selecting
+the same incomplete profile as current cannot restore a missing binding.
 
 Open the profile chooser and use **Set as current profile** for **Ashlr Agent
 Board Corrected**, then verify its **Ashlr Daily** layer. Input

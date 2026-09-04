@@ -112,6 +112,7 @@ const INPUT_INSTALLATION_STATUSES = new Set(['verified', 'missing', 'multiple_in
 const RECEIVER_RUNTIME_STATUSES = new Set(['exclusive', 'contended_same_build', 'contended_distinct_builds', 'not_running', 'unavailable'])
 const SHA256 = /^[0-9a-f]{64}$/
 const SAFE_VERSION = /^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$/
+const INPUT_CONTROL_IDS = new Set(['AG00', 'AG01', 'AG02', 'AG03', 'AG04', 'AG05', 'ACT06', 'ACT07', 'ACT08', 'ACT09', 'ACT10', 'ACT11', 'ACT12'])
 const boundedIsoTimestamp = (value) => {
   if (typeof value !== 'string' || value.length > 40 || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) return null
   const parsed = new Date(value)
@@ -244,6 +245,25 @@ export function evaluateDoctor(probes, options = {}) {
     && inputProfile.configuredLayers[0]?.name === 'Ashlr Daily'
     && inputProfile.configuredLayers[0]?.mapping === 'ashlr_daily'
     && inputProfile.configuredLayers[0]?.encoderDirection === 'correct'
+  const dailyLayerDiagnostic = inputProfile.configuredLayers?.length === 1
+    && inputProfile.configuredLayers[0]?.name === 'Ashlr Daily'
+    ? inputProfile.configuredLayers[0]
+    : null
+  const dailySignalCount = Number.isInteger(dailyLayerDiagnostic?.dailySignalCount)
+    && dailyLayerDiagnostic.dailySignalCount >= 0 && dailyLayerDiagnostic.dailySignalCount <= 20
+    ? dailyLayerDiagnostic.dailySignalCount
+    : null
+  const unboundControls = Array.isArray(dailyLayerDiagnostic?.unboundControls)
+    && dailyLayerDiagnostic.unboundControls.length <= 13
+    && dailyLayerDiagnostic.unboundControls.every((control) => INPUT_CONTROL_IDS.has(control))
+    ? [...new Set(dailyLayerDiagnostic.unboundControls)]
+    : []
+  const unexpectedBindings = dailyLayerDiagnostic?.unexpectedBindings === true
+  const activeProfileContentDrift = inputProfile.cacheStatus === 'available'
+    && inputProfile.activeProfile === 'Ashlr Agent Board Corrected'
+    && inputProfile.activeLayer === 'Ashlr Daily'
+    && dailyLayerDiagnostic !== null
+    && dailyLayerDiagnostic.mapping !== 'ashlr_daily'
   const hybridProfileMatch = inputProfile.activeProfile === 'Ashlr Hybrid Dual Plane (UNOFFICIAL)'
   const hybridLayersMatch = exactHybridLayers(inputProfile.configuredLayers)
   const hybridProfileReady = inputProfile.cacheStatus === 'available'
@@ -283,8 +303,10 @@ export function evaluateDoctor(probes, options = {}) {
       ? receiverReason
       : receiverRuntime.status === 'not_running'
         ? 'receiver_not_running'
-        : inputProfile.encoderDirection === 'reversed'
-      ? 'encoder_direction_reversed'
+      : inputProfile.encoderDirection === 'reversed'
+        ? 'encoder_direction_reversed'
+      : activeProfileContentDrift
+        ? 'active_profile_content_drift'
       : !dailyProfileReady
         ? 'input_profile_requires_activation'
         : unresolvedRuntimeObserved
@@ -334,6 +356,9 @@ export function evaluateDoctor(probes, options = {}) {
       dailyLayerMatch: inputProfile.activeLayer === 'Ashlr Daily',
       encoderDirection: inputProfile.encoderDirection,
       dailyProfileReady,
+      dailySignalCount,
+      unboundControls,
+      ...(unexpectedBindings ? { unexpectedBindings: true } : {}),
       ...(route === HYBRID_NATIVE_ROUTE ? {
         hybridProfileMatch,
         hybridLayersMatch,
@@ -372,7 +397,7 @@ export function evaluateDoctor(probes, options = {}) {
         fresh: nativePrerequisitesReady && nativeEvidenceFresh,
       },
       ashlrLayer: {
-        status: ashlrPrerequisitesReady && !receiverBlocked ? 'manual' : 'blocked',
+        status: ashlrPrerequisitesReady && !receiverBlocked && !activeProfileContentDrift ? 'manual' : 'blocked',
         reason: ashlrReason,
       },
       hybridNative: {
@@ -396,8 +421,10 @@ export function evaluateDoctor(probes, options = {}) {
             : 'Native Codex requires an explicit connected receipt; process presence alone is not enough.',
       ashlrLayer: receiverBlocked
         ? 'Agent Board receiver ownership is contended or unavailable. Shortcut and physical acceptance must wait for one reviewed receiver; no process was quit automatically.'
+        : activeProfileContentDrift
+          ? `The cache-current Ashlr Agent Board Corrected / Ashlr Daily labels match, but the exact 20-signal mapping does not${unexpectedBindings ? ': all expected positions match, but unexpected bindings or structure are also present' : dailySignalCount !== null ? `: ${dailySignalCount}/20 expected bindings match` : ''}${unboundControls.length > 0 ? `; ${unboundControls.join(', ')} ${unboundControls.length === 1 ? 'is' : 'are'} unbound` : ''}. Profile labels are not content proof.`
         : unresolvedRuntimeObserved
-          ? 'Input recently logged an unresolved profile/layer combination. This event is advisory and may predate the current cache; a fresh physical Flight Check can supersede it.'
+          ? "Input recently logged an unresolved profile/layer combination. This event is advisory: Work Louder's runtime layer index is offset from the cached layer ID, so the values cannot prove that a cached layer is missing."
           : recurringCodexTrafficObserved
             ? 'Input is receiving recurring Codex-protocol responses for which it had no active resolver. This is co-presence evidence, not ownership; Input-only reconciliation is not exclusive.'
             : 'The Ashlr shortcut route remains independently commissionable through Work Louder Input and the physical Flight Check.',
@@ -436,11 +463,13 @@ export function evaluateDoctor(probes, options = {}) {
             : route === 'ashlr_layer' && receiverRuntime.status === 'not_running'
               ? 'Open exactly one reviewed Ashlr Agent Board build, then rerun the doctor before Flight Check.'
           : route === 'ashlr_layer' && inputProfile.encoderDirection === 'reversed'
-            ? 'Create and activate the corrected Input profile before Flight Check.'
+              ? 'Create and activate the corrected Input profile before Flight Check.'
+            : route === 'ashlr_layer' && activeProfileContentDrift
+              ? `Replace the incomplete cached profile with a strictly verified 20-signal Ashlr Agent Board Corrected profile${unboundControls.length > 0 ? `; bind ${unboundControls.join(', ')} instead of leaving ${unboundControls.length === 1 ? 'it' : 'them'} disabled` : ''}. Preserve a rollback export, import and synchronize through Input alone, fully quit Input, rerun Doctor, and require a fresh physical receipt. Setting the same incomplete profile current is not a repair; Agent Board changed nothing.`
             : route === 'ashlr_layer' && !dailyProfileReady
               ? 'Use Set as current profile for Ashlr Agent Board Corrected and verify Ashlr Daily before Flight Check.'
               : unresolvedRuntimeObserved && route === 'ashlr_layer'
-                ? 'Review the recent unresolved Input profile/layer event. If the board remains silent, complete the Input-only reconciliation before firmware qualification.'
+                ? 'Treat the recent unresolved Input profile/layer event as advisory. If the board remains silent, use the deterministic cache mapping and a fresh physical Flight Check to choose the next repair; do not infer a missing layer by comparing the runtime index with the cached layer ID.'
                 : recurringCodexTrafficObserved && route === 'ashlr_layer'
                   ? 'A human must establish an Input-only window before reconciliation; no application was quit and protocol traffic does not prove ownership.'
                 : manualChecks[0].detail

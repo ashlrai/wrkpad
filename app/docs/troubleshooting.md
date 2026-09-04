@@ -96,6 +96,18 @@ shortcut receipt, USB ownership, or physical acceptance.
 
 All 20 desktop shortcuts must register and all 20 physical signals must be tested. ACT10 and ACT11 are independent bottom-row switches.
 
+If all endpoints register but no physical signal is received, watch **OS
+callbacks observed** and press the same accelerator on the Mac keyboard. This
+counter remains available when Flight Check is blocked or inactive. An allowed
+laptop callback followed by a silent board control points back to the board's
+active profile or emitted report. A rejected callback points to route or
+ownership revalidation. No callback from either input requires receiver-level
+diagnosis; `20/20 registered` alone is not delivery evidence. The counter stores
+only an allowlisted control ID, timestamp, aggregate count, and delivery result.
+It is reset and labeled for each shortcut-ownership route/generation, so an old
+Ashlr callback cannot be presented as evidence for a later Hybrid or passive
+native route.
+
 ## Input-only reconciliation
 
 Input exposes three different states: the profile shown in the editor, the
@@ -140,9 +152,11 @@ cache is wrong, or Agent Board shows recent unresolved-index log evidence:
 9. Run a fresh physical Flight Check without simulating shortcuts from the
    keyboard.
 
-Recent unresolved-index evidence may predate the current cache, so it is an
-advisory rather than proof of the current board state. Do not reset, delete or
-transform a protected `KV_OAI_*` layer, or flash firmware from that evidence.
+Recent unresolved-index evidence is advisory rather than proof of the current
+board state. The vendor runtime layer index is offset from the cached layer ID,
+so those numbers cannot establish that a cached layer is missing. Do not reset,
+delete or transform a protected `KV_OAI_*` layer, or flash firmware from that
+evidence.
 
 If Setup reports recurring Codex-protocol responses reaching Input, treat that
 as current controller co-presence only. It does not identify HID ownership or
@@ -200,6 +214,24 @@ requires a verified Input installation, complete profile backups, manual
 **Import layer**, offline post-import validation, and fresh physical
 acceptance. It never authorizes Reset Settings, a cache edit, or a raw device
 write.
+
+Do not compare Input's runtime `layer_index` directly with cached keymap layer
+IDs. The inspected vendor client translates the selected layer before the
+device request (`layerSelectedIndex = selectedLayerIndex - 1`); runtime layer
+`1` can therefore correspond to cache layer ID `0`. An unresolved profile/layer
+log remains advisory and never proves that a cache layer is absent. Diagnose the
+cache from its exact mapping and prove device delivery through a new physical
+Flight Check.
+
+Treat Doctor reason `active_profile_content_drift` as a separate stop
+condition. The cache-current profile and layer names match the Ashlr convention,
+but at least one of the 20 exact bindings does not. Doctor reports a bounded
+match count and known disabled controls when derivable, such as `19/20` and
+`ACT11` unbound. The Electron main process enforces that exact-content gate
+again before Flight Check. Do not use **Set as current profile** as the repair: replace the
+incomplete profile with a strictly verified artifact, synchronize it manually
+through Input alone, fully quit Input, rerun Doctor, and require a fresh physical
+receipt.
 
 After a firmware update, fully quit and reopen ChatGPT Desktop before drawing a
 new conclusion. An app process that started before the update may have only the

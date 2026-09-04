@@ -41,6 +41,25 @@ export interface PhysicalSignalEnvelope {
   monotonicNs: string
 }
 
+export interface ShortcutCallbackTelemetry {
+  generation: number
+  scope: string
+  totalObserved: number
+  last: {
+    signalId: ControlId
+    receivedAt: string
+    outcome: 'allowed' | 'rejected'
+  } | null
+}
+
+export interface FlightSnapshot {
+  active: boolean
+  startedAt: string | null
+  invalidated: boolean
+  droppedEventCount: number
+  rawEvents: PhysicalSignalEnvelope[]
+}
+
 export interface ShortcutRegistration {
   signalId: ControlId
   accelerator: string
@@ -87,6 +106,7 @@ export interface SystemStatus {
   workspace: string
   shortcutCount: number
   shortcutRegistrations: ShortcutRegistration[]
+  shortcutTelemetry: ShortcutCallbackTelemetry
   workspaceSnapshot: WorkspaceSnapshot | null
   receiverIdentity: ReceiverIdentity | null
   receiverRuntime: ReceiverRuntimeStatus
@@ -126,6 +146,9 @@ export interface InputProfileStatus {
     name: string | null
     mapping: 'ashlr_daily' | 'codex_native' | 'hybrid_native' | 'unknown'
     encoderDirection: 'correct' | 'reversed' | 'unrecognized' | 'unavailable'
+    dailySignalCount?: number | null
+    unboundControls?: string[]
+    unexpectedBindings?: boolean
   }>
 }
 
@@ -141,6 +164,14 @@ export interface InputRuntimeStatus {
     fresh: boolean
   }
 }
+
+export const activeProfileContentDrift = (profile: InputProfileStatus): boolean =>
+  profile.cacheStatus === 'available'
+  && profile.activeProfile === 'Ashlr Agent Board Corrected'
+  && profile.activeLayer === 'Ashlr Daily'
+  && profile.configuredLayers?.length === 1
+  && profile.configuredLayers[0]?.name === 'Ashlr Daily'
+  && profile.configuredLayers[0]?.mapping !== 'ashlr_daily'
 
 export interface ReceiverIdentity {
   appVersion: string

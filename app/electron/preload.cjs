@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('agentBoard', {
   getStatus: () => ipcRenderer.invoke('board:getStatus'),
+  getFlightSnapshot: () => ipcRenderer.invoke('board:getFlightSnapshot'),
   getMissionControl: () => ipcRenderer.invoke('board:getMissionControl'),
   getRecoveryGuide: () => ipcRenderer.invoke('board:getRecoveryGuide'),
   getNativeAcceptance: () => ipcRenderer.invoke('board:getNativeAcceptance'),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { actions, allControlIds, correctedInputProfileObserved, correctedInputProfileObservedForVariant, dualPlaneInputProfileConfigured, hardware, hybridNativeInputProfileConfigured, profileOrder, profiles, singleAshlrDailyInputProfileConfigured } from './board'
+import { actions, activeProfileContentDrift, allControlIds, correctedInputProfileObserved, correctedInputProfileObservedForVariant, dualPlaneInputProfileConfigured, hardware, hybridNativeInputProfileConfigured, profileOrder, profiles, singleAshlrDailyInputProfileConfigured } from './board'
 
 describe('board contract', () => {
   it('maps every physical signal in every profile', () => {
@@ -99,5 +99,17 @@ describe('board contract', () => {
     expect(hybridNativeInputProfileConfigured(hybrid)).toBe(true)
     expect(hybridNativeInputProfileConfigured({ ...hybrid, activeProfile: 'Almost hybrid' })).toBe(false)
     expect(hybridNativeInputProfileConfigured({ ...hybrid, configuredLayers: [...hybrid.configuredLayers].reverse() })).toBe(false)
+  })
+  it('distinguishes matching labels with incomplete content from a verified profile', () => {
+    const incomplete = {
+      cacheStatus: 'available' as const,
+      activeProfile: 'Ashlr Agent Board Corrected',
+      activeLayer: 'Ashlr Daily',
+      encoderDirection: 'correct' as const,
+      configuredLayers: [{ name: 'Ashlr Daily', mapping: 'unknown' as const, encoderDirection: 'correct' as const, dailySignalCount: 19, unboundControls: ['ACT11'] }],
+    }
+    expect(activeProfileContentDrift(incomplete)).toBe(true)
+    expect(activeProfileContentDrift({ ...incomplete, configuredLayers: [{ ...incomplete.configuredLayers[0], mapping: 'ashlr_daily' }] })).toBe(false)
+    expect(activeProfileContentDrift({ ...incomplete, activeProfile: 'Different' })).toBe(false)
   })
 })

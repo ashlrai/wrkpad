@@ -44,7 +44,7 @@ test('reports only sanitized active labels and a correct encoder direction', () 
     activeProfile: 'Ashlr Agent Board',
     activeLayer: 'Ashlr Daily',
     encoderDirection: 'correct',
-    configuredLayers: [{ name: 'Ashlr Daily', mapping: 'unknown', encoderDirection: 'correct' }],
+    configuredLayers: [{ name: 'Ashlr Daily', mapping: 'unknown', encoderDirection: 'correct', dailySignalCount: 3, unboundControls: [] }],
   })
   assert.equal(JSON.stringify(result).includes('KC_'), false)
   assert.equal(JSON.stringify(result).includes('private name'), false)
@@ -60,10 +60,11 @@ test('does not invent an active layer for a multi-layer profile', () => {
   assert.deepEqual(classifyInputKeymap(raw), {
     cacheStatus: 'available', activeProfile: 'Ashlr Agent Board', activeLayer: null, encoderDirection: 'unavailable',
     configuredLayers: [
-      { name: 'Ashlr Daily', mapping: 'unknown', encoderDirection: 'correct' },
-      { name: 'Another layer', mapping: 'unknown', encoderDirection: 'unrecognized' },
+      { name: 'Ashlr Daily', mapping: 'unknown', encoderDirection: 'correct', dailySignalCount: 3, unboundControls: [] },
+      { name: 'Another layer', mapping: 'unknown', encoderDirection: 'unrecognized', dailySignalCount: 0, unboundControls: [] },
     ],
   })
+
 })
 
 test('recognizes exact native and Ashlr mappings inside a dual-plane profile without claiming the selected layer', () => {
@@ -115,9 +116,60 @@ test('recognizes exact native and Ashlr mappings inside a dual-plane profile wit
     activeLayer: null,
     encoderDirection: 'unavailable',
     configuredLayers: [
-      { name: 'Codex Native Recovery (UNOFFICIAL)', mapping: 'codex_native', encoderDirection: 'unrecognized' },
-      { name: 'Ashlr Daily', mapping: 'ashlr_daily', encoderDirection: 'correct' },
+      { name: 'Codex Native Recovery (UNOFFICIAL)', mapping: 'codex_native', encoderDirection: 'unrecognized', dailySignalCount: 0, unboundControls: [] },
+      { name: 'Ashlr Daily', mapping: 'ashlr_daily', encoderDirection: 'correct', dailySignalCount: 20, unboundControls: [] },
     ],
+  })
+
+  const unexpected = structuredClone(raw)
+  unexpected.profiles[0].layers[1].layout.encoders.push(['KA_A1'])
+  assert.deepEqual(classifyInputKeymap(unexpected).configuredLayers[1], {
+    name: 'Ashlr Daily',
+    mapping: 'unknown',
+    encoderDirection: 'correct',
+    dailySignalCount: null,
+    unboundControls: [],
+    unexpectedBindings: true,
+  })
+
+  const unexpectedSector = structuredClone(raw)
+  unexpectedSector.profiles[0].layers[1].layout.joystick.sectors.push({ k: 'KA_A1', a1: 0.1, a2: 0.2 })
+  assert.deepEqual(classifyInputKeymap(unexpectedSector).configuredLayers[1], {
+    name: 'Ashlr Daily',
+    mapping: 'unknown',
+    encoderDirection: 'correct',
+    dailySignalCount: null,
+    unboundControls: [],
+    unexpectedBindings: true,
+  })
+
+  const parallelBase = structuredClone(raw)
+  parallelBase.profiles[0].layers[1].layout.base = structuredClone(parallelBase.profiles[0].layers[1].layout.keymap)
+  assert.equal(classifyInputKeymap(parallelBase).configuredLayers[1].mapping, 'unknown')
+
+  const unexpectedButtons = structuredClone(raw)
+  unexpectedButtons.profiles[0].layers[1].layout.joystick.buttons = ['KA_A1']
+  assert.equal(classifyInputKeymap(unexpectedButtons).configuredLayers[1].mapping, 'unknown')
+
+  const malformedParallelBase = structuredClone(raw)
+  malformedParallelBase.profiles[0].layers[1].layout.base = null
+  assert.equal(classifyInputKeymap(malformedParallelBase).configuredLayers[1].mapping, 'unknown')
+
+  const extraSectorField = structuredClone(raw)
+  extraSectorField.profiles[0].layers[1].layout.joystick.sectors[0].extraBinding = 'KA_A1'
+  assert.equal(classifyInputKeymap(extraSectorField).configuredLayers[1].mapping, 'unknown')
+
+  const incomplete = structuredClone(raw)
+  incomplete.profiles[0].name = 'Ashlr Agent Board Corrected'
+  incomplete.profiles[0].layers = [incomplete.profiles[0].layers[1]]
+  incomplete.profiles[0].layers[0].id = 0
+  incomplete.profiles[0].layers[0].layout.keymap[3][1] = 'KC_NONE'
+  assert.deepEqual(classifyInputKeymap(incomplete).configuredLayers[0], {
+    name: 'Ashlr Daily',
+    mapping: 'unknown',
+    encoderDirection: 'correct',
+    dailySignalCount: 19,
+    unboundControls: ['ACT11'],
   })
 })
 

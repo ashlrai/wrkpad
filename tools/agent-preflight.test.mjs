@@ -503,7 +503,26 @@ test('Ashlr Layer exposes recent unresolved Input evidence as a bounded advisory
   const runtime = result.checks.find((item) => item.id === 'input_runtime')
   assert.equal(runtime.status, 'warn')
   assert.match(runtime.evidence, /profile_index=2; layer_index=1/)
-  assert.match(runtime.reason, /may predate the current cache/)
+  assert.match(runtime.reason, /runtime layer index is offset from the cached layer ID/)
+})
+
+test('Ashlr Layer exposes exact cached content drift to agents', () => {
+  const result = buildPreflight({
+    route: 'ashlr_layer', source, stable: null,
+    appDoctorRaw: {
+      ...appDoctor,
+      inputProfile: { ...appDoctor.inputProfile, dailyProfileReady: false, dailySignalCount: 19, unboundControls: ['ACT11'] },
+      readiness: { ...appDoctor.readiness, ashlrLayer: { status: 'blocked', reason: 'active_profile_content_drift' } },
+    },
+    developmentBinary: '/missing/development/binary', runCommand: commandFixture,
+    observedAt: '2026-09-01T20:00:00.000Z',
+  })
+
+  const profile = result.checks.find((item) => item.id === 'input_profile')
+  assert.equal(profile.status, 'blocked')
+  assert.match(profile.evidence, /expected_bindings=19\/20; unexpected_bindings=false; unbound=ACT11/)
+  assert.match(profile.reason, /strictly verified 20-signal profile/)
+  assert.match(result.checks.find((item) => item.id === 'route_readiness').evidence, /active_profile_content_drift/)
 })
 
 test('Ashlr Layer warns when bounded Input runtime evidence is unsafe', () => {

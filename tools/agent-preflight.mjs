@@ -26,7 +26,8 @@ const INPUT_INSTALLATION_STATUSES = new Set(['verified', 'missing', 'multiple_in
 const RECEIVER_RUNTIME_STATUSES = new Set(['not_running', 'exclusive', 'contended_same_build', 'contended_distinct_builds', 'unavailable'])
 const READINESS_STATUSES = new Set(['pass', 'manual', 'blocked'])
 const NATIVE_REASONS = new Set(['native_prerequisite_missing', 'firmware_rpc_missing', 'historical_firmware_rpc_missing', 'recent_native_connection_observed', 'native_connection_requires_verification'])
-const ASHLR_REASONS = new Set(['required_prerequisite_missing', 'receiver_contended_same_build', 'receiver_contended_distinct_builds', 'receiver_probe_unavailable', 'receiver_not_running', 'encoder_direction_reversed', 'input_profile_requires_activation', 'recent_unresolved_profile_layer_observed', 'recurring_codex_protocol_traffic', 'physical_acceptance_required'])
+const ASHLR_REASONS = new Set(['required_prerequisite_missing', 'receiver_contended_same_build', 'receiver_contended_distinct_builds', 'receiver_probe_unavailable', 'receiver_not_running', 'encoder_direction_reversed', 'input_profile_requires_activation', 'active_profile_content_drift', 'recent_unresolved_profile_layer_observed', 'recurring_codex_protocol_traffic', 'physical_acceptance_required'])
+const INPUT_CONTROL_IDS = new Set(['AG00', 'AG01', 'AG02', 'AG03', 'AG04', 'AG05', 'ACT06', 'ACT07', 'ACT08', 'ACT09', 'ACT10', 'ACT11', 'ACT12'])
 const HYBRID_REASONS = new Set(['required_prerequisite_missing', 'receiver_contended_same_build', 'receiver_contended_distinct_builds', 'receiver_probe_unavailable', 'receiver_not_running', 'input_application_running', 'input_application_probe_unavailable', 'hybrid_profile_requires_activation', 'separate_physical_acceptance_required'])
 const INPUT_APPLICATION_STATUSES = new Set(['running', 'not_running', 'unavailable'])
 const boundedHash = (value) => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value) ? value : null
@@ -259,6 +260,16 @@ function projectAppDoctor(raw) {
   const dailyProfileMatch = rawProfile?.dailyProfileMatch === true
   const dailyLayerMatch = rawProfile?.dailyLayerMatch === true
   const dailyProfileReady = cacheStatus === 'available' && dailyProfileMatch && dailyLayerMatch && encoderDirection === 'correct'
+    && rawProfile?.dailyProfileReady === true
+  const dailySignalCount = Number.isInteger(rawProfile?.dailySignalCount) && rawProfile.dailySignalCount >= 0 && rawProfile.dailySignalCount <= 20
+    ? rawProfile.dailySignalCount
+    : null
+  const unboundControls = Array.isArray(rawProfile?.unboundControls)
+    && rawProfile.unboundControls.length <= 13
+    && rawProfile.unboundControls.every((control) => INPUT_CONTROL_IDS.has(control))
+    ? [...new Set(rawProfile.unboundControls)]
+    : []
+  const unexpectedBindings = rawProfile?.unexpectedBindings === true
   const hybridProfileMatch = rawProfile?.hybridProfileMatch === true
   const hybridLayersMatch = rawProfile?.hybridLayersMatch === true
   const hybridProfileReady = cacheStatus === 'available' && hybridProfileMatch && hybridLayersMatch
@@ -311,6 +322,9 @@ function projectAppDoctor(raw) {
       dailyLayerMatch,
       encoderDirection,
       dailyProfileReady,
+      dailySignalCount,
+      unboundControls,
+      ...(unexpectedBindings ? { unexpectedBindings: true } : {}),
       hybridProfileMatch,
       hybridLayersMatch,
       hybridProfileReady,
@@ -483,6 +497,7 @@ export function buildPreflight({
     const codexTraffic = runtime?.codexProtocolTraffic
     ashlrInputOnlyWindowNeeded = codexTraffic?.status === 'recurring_unresolved_response' && codexTraffic.fresh === true
     const codexTrafficUnavailable = ['log_missing', 'log_unsafe', 'log_unavailable', 'invalid'].includes(codexTraffic?.status)
+    const contentDrift = appDoctor?.ashlrReason === 'active_profile_content_drift'
     checks.push(check(
       'receiver_ownership',
       ashlrReceiverReady ? 'pass' : 'blocked',
@@ -495,9 +510,11 @@ export function buildPreflight({
     ))
     checks.push(check(
       'input_profile',
-      profile?.dailyProfileReady ? 'pass' : profile?.encoderDirection === 'reversed' ? 'blocked' : 'warn',
-      profile ? `cache=${profile.cacheStatus}; daily_profile_match=${profile.dailyProfileMatch}; daily_layer_match=${profile.dailyLayerMatch}; encoder=${profile.encoderDirection}` : 'bounded Input profile evidence unavailable',
-      profile?.dailyProfileReady
+      contentDrift || profile?.encoderDirection === 'reversed' ? 'blocked' : profile?.dailyProfileReady ? 'pass' : 'warn',
+      profile ? `cache=${profile.cacheStatus}; daily_profile_match=${profile.dailyProfileMatch}; daily_layer_match=${profile.dailyLayerMatch}; encoder=${profile.encoderDirection}; expected_bindings=${profile.dailySignalCount ?? 'unknown'}/20; unexpected_bindings=${profile.unexpectedBindings === true}; unbound=${profile.unboundControls?.join(',') || 'none_observed'}` : 'bounded Input profile evidence unavailable',
+      contentDrift
+        ? 'the cached profile labels match but its exact content is incomplete; replace it with a strictly verified 20-signal profile rather than selecting the same profile again'
+        : profile?.dailyProfileReady
         ? 'the read-only cache matches the corrected daily profile; a board write and physical dial route are not yet proven'
         : profile?.encoderDirection === 'reversed' ? 'the read-only cache identifies the known reversed dial mapping' : 'activate the corrected daily profile in Work Louder Input before Flight Check',
     ))
@@ -508,7 +525,7 @@ export function buildPreflight({
         ? `reason=unresolved_profile_layer; profile_index=${runtime.profileIndex ?? 'unknown'}; layer_index=${runtime.layerIndex ?? 'unknown'}; fresh=${runtime.fresh}`
         : runtimeUnavailable ? `reason=${runtime.status}; bounded Input runtime evidence unavailable` : runtime ? `reason=${runtime.status}; no recent unresolved combination projected` : 'bounded Input runtime evidence unavailable',
       runtime?.status === 'unresolved_profile_layer' && runtime.fresh
-        ? 'Input recently logged an unresolved index combination; it may predate the current cache and does not prove current device state'
+        ? "Input recently logged an unresolved index combination; the vendor runtime layer index is offset from the cached layer ID, so it does not prove a missing cache layer or current device state"
         : runtimeUnavailable ? 'runtime evidence is unavailable or unsafe; do not infer an error-free Input session' : runtime ? 'no recent unresolved Input profile/layer event requires an advisory' : 'run the desktop doctor directly for bounded Input runtime evidence',
     ))
     checks.push(check(

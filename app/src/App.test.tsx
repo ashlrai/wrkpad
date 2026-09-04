@@ -11,7 +11,7 @@ const correctedInputProfile = {
   activeLayer: 'Ashlr Daily',
   encoderDirection: 'correct' as const,
   configuredLayers: [
-    { name: 'Ashlr Daily', mapping: 'ashlr_daily' as const, encoderDirection: 'correct' as const },
+    { name: 'Ashlr Daily', mapping: 'ashlr_daily' as const, encoderDirection: 'correct' as const, dailySignalCount: 20, unboundControls: [] },
   ],
 }
 
@@ -921,7 +921,7 @@ describe('operator interface', () => {
     expect(screen.getByText(/saved Input recovery artifact is missing or changed/i)).toBeTruthy()
   })
 
-  it('turns a fresh Input profile-layer error into a safe reconciliation path', async () => {
+  it('keeps a fresh vendor runtime layer index advisory when exact cached content is present', async () => {
     window.agentBoard = {
       getStatus: vi.fn().mockResolvedValue({
         boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
@@ -938,14 +938,40 @@ describe('operator interface', () => {
 
     render(<App />)
     fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
-    expect(await screen.findByRole('heading', { name: 'Keep these steps visible before you quit.' })).toBeTruthy()
-    expect(screen.getByText(/Input logged profile 2 \/ layer 1 as unresolved/i)).toBeTruthy()
-    expect(screen.getByText(/may predate the current cache/i)).toBeTruthy()
+    expect(await screen.findByText(/vendor runtime index is offset from the cached layer ID/i)).toBeTruthy()
+    expect(screen.getByText(/does not prove a missing layer/i)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Create corrected Input profile' })).toBeNull()
-    const cacheState = screen.getByText(/Cache observed · Ashlr Agent Board Corrected/i)
-    expect(cacheState.closest('article')?.classList.contains('observed')).toBe(true)
+    expect(screen.queryByText(/Blocked · current profile/i)).toBeNull()
+    expect(screen.getByText(/Cache observed · Ashlr Agent Board Corrected · Ashlr Daily · device sync unproven/i).closest('article')?.classList.contains('observed')).toBe(true)
     fireEvent.click(screen.getByRole('tab', { name: 'Flight Check' }))
     expect((screen.getByRole('button', { name: 'Daily profile' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('blocks matching profile labels when ACT11 is unbound in the cached content', async () => {
+    window.agentBoard = {
+      getStatus: vi.fn().mockResolvedValue({
+        boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
+        ...trustedHardwareDiagnostics,
+        inputProfile: {
+          ...correctedInputProfile,
+          configuredLayers: [{ ...correctedInputProfile.configuredLayers[0], mapping: 'unknown', dailySignalCount: 19, unboundControls: ['ACT11'] }],
+        },
+        inputRuntime: { status: 'not_observed', profileIndex: null, layerIndex: null, observedAt: null, fresh: false },
+        receiverIdentity: null, codex: true, claude: true, ashlr: true, boardRoute: 'ashlr_layer', workspace: '/tmp', shortcutCount: 20,
+        shortcutRegistrations: [], workspaceSnapshot: null,
+      }),
+      getMissionControl: vi.fn().mockResolvedValue(initialUnavailableMission()),
+      focusAgentSlot: vi.fn(), setProfile: vi.fn(), setFlightCheck: vi.fn(), requestAction: vi.fn(), confirmAction: vi.fn(),
+      beginHold: vi.fn(), cancelHold: vi.fn(), chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(), onControl: vi.fn(() => () => {}),
+    } as unknown as NonNullable<typeof window.agentBoard>
+
+    render(<App />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
+    expect(await screen.findByText(/Blocked · cached profile incomplete · 19\/20 expected · ACT11 unbound/i)).toBeTruthy()
+    expect(screen.getByRole('alert').textContent).toContain('strictly verified artifact')
+    expect(screen.queryByText(/Set as current profile/i)).toBeNull()
+    fireEvent.click(screen.getByRole('tab', { name: 'Flight Check' }))
+    expect((screen.getByRole('button', { name: 'Daily profile' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('shows one recovery path when cache and recent Input log evidence both disagree', async () => {
@@ -966,7 +992,7 @@ describe('operator interface', () => {
     render(<App />)
     fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
     expect(await screen.findByRole('button', { name: 'Create corrected Input profile' })).toBeTruthy()
-    expect(screen.getByText(/Input also logged profile 2 \/ layer 1 as unresolved recently/i)).toBeTruthy()
+    expect(screen.getByText(/Input logged profile 2 \/ layer 1 as unresolved recently/i)).toBeTruthy()
     expect(screen.queryByText('Input recently logged an unresolved combination.')).toBeNull()
     expect(document.querySelectorAll('.profile-repair')).toHaveLength(1)
   })
@@ -1527,6 +1553,45 @@ describe('operator interface', () => {
     await waitFor(() => expect(setFlightCheck).toHaveBeenCalledWith(true, 'daily', expect.objectContaining({ dualPlaneAshlrLayerSelected: true, attestedAt: expect.any(String) })))
   })
 
+  it('suppresses physical callbacks while Flight Check admission is pending', async () => {
+    const admission = deferred<{ acknowledged: boolean; active: boolean; startedAt: string | null }>()
+    const requestAction = vi.fn()
+    let controlHandler: ((signal: PhysicalSignalEnvelope) => void) | undefined
+    window.agentBoard = {
+      getStatus: vi.fn().mockResolvedValue({
+        boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
+        ...trustedHardwareDiagnostics,
+        inputProfile: correctedInputProfile,
+        codex: true, claude: true, ashlr: true, boardRoute: 'ashlr_layer', workspace: '/tmp', shortcutCount: 20,
+        shortcutRegistrations: [], workspaceSnapshot: null,
+      }),
+      getMissionControl: vi.fn().mockResolvedValue(initialUnavailableMission()),
+      focusAgentSlot: vi.fn(), setProfile: vi.fn(), setFlightCheck: vi.fn(() => admission.promise),
+      requestAction, confirmAction: vi.fn(), beginHold: vi.fn(), cancelHold: vi.fn(),
+      chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(),
+      onControl: vi.fn((callback) => { controlHandler = callback; return () => {} }),
+    } as unknown as NonNullable<typeof window.agentBoard>
+
+    render(<App />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Flight Check' }))
+    const daily = await screen.findByRole('button', { name: 'Daily profile' })
+    await waitFor(() => expect((daily as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(daily)
+    expect(await screen.findByText('WAIT FOR INTERLOCK')).toBeTruthy()
+
+    act(() => controlHandler?.({
+      schemaVersion: 1, sequence: 1, signalId: 'cmd1', source: 'global-shortcut',
+      accelerator: 'Control+Alt+Command+A', receivedAt: '2026-09-04T05:00:00.000Z', monotonicNs: '1',
+    }))
+    expect(requestAction).not.toHaveBeenCalled()
+
+    await act(async () => {
+      admission.resolve({ acknowledged: true, active: true, startedAt: '2026-09-04T05:00:01.000Z' })
+      await admission.promise
+    })
+    expect(await screen.findByRole('heading', { name: 'Dial left' })).toBeTruthy()
+  })
+
   it('stops prompting after a misroute and offers a clean restart', async () => {
     let controlHandler: ((signal: { schemaVersion: 1; sequence: number; signalId: 'joyUp'; source: 'global-shortcut'; accelerator: string; receivedAt: string; monotonicNs: string }) => void) | undefined
     const setFlightCheck = vi.fn((active: boolean) => Promise.resolve({ acknowledged: true, active, startedAt: active ? new Date().toISOString() : null }))
@@ -1561,7 +1626,7 @@ describe('operator interface', () => {
     }))
 
     expect(screen.getByText('THIS RUN CANNOT PASS')).toBeTruthy()
-    expect(screen.getByText(/continuing cannot produce a passing receipt/i)).toBeTruthy()
+    expect(screen.getByText(/a misroute was latched/i)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /End and restart/i }))
     await waitFor(() => expect(restartFlightCheck).toHaveBeenCalledWith('daily'))
     expect(setFlightCheck.mock.calls).toEqual([[true, 'daily']])
@@ -1638,7 +1703,7 @@ describe('operator interface', () => {
       await Promise.resolve()
     })
     expect(screen.getByText('THIS RUN CANNOT PASS')).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'A live acceptance gate changed' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'This run was invalidated' })).toBeTruthy()
     expect(screen.getByText(/Recover every gate, then end and restart/i)).toBeTruthy()
     expect(screen.queryByText('ACCEPTANCE PASSED')).toBeNull()
     expect(screen.queryByRole('button', { name: /Export receipt/i })).toBeNull()
@@ -1656,7 +1721,7 @@ describe('operator interface', () => {
       await Promise.resolve()
     })
     expect(screen.getByText('THIS RUN CANNOT PASS')).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'A live acceptance gate changed' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'This run was invalidated' })).toBeTruthy()
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /End and restart/i }))
@@ -1771,5 +1836,66 @@ describe('operator interface', () => {
     })
     expect(screen.queryByText('THIS RUN CANNOT PASS')).toBeNull()
     expect(screen.getByRole('button', { name: 'Daily profile' })).toBeTruthy()
+  })
+
+  it('shows an allowed OS callback immediately outside Flight Check', async () => {
+    let controlHandler: ((signal: PhysicalSignalEnvelope) => void) | undefined
+    window.agentBoard = {
+      getStatus: vi.fn().mockResolvedValue({
+        boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
+        ...trustedHardwareDiagnostics, inputProfile: correctedInputProfile,
+        codex: true, claude: true, ashlr: false, boardRoute: 'ashlr_layer', workspace: '/tmp', shortcutCount: 20,
+        shortcutRegistrations: [], shortcutTelemetry: { generation: 3, scope: 'ashlr_layer', totalObserved: 0, last: null }, workspaceSnapshot: null,
+      }),
+      getMissionControl: vi.fn().mockResolvedValue(initialUnavailableMission()),
+      focusAgentSlot: vi.fn().mockResolvedValue({ ok: true, title: 'Focused', message: 'Local focus only.', timestamp: new Date().toISOString() }),
+      setProfile: vi.fn(), setFlightCheck: vi.fn(), restartFlightCheck: vi.fn(), requestAction: vi.fn(), confirmAction: vi.fn(),
+      beginHold: vi.fn(), cancelHold: vi.fn(), chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(),
+      onControl: vi.fn((callback) => { controlHandler = callback; return () => {} }),
+    } as unknown as NonNullable<typeof window.agentBoard>
+
+    render(<App />)
+    expect(await screen.findByText('No OS callback observed · ashlr_layer generation 3')).toBeTruthy()
+    act(() => controlHandler?.({
+      schemaVersion: 1, sequence: 1, signalId: 'agent1', source: 'global-shortcut',
+      accelerator: 'Control+Alt+Command+1', receivedAt: '2026-09-04T05:00:00.000Z', monotonicNs: '1',
+    }))
+    expect(screen.getByText('1 OS callback observed · last AG00 · delivery allowed · ashlr_layer generation 3')).toBeTruthy()
+  })
+
+  it('reconciles a main-owned Flight event that the renderer subscription missed', async () => {
+    const startedAt = '2026-09-04T05:00:00.000Z'
+    const getFlightSnapshot = vi.fn().mockResolvedValue({
+      active: true,
+      startedAt,
+      invalidated: false,
+      droppedEventCount: 0,
+      rawEvents: [1, 2, 3].map((sequence) => ({
+        schemaVersion: 1, sequence, signalId: 'dialLeft', source: 'global-shortcut',
+        accelerator: 'Control+Alt+Command+Q', receivedAt: `2026-09-04T05:00:0${sequence}.000Z`, monotonicNs: String(sequence),
+      })),
+    })
+    window.agentBoard = {
+      getStatus: vi.fn().mockResolvedValue({
+        boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
+        ...trustedHardwareDiagnostics, inputProfile: correctedInputProfile,
+        codex: true, claude: true, ashlr: false, boardRoute: 'ashlr_layer', workspace: '/tmp', shortcutCount: 20,
+        shortcutRegistrations: [], shortcutTelemetry: { generation: 3, scope: 'ashlr_layer', totalObserved: 1, last: { signalId: 'dialLeft', receivedAt: '2026-09-04T05:00:01.000Z', outcome: 'allowed' } }, workspaceSnapshot: null,
+      }),
+      getFlightSnapshot,
+      getMissionControl: vi.fn().mockResolvedValue(initialUnavailableMission()),
+      focusAgentSlot: vi.fn(), setProfile: vi.fn(),
+      setFlightCheck: vi.fn().mockResolvedValue({ acknowledged: true, active: true, startedAt }),
+      restartFlightCheck: vi.fn(), requestAction: vi.fn(), confirmAction: vi.fn(), beginHold: vi.fn(), cancelHold: vi.fn(),
+      chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(), onControl: vi.fn(() => () => {}),
+    } as unknown as NonNullable<typeof window.agentBoard>
+
+    render(<App />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Flight Check' }))
+    const daily = await screen.findByRole('button', { name: 'Daily profile' })
+    await waitFor(() => expect((daily as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(daily)
+    expect(await screen.findByLabelText('Dial left: Complete')).toBeTruthy()
+    expect(getFlightSnapshot).toHaveBeenCalled()
   })
 })

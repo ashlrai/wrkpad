@@ -35,6 +35,7 @@ const { appSettingsPath, readWorkspaceSettings, saveBoardRouteSettings, saveWork
 const { passiveRouteActionResult, routeAllowsConfiguredActions } = require('./action-route-policy.cjs')
 const { routeAllowsShortcutDelivery, routeOwnsShortcuts, shortcutSignalsForRoute } = require('./board-route-policy.cjs')
 const { createShortcutCallbackGuard, createShortcutOwnershipController } = require('./shortcut-ownership.cjs')
+const { createShortcutObservability, projectFlightSnapshot } = require('./shortcut-observability.cjs')
 const { resolveTool } = require('./tool-resolver.cjs')
 
 const PROFILE_IDS = new Set(['codex', 'claude', 'fleet', 'ship', 'emergency'])
@@ -51,15 +52,41 @@ const flightSession = createFlightSession()
 const flightOperations = createFlightOperationCoordinator(flightSession)
 let activeFlightAdmission = null
 let flightAdmissionMutation = 0
+const flightAdmissionSuppressions = new Set()
+const mappedActionOperations = new Set()
 const cachedReceiverAsarHash = createCachedAsarHasher({ ttlMs: 30_000, maxEntries: 32, filesystem: originalFilesystem })
 const inspectInputInstallationAsync = createInputInstallationInspector()
 const shortcutCallbackGuard = createShortcutCallbackGuard()
+const shortcutObservability = createShortcutObservability({ signalIds: Object.keys(HOTKEYS) })
 const cmuxFocusAdapter = createCmuxFocusAdapter({ foreground: () => openFixedApp('cmux') })
 
 function resetFlightState() {
   flightAdmissionMutation += 1
   activeFlightAdmission = null
   flightOperations.reset()
+}
+
+function flightActionsSuppressed() {
+  return flightSession.isActive() || flightAdmissionSuppressions.size > 0
+}
+
+function flightInterlockResult(message = 'Mapped actions are disabled until hardware acceptance ends.') {
+  return { ok:false, title:'Flight Check interlock', message, timestamp:new Date().toISOString() }
+}
+
+async function runMappedAction(operation, denied = () => flightInterlockResult()) {
+  if (flightActionsSuppressed()) return denied()
+  const lease = Symbol('mapped-action')
+  mappedActionOperations.add(lease)
+  try {
+    return await operation()
+  } finally {
+    mappedActionOperations.delete(lease)
+  }
+}
+
+function requireMappedActionsIdle() {
+  if (mappedActionOperations.size > 0) throw new Error('Wait for the current mapped action to finish, then start Flight Check again')
 }
 
 function settingsPath() { return appSettingsPath(app.getPath('appData')) }
@@ -277,14 +304,16 @@ function trustedCompactIpc(handler) {
 
 function registerShortcuts(boardRoute) {
   shortcutCallbackGuard.invalidate()
+  shortcutObservability.beginGeneration(boardRoute, true)
   const registrations = []
   for (const control of shortcutSignalsForRoute(boardRoute)) {
     const accelerator = HOTKEYS[control]
     if (typeof accelerator !== 'string') throw new Error('Shortcut route contains an unknown signal')
-    const registered = globalShortcut.register(accelerator, shortcutCallbackGuard.bind(() => {
+    const deliver = shortcutCallbackGuard.bind((observation) => {
       let deliveryAllowed = false
+      let currentRoute = null
       try {
-        const currentRoute = readSettings().boardRoute
+        currentRoute = readSettings().boardRoute
         const inputApplication = boardRoute === 'hybrid_native' ? inspectInputApplicationRuntime() : null
         deliveryAllowed = routeAllowsShortcutDelivery(boardRoute, currentRoute, inputApplication)
       } catch {}
@@ -296,23 +325,42 @@ function registerShortcuts(boardRoute) {
           resetFlightState()
           approvals.clear()
         }
+        // Ownership rotation must not erase the callback that triggered the
+        // fail-closed transition. Re-record only its allowlisted metadata in
+        // the released generation; delivery remains rejected.
+        shortcutObservability.observe(control)
         return
       }
+      shortcutObservability.allow(observation)
       const envelope = {
         schemaVersion: 1,
         sequence: ++signalSequence,
         signalId: control,
         source: 'global-shortcut',
         accelerator,
-        receivedAt: new Date().toISOString(),
+        receivedAt: observation?.receivedAt ?? new Date().toISOString(),
         monotonicNs: process.hrtime.bigint().toString(),
       }
-      flightSession.record(envelope)
+      const recordedForFlight = flightSession.record(envelope)
+      if (recordedForFlight && activeFlightAdmission && currentRoute) {
+        const evaluation = evaluateFlightSignals(activeFlightAdmission.variant, flightSession.snapshot().rawEvents, currentRoute)
+        if (evaluation.problems.length > 0) flightSession.invalidate()
+      }
       mainWindow?.webContents.send('board:control', envelope)
-    }))
+    })
+    const registered = globalShortcut.register(accelerator, () => {
+      // This receipt is deliberately captured before the callback guard and
+      // route revalidation. Its default rejected outcome therefore remains
+      // truthful if either gate suppresses delivery.
+      deliver(shortcutObservability.observe(control))
+    })
     registrations.push({ signalId: control, accelerator, registered })
   }
   return registrations
+}
+
+function publicFlightSnapshot() {
+  return projectFlightSnapshot(flightSession.snapshot(), HOTKEYS)
 }
 
 function inspectCurrentReceiverRuntime() {
@@ -374,16 +422,27 @@ const shortcutOwnership = createShortcutOwnershipController({
 })
 
 function synchronizeShortcutOwnership(boardRoute) {
-  if (!routeOwnsShortcuts(boardRoute)) shortcutCallbackGuard.invalidate()
+  if (!routeOwnsShortcuts(boardRoute)) {
+    shortcutCallbackGuard.invalidate()
+    shortcutObservability.beginGeneration(boardRoute)
+  }
   try {
     const state = shortcutOwnership.synchronize(boardRoute)
     shortcutRegistrations = state.registrations
-    if (routeOwnsShortcuts(boardRoute) && registrationsAreActive(shortcutRegistrations, boardRoute)) shortcutCallbackGuard.enable()
+    const active = routeOwnsShortcuts(boardRoute) && registrationsAreActive(shortcutRegistrations, boardRoute)
+    if (active) shortcutCallbackGuard.enable()
     else shortcutCallbackGuard.invalidate()
+    const scope = active
+      ? boardRoute
+      : routeOwnsShortcuts(boardRoute)
+        ? `${boardRoute}_released`
+        : ['codex_native', 'unknown'].includes(boardRoute) ? boardRoute : 'unknown'
+    shortcutObservability.beginGeneration(scope)
     return state
   } catch (error) {
     shortcutRegistrations = []
     shortcutCallbackGuard.invalidate()
+    shortcutObservability.beginGeneration(routeOwnsShortcuts(boardRoute) ? `${boardRoute}_released` : 'unknown')
     throw error
   }
 }
@@ -481,7 +540,7 @@ function openFixedApp(name) {
 }
 
 async function focusAgentFromSnapshot(slot, snapshot) {
-  if (flightSession.isActive()) return { ok:false,title:'Flight Check interlock',message:'Agent focus is disabled until hardware acceptance ends.',timestamp:new Date().toISOString() }
+  if (flightActionsSuppressed()) return { ok:false,title:'Flight Check interlock',message:'Agent focus is disabled until hardware acceptance ends.',timestamp:new Date().toISOString() }
   if (!Number.isInteger(slot) || slot < 1 || slot > 6) return { ok:false,title:'Slot unavailable',message:'Choose one of the six agent slots.',timestamp:new Date().toISOString() }
   const agent = snapshot.agents.find((candidate) => candidate.slot === slot)
   if (!agent?.provider || agent.state === 'off') return { ok:false,title:`Agent ${slot} is empty`,message:'This slot has no live provider receipt yet. Start or resume a session, then try again.',timestamp:new Date().toISOString() }
@@ -510,7 +569,7 @@ async function focusAgentSlotResult(slot) {
 }
 
 async function focusHighestPriorityAgentResult() {
-  if (flightSession.isActive()) return focusAgentFromSnapshot(null, { agents: [] })
+  if (flightActionsSuppressed()) return focusAgentFromSnapshot(null, { agents: [] })
   // Attention must resolve and focus from the same new HASP read. Never reuse
   // the renderer cache or an earlier in-flight refresh for this action.
   const mission = await collectMissionControl(app.getPath('home'))
@@ -554,6 +613,7 @@ ipcMain.handle('board:getStatus', trustedIpc(async () => {
     workspace: settings.workspace,
     shortcutCount: shortcutRegistrations.filter((registration) => registration.registered).length,
     shortcutRegistrations,
+    shortcutTelemetry: shortcutObservability.snapshot(),
     workspaceSnapshot,
     receiverIdentity: {
       appVersion: app.getVersion(),
@@ -564,6 +624,7 @@ ipcMain.handle('board:getStatus', trustedIpc(async () => {
     inputApplication: currentReceiverRuntime.inputApplication,
   }
 }))
+ipcMain.handle('board:getFlightSnapshot', trustedIpc(() => publicFlightSnapshot()))
 ipcMain.handle('board:getMissionControl', trustedIpc(() => missionControl()))
 ipcMain.handle('board:getRecoveryGuide', trustedIpc(() => {
   const handoff = readRecoveryReceipt(handoffPath())
@@ -592,6 +653,7 @@ ipcMain.handle('board:saveNativeControlCheck', trustedIpc(async (_event, report)
   return writeNativeControlCheck(settingsPath(), receipt, { currentContext, now })
 }))
 ipcMain.handle('board:setBoardRoute', trustedIpc((_event, boardRoute) => {
+  if (flightActionsSuppressed()) throw new Error('End Flight Check before changing shortcut ownership')
   if (!validBoardRoute(boardRoute)) throw new TypeError('Unsupported board route declaration')
   return nativeAcceptanceOperations.mutateContext(() => {
     const currentRoute = readSettings().boardRoute
@@ -606,8 +668,8 @@ ipcMain.handle('board:setBoardRoute', trustedIpc((_event, boardRoute) => {
     return boardRoute
   })
 }))
-ipcMain.handle('board:focusAgentSlot', trustedIpc((_event, slot) => focusAgentSlotResult(slot)))
-ipcMain.handle('board:focusAttention', trustedIpc(() => focusHighestPriorityAgentResult()))
+ipcMain.handle('board:focusAgentSlot', trustedIpc((_event, slot) => runMappedAction(() => focusAgentSlotResult(slot))))
+ipcMain.handle('board:focusAttention', trustedIpc(() => runMappedAction(() => focusHighestPriorityAgentResult())))
 ipcMain.handle('board:showCompactDeck', trustedIpc(() => {
   showCompactDeck()
   return { ok: true }
@@ -618,19 +680,28 @@ ipcMain.handle('compact:getSnapshot', trustedCompactIpc(async () => {
   const preferences = readCompactSettings(compactWindow?.getBounds())
   return projectCompactSnapshot(mission, { showTitles: preferences.showTitles })
 }))
-ipcMain.handle('compact:focusAgentSlot', trustedCompactIpc(async (_event, slot) => projectCompactActionResult(await focusAgentSlotResult(slot))))
+ipcMain.handle('compact:focusAgentSlot', trustedCompactIpc((_event, slot) => runMappedAction(
+  async () => projectCompactActionResult(await focusAgentSlotResult(slot)),
+  () => projectCompactActionResult(flightInterlockResult('Compact actions are disabled until hardware acceptance ends.')),
+)))
 ipcMain.handle('compact:focusAttention', trustedCompactIpc(async () => {
-  requireCompactWorkflowAction('stage_attention', ACTION_SPECS)
-  await executeSpec('stage_attention', readSettings().workspace, { clipboard, home: app.getPath('home') })
-  return projectCompactActionResult(await focusHighestPriorityAgentResult())
+  return runMappedAction(async () => {
+    requireCompactWorkflowAction('stage_attention', ACTION_SPECS)
+    await executeSpec('stage_attention', readSettings().workspace, { clipboard, home: app.getPath('home') })
+    return projectCompactActionResult(await focusHighestPriorityAgentResult())
+  }, () => projectCompactActionResult(flightInterlockResult('Compact actions are disabled until hardware acceptance ends.')))
 }))
 ipcMain.handle('compact:runSkillAction', trustedCompactIpc(async (_event, actionId) => {
-  requireCompactAction(actionId, ACTION_SPECS)
-  return projectCompactActionResult(await executeSpec(actionId, readSettings().workspace, { clipboard, home: app.getPath('home') }))
+  return runMappedAction(async () => {
+    requireCompactAction(actionId, ACTION_SPECS)
+    return projectCompactActionResult(await executeSpec(actionId, readSettings().workspace, { clipboard, home: app.getPath('home') }))
+  }, () => projectCompactActionResult(flightInterlockResult('Compact actions are disabled until hardware acceptance ends.')))
 }))
 ipcMain.handle('compact:runWorkflowAction', trustedCompactIpc(async (_event, actionId) => {
-  requireCompactWorkflowAction(actionId, ACTION_SPECS)
-  return projectCompactActionResult(await executeSpec(actionId, readSettings().workspace, { clipboard, home: app.getPath('home') }))
+  return runMappedAction(async () => {
+    requireCompactWorkflowAction(actionId, ACTION_SPECS)
+    return projectCompactActionResult(await executeSpec(actionId, readSettings().workspace, { clipboard, home: app.getPath('home') }))
+  }, () => projectCompactActionResult(flightInterlockResult('Compact actions are disabled until hardware acceptance ends.')))
 }))
 ipcMain.handle('compact:getPreferences', trustedCompactIpc(() => readCompactSettings(compactWindow?.getBounds())))
 ipcMain.handle('compact:savePreferences', trustedCompactIpc((_event, candidate) => {
@@ -659,12 +730,23 @@ ipcMain.handle('board:setFlightCheck', trustedIpc(async (_event, active, variant
   const mutation = ++flightAdmissionMutation
   const dualPlaneAshlrLayerSelected = active === true && hasFreshExactDualPlaneAshlrAttestation(attestation)
   let admission = null
-  const state = active === true
-    ? await flightOperations.start(async () => {
-      admission = await verifyFlightGates(variant, true, dualPlaneAshlrLayerSelected)
-      return admission
-    })
-    : flightOperations.stop()
+  let state
+  if (active === true) {
+    const suppression = Symbol('flight-admission')
+    flightAdmissionSuppressions.add(suppression)
+    approvals.clear()
+    try {
+      requireMappedActionsIdle()
+      state = await flightOperations.start(async () => {
+        admission = await verifyFlightGates(variant, true, dualPlaneAshlrLayerSelected)
+        return admission
+      })
+    } finally {
+      flightAdmissionSuppressions.delete(suppression)
+    }
+  } else {
+    state = flightOperations.stop()
+  }
   if (mutation === flightAdmissionMutation) {
     activeFlightAdmission = state.acknowledged && state.active && admission?.ready === true
       ? {
@@ -685,7 +767,15 @@ ipcMain.handle('board:restartFlightCheck', trustedIpc(async (_event, variant) =>
   if (prior?.dualPlaneAshlrLayerSelected) {
     throw new Error('End the check, re-establish native layer 1, move exactly once to Ashlr layer 2, and provide a fresh attestation')
   }
-  const state = await flightOperations.restart(() => verifyBoundFlightGates(variant))
+  const suppression = Symbol('flight-restart')
+  flightAdmissionSuppressions.add(suppression)
+  approvals.clear()
+  let state
+  try {
+    state = await flightOperations.restart(() => verifyBoundFlightGates(variant))
+  } finally {
+    flightAdmissionSuppressions.delete(suppression)
+  }
   if (mutation === flightAdmissionMutation) {
     activeFlightAdmission = state.acknowledged && state.active && prior
       ? { ...prior, startedAt: state.startedAt }
@@ -700,7 +790,7 @@ ipcMain.handle('board:chooseWorkspace', trustedIpc(async () => {
   saveWorkspace(result.filePaths[0]); return result.filePaths[0]
 }))
 ipcMain.handle('board:createCorrectedInputProfile', trustedIpc(async () => {
-  if (flightSession.isActive()) {
+  if (flightActionsSuppressed()) {
     return { status: 'failed', message: 'End Flight Check before creating a repair artifact. No file or device setting changed.' }
   }
   const source = await dialog.showOpenDialog(mainWindow, {
@@ -805,7 +895,7 @@ ipcMain.handle('board:saveFlightReceipt', trustedIpc(async (_event, receipt) => 
       const evaluation = evaluateFlightSignals(variant, flight.rawEvents, admission.evidence.boardRoute)
       const usbDetected = admission.evidence.usbDetected
       const registeredCount = shortcutRegistrations.filter((item) => item.registered).length
-      const status = evaluation.status === 'passed' && admission.ready ? 'passed' : evaluation.status === 'incomplete' ? 'incomplete' : 'failed'
+      const status = evaluation.status === 'passed' && admission.ready && flight.invalidated !== true ? 'passed' : evaluation.status === 'incomplete' && flight.invalidated !== true ? 'incomplete' : 'failed'
       const payload = {
         schema: 'ai.ashlr.agent-board.flight-check/v2',
         receiptId: randomUUID(),
@@ -845,7 +935,7 @@ ipcMain.handle('board:requestAction', trustedIpc(async (_event, actionId) => {
     approvals.clear()
     return passiveRouteActionResult()
   }
-  if (flightSession.isActive()) return { ok:false,title:'Flight Check interlock',message:'Mapped actions are disabled until hardware acceptance ends.',timestamp:new Date().toISOString() }
+  if (flightActionsSuppressed()) return flightInterlockResult()
   const spec = ACTION_SPECS[actionId]
   if (!spec) return { ok:false,title:'Action unavailable',message:'This action is not allowlisted.',timestamp:new Date().toISOString() }
   if (spec.safety !== 'safe') {
@@ -862,7 +952,7 @@ ipcMain.handle('board:requestAction', trustedIpc(async (_event, actionId) => {
     })
     return { ok:true,title:'Confirmation required',message:'Review the consequence before continuing.',needsConfirmation:true,token,timestamp:new Date().toISOString() }
   }
-  return executeSpec(actionId, settings.workspace, { clipboard, home: app.getPath('home') })
+  return runMappedAction(() => executeSpec(actionId, settings.workspace, { clipboard, home: app.getPath('home') }))
 }))
 ipcMain.handle('board:beginHold', trustedIpc((_event, actionId, token) => {
   const settings = readSettings()
@@ -871,7 +961,7 @@ ipcMain.handle('board:beginHold', trustedIpc((_event, actionId, token) => {
     return false
   }
   const approval = approvals.get(token)
-  if (!approval || approval.actionId !== actionId || approval.safety !== 'hold' || approval.webContentsId !== _event.sender.id || approval.boardRoute !== settings.boardRoute || approval.expires < Date.now() || flightSession.isActive()) return false
+  if (!approval || approval.actionId !== actionId || approval.safety !== 'hold' || approval.webContentsId !== _event.sender.id || approval.boardRoute !== settings.boardRoute || approval.expires < Date.now() || flightActionsSuppressed()) return false
   approval.holdStartedAt = Date.now()
   return true
 }))
@@ -890,13 +980,13 @@ ipcMain.handle('board:confirmAction', trustedIpc(async (_event, actionId, token)
   const approval = approvals.get(token); approvals.delete(token)
   const settings = readSettings()
   if (!routeAllowsConfiguredActions(settings)) return passiveRouteActionResult()
-  if (flightSession.isActive()) return { ok:false,title:'Flight Check interlock',message:'The pending approval was canceled when hardware acceptance began.',timestamp:new Date().toISOString() }
+  if (flightActionsSuppressed()) return flightInterlockResult('The pending approval was canceled when hardware acceptance began.')
   if (!approval || approval.actionId !== actionId || approval.expires < Date.now()) return { ok:false,title:'Approval expired',message:'Select the action again to create a fresh authorization.',timestamp:new Date().toISOString() }
   if (approval.webContentsId !== _event.sender.id) return { ok:false,title:'Approval rejected',message:'The confirmation came from a different window.',timestamp:new Date().toISOString() }
   if (approval.boardRoute !== settings.boardRoute) return { ok:false,title:'Board route changed',message:'Review the action again after confirming the current active action route.',timestamp:new Date().toISOString() }
   if (approval.workspace !== settings.workspace) return { ok:false,title:'Workspace changed',message:'Review the action again for the newly selected working directory.',timestamp:new Date().toISOString() }
   if (approval.safety === 'hold' && !holdSatisfied(approval)) return { ok:false,title:'Hold incomplete',message:'Keep holding continuously until the authorization indicator completes.',timestamp:new Date().toISOString() }
-  return executeSpec(actionId, approval.workspace, { clipboard, home: app.getPath('home') })
+  return runMappedAction(() => executeSpec(actionId, approval.workspace, { clipboard, home: app.getPath('home') }))
 }))
 
 app.setName('Ashlr Agent Board')

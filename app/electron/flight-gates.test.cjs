@@ -8,7 +8,11 @@ const ready = {
   boardRoute: 'ashlr_layer',
   usbDetected: true,
   inputInstallation: { status: 'verified', version: '0.18.4' },
-  inputProfile: { cacheStatus: 'available', activeProfile: 'Ashlr Agent Board Corrected', activeLayer: 'Ashlr Daily', encoderDirection: 'correct' },
+  inputProfile: {
+    cacheStatus: 'available',
+    activeProfile: 'Ashlr Agent Board Corrected', activeLayer: 'Ashlr Daily', encoderDirection: 'correct',
+    configuredLayers: [{ name: 'Ashlr Daily', mapping: 'ashlr_daily', encoderDirection: 'correct' }],
+  },
   receiverRuntime: { status: 'exclusive', instanceCount: 1, distinctBuildCount: 1, currentAsarSha256: 'a'.repeat(64) },
   shortcutRegistrations: ASHLR_LAYER_SIGNAL_IDS.map((signalId) => ({ signalId, registered: true })),
 }
@@ -60,6 +64,30 @@ test('rejects a dual-plane profile whose Ashlr layer is changed or whose profile
   }
   assert.equal(evaluateFlightGates({ ...ready, dualPlaneAshlrLayerSelected: true, inputProfile }).gates.profile, false)
   assert.equal(evaluateFlightGates({ ...ready, dualPlaneAshlrLayerSelected: true, inputProfile: { ...inputProfile, activeProfile: 'Other' } }).gates.profile, false)
+})
+
+test('authoritative gates reject daily content drift', () => {
+  const contentDrift = evaluateFlightGates({
+    ...ready,
+    inputProfile: {
+      ...ready.inputProfile,
+      configuredLayers: [{ name: 'Ashlr Daily', mapping: 'unknown', encoderDirection: 'correct', dailySignalCount: 19, unboundControls: ['ACT11'] }],
+    },
+  })
+  assert.equal(contentDrift.ready, false)
+  assert.equal(contentDrift.gates.profile, false)
+  assert.equal(contentDrift.evidence.profileFailure, 'active_profile_content_drift')
+
+})
+
+test('runtime layer indexes never override deterministic cache content at the authoritative gate', () => {
+  const result = evaluateFlightGates({
+    ...ready,
+    inputRuntime: { status: 'unresolved_profile_layer', profileIndex: 2, layerIndex: 1, observedAt: '2026-09-03T20:01:00.000Z', fresh: true },
+  })
+  assert.equal(result.ready, true)
+  assert.equal(result.gates.profile, true)
+  assert.equal(result.evidence.profileFailure, null)
 })
 
 test('rejects a configured dual-plane profile without a fresh layer-2 operator attestation', () => {

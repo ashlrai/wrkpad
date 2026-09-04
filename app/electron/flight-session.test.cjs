@@ -9,9 +9,11 @@ test('stopping a flight atomically clears its start and raw evidence', () => {
   assert.deepEqual(session.snapshot(), {
     active: true,
     startedAt: '2026-08-31T18:00:00.000Z',
+    invalidated: false,
+    droppedEventCount: 0,
     rawEvents: [{ signalId: 'dialLeft' }],
   })
-  assert.deepEqual(session.stop(), { active: false, startedAt: null, rawEvents: [] })
+  assert.deepEqual(session.stop(), { active: false, startedAt: null, invalidated: false, droppedEventCount: 0, rawEvents: [] })
 })
 
 test('window-close reset cannot leave a hidden interlock or stale receipt', () => {
@@ -21,7 +23,7 @@ test('window-close reset cannot leave a hidden interlock or stale receipt', () =
   session.reset()
   assert.equal(session.isActive(), false)
   assert.equal(session.record({ signalId: 'agent2' }), false)
-  assert.deepEqual(session.snapshot(), { active: false, startedAt: null, rawEvents: [] })
+  assert.deepEqual(session.snapshot(), { active: false, startedAt: null, invalidated: false, droppedEventCount: 0, rawEvents: [] })
 })
 
 test('restarting clears evidence without releasing the interlock', () => {
@@ -33,7 +35,23 @@ test('restarting clears evidence without releasing the interlock', () => {
   assert.deepEqual(session.restart(), {
     active: true,
     startedAt: '2026-08-31T18:01:00.000Z',
+    invalidated: false,
+    droppedEventCount: 0,
     rawEvents: [],
   })
   assert.equal(session.isActive(), true)
+})
+
+test('a failure latch and bounded overflow survive for the whole active run', () => {
+  const session = createFlightSession(() => '2026-08-31T18:00:00.000Z')
+  session.start()
+  assert.equal(session.invalidate(), true)
+  for (let index = 0; index < 503; index += 1) session.record({ signalId: 'dialLeft', sequence: index + 1 })
+  const snapshot = session.snapshot()
+  assert.equal(snapshot.invalidated, true)
+  assert.equal(snapshot.droppedEventCount, 3)
+  assert.equal(snapshot.rawEvents.length, 500)
+  assert.equal(snapshot.rawEvents[0].sequence, 4)
+  assert.equal(session.restart().invalidated, false)
+  assert.equal(session.snapshot().droppedEventCount, 0)
 })

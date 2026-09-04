@@ -40,7 +40,14 @@ function profileReady(profile, route, variant, expected, dualPlaneAshlrLayerSele
   }
   if (profile.activeProfile === expected.profile
     && profile.activeLayer === expected.layer
-    && profile.encoderDirection === 'correct') return true
+    && profile.encoderDirection === 'correct') {
+    if (variant !== 'daily') return true
+    return Array.isArray(profile.configuredLayers)
+      && profile.configuredLayers.length === 1
+      && profile.configuredLayers[0]?.name === 'Ashlr Daily'
+      && profile.configuredLayers[0]?.mapping === 'ashlr_daily'
+      && profile.configuredLayers[0]?.encoderDirection === 'correct'
+  }
   return variant === 'daily'
     && dualPlaneAshlrLayerSelected === true
     && profile.activeProfile === DUAL_PLANE_PROFILE
@@ -72,6 +79,13 @@ function evaluateFlightGates(evidence) {
   const input = evidence?.inputInstallation
   const profile = evidence?.inputProfile
   const receiver = evidence?.receiverRuntime
+  const profileContentDrift = variant === 'daily'
+    && profile?.cacheStatus === 'available'
+    && profile?.activeProfile === EXPECTED_PROFILE.daily.profile
+    && profile?.activeLayer === EXPECTED_PROFILE.daily.layer
+    && Array.isArray(profile?.configuredLayers)
+    && profile.configuredLayers.length === 1
+    && profile.configuredLayers[0]?.mapping !== 'ashlr_daily'
 
   const gates = {
     variant: Boolean(variant) && (route !== HYBRID_NATIVE_ROUTE || variant === 'daily'),
@@ -110,6 +124,7 @@ function evaluateFlightGates(evidence) {
           }))
           : [],
       },
+      profileFailure: profileContentDrift ? 'active_profile_content_drift' : null,
       receiverRuntime: {
         status: typeof receiver?.status === 'string' ? receiver.status : 'unavailable',
         instanceCount: Number.isInteger(receiver?.instanceCount) ? receiver.instanceCount : 0,

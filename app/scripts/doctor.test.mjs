@@ -108,13 +108,18 @@ test('does not call a partial or silent-key Ashlr cache ready', () => {
     boardRoute: 'ashlr_layer',
     inputProfile: {
       ...requiredProbes.inputProfile,
-      configuredLayers: [{ name: 'Ashlr Daily', mapping: 'unknown', encoderDirection: 'correct' }],
+      configuredLayers: [{ name: 'Ashlr Daily', mapping: 'unknown', encoderDirection: 'correct', dailySignalCount: 19, unboundControls: ['ACT11'] }],
     },
   })
 
   assert.equal(result.inputProfile.dailyProfileReady, false)
-  assert.equal(result.readiness.ashlrLayer.reason, 'input_profile_requires_activation')
-  assert.match(result.nextAction, /Set as current profile for Ashlr Agent Board Corrected/)
+  assert.equal(result.readiness.ashlrLayer.status, 'blocked')
+  assert.equal(result.readiness.ashlrLayer.reason, 'active_profile_content_drift')
+  assert.equal(result.inputProfile.dailySignalCount, 19)
+  assert.deepEqual(result.inputProfile.unboundControls, ['ACT11'])
+  assert.match(result.modeGuidance.ashlrLayer, /19\/20 expected bindings match; ACT11 is unbound/)
+  assert.match(result.nextAction, /strictly verified 20-signal/)
+  assert.match(result.nextAction, /Setting the same incomplete profile current is not a repair/)
 })
 
 test('required Input check passes only an exact verified installation receipt', () => {
@@ -491,6 +496,8 @@ test('doctor identifies the known reversed dial without exposing profile labels'
     dailyLayerMatch: false,
     encoderDirection: 'reversed',
     dailyProfileReady: false,
+    dailySignalCount: null,
+    unboundControls: [],
   })
 })
 
@@ -511,8 +518,32 @@ test('doctor projects recent unresolved Input evidence without raw logs or a cur
     codexProtocolTraffic: { status: 'log_unavailable', observedAt: null, fresh: false },
   })
   assert.equal(result.readiness.ashlrLayer.reason, 'recent_unresolved_profile_layer_observed')
-  assert.match(result.modeGuidance.ashlrLayer, /may predate the current cache/)
+  assert.match(result.modeGuidance.ashlrLayer, /runtime layer index is offset from the cached layer ID/)
   assert.doesNotMatch(JSON.stringify(result), /private log text/)
+})
+
+test('doctor keeps vendor runtime layer indexes advisory while deterministic content drift blocks', () => {
+  const result = evaluateDoctor({
+    ...requiredProbes,
+    ...missingOptionalProbes,
+    boardRoute: 'ashlr_layer',
+    inputProfile: {
+      ...requiredProbes.inputProfile,
+      configuredLayers: [{ name: 'Ashlr Daily', mapping: 'unknown', encoderDirection: 'correct', dailySignalCount: 19, unboundControls: ['ACT11'] }],
+    },
+    inputRuntime: {
+      status: 'unresolved_profile_layer', profileIndex: 2, layerIndex: 1,
+      observedAt: '2026-09-01T19:33:00.000Z', fresh: true,
+    },
+  })
+
+  assert.equal(result.inputProfile.dailyProfileReady, false)
+  assert.equal(result.readiness.ashlrLayer.status, 'blocked')
+  assert.equal(result.readiness.ashlrLayer.reason, 'active_profile_content_drift')
+  assert.match(result.modeGuidance.ashlrLayer, /19\/20 expected bindings match/)
+  assert.match(result.nextAction, /strictly verified 20-signal/)
+  assert.match(result.nextAction, /same incomplete profile current is not a repair/)
+  assert.match(result.nextAction, /Agent Board changed nothing/)
 })
 
 test('deterministic cache repair outranks advisory log evidence', () => {
@@ -553,7 +584,9 @@ test('doctor projects recurring Codex-protocol traffic as manual co-presence evi
   assert.equal(result.readiness.ashlrLayer.reason, 'recurring_codex_protocol_traffic')
   assert.match(result.modeGuidance.ashlrLayer, /co-presence evidence, not ownership/)
   assert.match(result.nextAction, /human must establish an Input-only window/)
-  assert.doesNotMatch(JSON.stringify(result), /456|private log text/)
+  assert.equal(Object.hasOwn(result.inputRuntime.codexProtocolTraffic, 'rpcId'), false)
+  assert.equal(Object.hasOwn(result.inputRuntime.codexProtocolTraffic, 'raw'), false)
+  assert.doesNotMatch(JSON.stringify(result), /private log text/)
 })
 
 test('malformed recurring traffic cannot become a fresh advisory', () => {

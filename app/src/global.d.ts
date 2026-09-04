@@ -1,4 +1,4 @@
-import type { BoardRoute, ExecutionResult, MissionControlSnapshot, NativeAcceptanceActionResult, NativeAcceptanceAttestations, NativeAcceptanceSnapshot, PhysicalSignalEnvelope, ProfileId, ProfileRepairResult, SystemStatus } from './board'
+import type { BoardRoute, ExecutionResult, FlightSnapshot, MissionControlSnapshot, NativeAcceptanceActionResult, NativeAcceptanceAttestations, NativeAcceptanceSnapshot, PhysicalSignalEnvelope, ProfileId, ProfileRepairResult, SystemStatus } from './board'
 import type { NativeControlCheckReceipt, NativeControlCheckReport } from './components/NativeControlCheck'
 
 declare global {
@@ -26,6 +26,7 @@ declare global {
   interface Window {
     agentBoard?: {
       getStatus(): Promise<SystemStatus>
+      getFlightSnapshot?(): Promise<FlightSnapshot>
       getMissionControl(): Promise<MissionControlSnapshot>
       getRecoveryGuide?(): Promise<AgentBoardRecoveryGuide>
       getNativeAcceptance?(): Promise<NativeAcceptanceSnapshot>
