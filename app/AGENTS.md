@@ -43,5 +43,6 @@ npm audit --audit-level=high
 ```
 
 Run `npm run package:mac` only when packaging behavior changed. It creates an
-unsigned local directory build; it does not install, sign, notarize, publish, or
-prove physical acceptance.
+ad-hoc-sealed local directory build with signing identity auto-discovery
+disabled; it does not install, Developer ID sign, notarize, publish, or prove
+physical acceptance.

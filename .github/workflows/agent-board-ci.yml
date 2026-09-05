@@ -49,7 +49,7 @@ jobs:
           cache-dependency-path: app/package-lock.json
       - run: npm ci
       - run: npm run package:mac
-      - name: Verify hardened unsigned package
+      - name: Verify hardened non-distribution package
         shell: bash
         run: |
           set -euo pipefail
@@ -67,6 +67,7 @@ jobs:
           for key in NSAudioCaptureUsageDescription NSBluetoothAlwaysUsageDescription NSBluetoothPeripheralUsageDescription NSCameraUsageDescription NSMicrophoneUsageDescription; do
             ! /usr/libexec/PlistBuddy -c "Print :$key" "$plist" >/dev/null 2>&1
           done
+          codesign --verify --deep --strict --verbose=2 "$bundle"
           signature_info="$(codesign -dvvv "$bundle" 2>&1 || true)"
           if grep -q '^Authority=Developer ID Application:' <<<"$signature_info"; then
             echo "PR package unexpectedly contains a Developer ID Application authority." >&2
@@ -77,11 +78,21 @@ jobs:
             echo "PR package unexpectedly contains a signing team identifier." >&2
             exit 1
           fi
-          if ! { grep -q '^Signature=adhoc$' <<<"$signature_info" && grep -q '^TeamIdentifier=not set$' <<<"$signature_info"; } \
-            && ! grep -q 'code object is not signed at all' <<<"$signature_info"; then
-            echo "PR package signature state was empty or unrecognized; refusing to classify it as expected-unsigned." >&2
+          if ! { grep -q '^Signature=adhoc$' <<<"$signature_info" && grep -q '^TeamIdentifier=not set$' <<<"$signature_info"; }; then
+            echo "PR package must have a complete ad-hoc bundle signature with no team identity." >&2
             exit 1
           fi
+          macho_count=0
+          while IFS= read -r -d '' code; do
+            if file -b "$code" | grep -q '^Mach-O'; then
+              macho_count=$((macho_count + 1))
+              nested_info="$(codesign -dvvv "$code" 2>&1 || true)"
+              grep -q '^Signature=adhoc$' <<<"$nested_info"
+              grep -q '^TeamIdentifier=not set$' <<<"$nested_info"
+              ! grep -q '^Authority=' <<<"$nested_info"
+            fi
+          done < <(find "$bundle" -type f -print0)
+          test "$macho_count" -gt 0
           if spctl --assess --type execute "$bundle" >/dev/null 2>&1; then
             echo "Expected Gatekeeper to reject the non-distribution PR package." >&2
             exit 1

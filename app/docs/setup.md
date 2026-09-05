@@ -468,7 +468,7 @@ For development:
 npm run dev
 ```
 
-For a local unsigned package:
+For a local, non-distribution, ad-hoc-sealed preview:
 
 ```bash
 npm run package:mac

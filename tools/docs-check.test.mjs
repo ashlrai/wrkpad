@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 
-import { githubSlug, localLinks, markdownAnchors, validateMarkdown, validateUnsignedDistributionPolicy } from './docs-check.mjs'
+import { githubSlug, localLinks, markdownAnchors, validateMarkdown, validatePackageClaims, validatePublicSkillClaims, validateUnsignedDistributionPolicy } from './docs-check.mjs'
 
 test('GitHub-style heading anchors are stable and deduplicated', () => {
   assert.equal(githubSlug('Run the read-only preflight'), 'run-the-read-only-preflight')
@@ -47,6 +47,41 @@ test('expected-unsigned workflows cannot upload or publish artifacts', (t) => {
   assert.deepEqual(validateUnsignedDistributionPolicy(root), [
     'unsafe.yml: expected-unsigned workflow must not publish or upload artifacts',
   ])
+})
+
+test('public pages describe the checked-in delivery skill without claiming provider acceptance', () => {
+  const root = join(import.meta.dirname, '..')
+  assert.deepEqual(validatePublicSkillClaims(root), [])
+})
+
+test('public skill validation rejects missing modes, stale claims, and missing runtime boundaries', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'wrkpad-skill-claims-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  mkdirSync(join(root, '.agents', 'skills', 'ashlr-delivery'), { recursive: true })
+  mkdirSync(join(root, 'site'))
+  writeFileSync(join(root, '.agents', 'skills', 'ashlr-delivery', 'SKILL.md'), 'Invoke as `$ashlr-delivery <mode>`\n**Amplify:** only\n')
+  writeFileSync(join(root, 'site', 'index.html'), '$ashlr-delivery contract is proposed')
+  writeFileSync(join(root, 'site', 'llms.txt'), '$ashlr-delivery')
+  const failures = validatePublicSkillClaims(root)
+  assert.ok(failures.some((failure) => failure.includes('Verify mode missing')))
+  assert.ok(failures.some((failure) => failure.includes('described as merely proposed')))
+  assert.equal(failures.filter((failure) => failure.includes('provider discovery boundary missing')).length, 2)
+})
+
+test('local package documentation distinguishes an ad-hoc seal from Developer ID signing', () => {
+  const root = join(import.meta.dirname, '..')
+  assert.deepEqual(validatePackageClaims(root), [])
+})
+
+test('package validation rejects missing identity isolation and reports absent claim files', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'wrkpad-package-claims-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  mkdirSync(join(root, 'app', 'scripts'), { recursive: true })
+  writeFileSync(join(root, 'app', 'package.json'), JSON.stringify({ scripts: { 'package:mac': 'WRKPAD_ADHOC_PREVIEW=1 electron-builder --mac dir' } }))
+  writeFileSync(join(root, 'app', 'scripts', 'after-pack.cjs'), "const args = ['--force', '--deep', '--sign', '-', bundle]\n")
+  const failures = validatePackageClaims(root)
+  assert.ok(failures.some((failure) => failure.includes('disable signing identity discovery')))
+  assert.ok(failures.some((failure) => failure.includes('ORGANIZATIONS.md: required package contract file missing')))
 })
 
 test('operator docs preserve the exact twenty-gesture cross-provider contract', () => {

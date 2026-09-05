@@ -417,6 +417,11 @@ Authorizations expire after 30 seconds and fail if the window, action, or worksp
 
 ## The package will not open
 
-`npm run package:mac` creates an unsigned, unpacked app, not a notarized public release. Use `npm run dev` for development and follow [release and readiness](release-readiness.md) for distribution.
+`npm run package:mac` creates an ad-hoc sealed, unpacked preview—not a
+Developer ID-signed or notarized public release. CI requires default Gatekeeper
+assessment to reject it; a local machine's policy or prior explicit allowance
+can differ. Replacing an ad-hoc preview may also require the operator to grant
+Input Monitoring to the new content-bound build again. Use `npm run dev` for development and follow
+[release and readiness](release-readiness.md) for distribution.
 
 If the problem remains, prepare a minimal redacted report using [support](../SUPPORT.md).

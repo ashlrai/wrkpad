@@ -48,7 +48,7 @@
     "test": "vitest run && node --test electron/*.test.cjs scripts/*.test.mjs",
     "preview": "vite preview",
     "start": "electron .",
-    "package:mac": "npm run build && electron-builder --mac dir"
+    "package:mac": "npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false WRKPAD_ADHOC_PREVIEW=1 electron-builder --mac dir --config.mac.identity=null"
   },
   "build": {
     "appId": "ai.ashlr.agent-board",

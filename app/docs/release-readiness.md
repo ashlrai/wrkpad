@@ -59,16 +59,21 @@ These gates do not prove one another, a current Input profile, Input Monitoring,
 device synchronization, native Codex RPC success, provider receipt, or physical
 acceptance.
 
-## Build an unsigned artifact
+## Build a non-distribution ad-hoc-sealed preview
 
 ```bash
 npm run package:mac
 find release -maxdepth 3 -type d -name '*.app' -print
 ```
 
-Record an `app.asar` checksum and the exact source SHA. The command creates a directory target only; it does not create a DMG, sign, notarize, staple, upload, or update users.
+Record an `app.asar` checksum and the exact source SHA. The command creates a
+directory target and applies a complete ad-hoc bundle seal so strict macOS code
+verification can detect corruption. It does not create a DMG, apply a Developer
+ID signature, notarize, staple, upload, or update users. CI requires the preview
+to be rejected by Gatekeeper; a local machine's policy or prior explicit
+allowance can differ.
 
-The manual unsigned-package audit builds on an ephemeral GitHub runner and
+The manual non-distribution package audit builds on an ephemeral GitHub runner and
 checks the bundle identifier, version, architecture, source SHA, `app.asar`
 checksum, and expected `developer_id_signed=false`/`notarized=false` state. It does not
 upload an application archive or publish an installable binary. Its temporary
@@ -88,7 +93,9 @@ After launch, require **One receiver · shortcut ownership available** and verif
 the exact receiver manually in **System Settings → Privacy & Security → Input
 Monitoring**. A matching `app.asar` hash identifies bytes only; it does not prove
 Developer ID signing, notarization, permission, shortcut receipt, or physical
-acceptance. An unsigned preview is still not distribution ready.
+acceptance. Because an ad-hoc designated requirement is content-bound, replacing
+the preview can require the operator to grant Input Monitoring to the new build
+again. An ad-hoc-sealed preview is still not distribution ready.
 
 ## Public distribution gate
 

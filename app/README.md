@@ -143,7 +143,7 @@ npm test             # Vitest plus Electron main-process tests
 npm run lint         # oxlint
 npm run build        # TypeScript and production renderer
 npm run capture:public-demo # privacy-safe screenshot from the real renderer
-npm run package:mac  # unsigned, unpacked macOS app
+npm run package:mac  # ad-hoc sealed, unpacked macOS preview
 ```
 
 The public-demo capture uses a fixed-data, action-disabled synthetic bridge
@@ -153,7 +153,12 @@ CI executes the real fixture and validates its required states, privacy labels,
 dimensions, and truncation boundary. Chromium raster output can vary even on
 one runner, so screenshot refreshes remain under human visual review.
 
-`npm run package:mac` writes an architecture-specific app under `release/`. It does not sign, notarize, publish, install, or prove physical acceptance.
+`npm run package:mac` writes an architecture-specific app under `release/` and
+applies a complete local ad-hoc bundle signature so strict macOS verification
+can detect packaging corruption. An ad-hoc signature is not a Developer ID
+signature: CI requires default Gatekeeper assessment to reject the preview,
+while a local machine's policy or prior explicit allowance can differ. The
+command does not notarize, publish, install, or prove physical acceptance.
 
 ## Documentation
 

@@ -4,6 +4,13 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 
 ## [Unreleased]
 
+### Changed
+
+- Seal local macOS preview packages with a complete ad-hoc signature and make
+  package CI fail when strict bundle verification does not pass. This detects
+  packaging corruption without claiming Developer ID signing, notarization, or
+  distribution readiness.
+
 ### Fixed
 
 - Include the Agent Board ancestor in the bounded macOS receiver probe so a
@@ -83,7 +90,7 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
   declared route, read-only marker, and separate prerequisite, native, and
   Ashlr Layer readiness.
 - Public project documentation, contribution guidance, support boundaries, and release criteria.
-- Source-SHA and SHA-256 audit manifest for ephemeral unsigned package checks;
+- Source-SHA and SHA-256 audit manifest for ephemeral non-distribution package checks;
   public CI does not upload the application binary.
 - Fixed-data, action-disabled public screenshot harness with synthetic agent
   states and no local paths, device claims, or remote authority.

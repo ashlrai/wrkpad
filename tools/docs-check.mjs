@@ -131,11 +131,71 @@ export function validateUnsignedDistributionPolicy(root) {
   return [...new Set(failures)]
 }
 
+export function validatePublicSkillClaims(root) {
+  const failures = []
+  const sources = [
+    ['.agents/skills/ashlr-delivery/SKILL.md', 'skill'],
+    ['site/index.html', 'landing'],
+    ['site/llms.txt', 'llms'],
+  ]
+  const loaded = Object.fromEntries(sources.map(([relative, key]) => {
+    const filename = resolve(root, relative)
+    if (!existsSync(filename)) {
+      failures.push(`${relative}: required public skill contract file missing`)
+      return [key, '']
+    }
+    return [key, readFileSync(filename, 'utf8')]
+  }))
+  const { skill, landing, llms } = loaded
+
+  if (!skill.includes('Invoke as `$ashlr-delivery <mode>`')) failures.push('.agents/skills/ashlr-delivery/SKILL.md: canonical invocation missing')
+  for (const mode of ['Amplify', 'Verify', 'Polish', 'Advance']) {
+    if (!skill.includes(`**${mode}:**`)) failures.push(`.agents/skills/ashlr-delivery/SKILL.md: ${mode} mode missing`)
+  }
+  for (const [path, source] of [['site/index.html', landing], ['site/llms.txt', llms]]) {
+    if (!source.includes('$ashlr-delivery')) failures.push(`${path}: implemented delivery skill must be named`)
+    if (!/(?:automatic|provider) discovery[\s\S]*(?:unverified|runtime verification|runtime acceptance)/i.test(source)) failures.push(`${path}: provider discovery boundary missing`)
+    if (/(?:contract is being prepared|contract is proposed|Proposed contract:)/i.test(source)) failures.push(`${path}: implemented delivery skill is described as merely proposed`)
+  }
+  return failures
+}
+
+export function validatePackageClaims(root) {
+  const failures = []
+  const readRequired = (relative) => {
+    const filename = resolve(root, relative)
+    if (!existsSync(filename)) {
+      failures.push(`${relative}: required package contract file missing`)
+      return ''
+    }
+    return readFileSync(filename, 'utf8')
+  }
+  let packageJson = {}
+  const packageSource = readRequired('app/package.json')
+  try { packageJson = packageSource ? JSON.parse(packageSource) : {} } catch { failures.push('app/package.json: invalid JSON') }
+  const afterPack = readRequired('app/scripts/after-pack.cjs')
+  const packageCommand = packageJson.scripts?.['package:mac'] ?? ''
+  if (!packageCommand.includes('WRKPAD_ADHOC_PREVIEW=1') || !afterPack.includes("['--force', '--deep', '--sign', '-', bundle]")) {
+    failures.push('app/package.json: local preview must enable the fixed ad-hoc bundle seal')
+  }
+  if (!packageCommand.includes('CSC_IDENTITY_AUTO_DISCOVERY=false') || !packageCommand.includes('--config.mac.identity=null')) {
+    failures.push('app/package.json: local preview must disable signing identity discovery and set identity null')
+  }
+  const documents = ['README.md', 'app/README.md', 'app/docs/release-readiness.md', 'ORGANIZATIONS.md', 'site/index.html', 'site/capabilities.json']
+  for (const relative of documents) {
+    const source = readRequired(relative)
+    if (!/ad-hoc/i.test(source) || !/Developer ID/i.test(source)) failures.push(`${relative}: ad-hoc seal and Developer ID boundary must both be explicit`)
+  }
+  return failures
+}
+
 function main() {
   const failures = [
     ...validateMarkdown(REPO_ROOT, markdownFiles(REPO_ROOT)),
     ...validateCanonicalCommands(REPO_ROOT),
     ...validateUnsignedDistributionPolicy(REPO_ROOT),
+    ...validatePublicSkillClaims(REPO_ROOT),
+    ...validatePackageClaims(REPO_ROOT),
   ]
   if (failures.length > 0) {
     for (const failure of failures) console.error(failure)

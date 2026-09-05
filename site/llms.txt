@@ -8,10 +8,11 @@
 - Controls: https://github.com/ashlrai/wrkpad/blob/main/app/docs/controls.md
 - Setup: https://github.com/ashlrai/wrkpad/blob/main/app/docs/setup.md
 - Local commissioner: https://github.com/ashlrai/wrkpad/blob/main/docs/commissioner-architecture.md
+- Delivery skill: https://github.com/ashlrai/wrkpad/blob/main/.agents/skills/ashlr-delivery/SKILL.md
 - Release evidence: https://github.com/ashlrai/wrkpad/blob/main/docs/release.md
 - Capabilities: capabilities.json
 
-The core is MIT; the desktop app is Apache-2.0. This is a developer preview with no signed public binary. Checked-in landing-page source does not prove a GitHub Pages deployment. Device operation is observe-only. Provider approvals and release authority remain outside wrkpad. The landing demo is synthetic. An Amplify, Verify, Polish, and Advance delivery contract is proposed for Codex and Claude Code/cmux; the current landing does not claim that contract is released. It does not submit prompts or terminal input.
+The core is MIT; the desktop app is Apache-2.0. This is a developer preview with no signed public binary. Checked-in landing-page source does not prove a GitHub Pages deployment. Device operation is observe-only. Provider approvals and release authority remain outside wrkpad. The landing demo is synthetic. The repository-local `$ashlr-delivery` skill contract implements Amplify, Verify, Polish, and Advance for Codex and Claude Code; provider discovery and a provider-fired invocation remain separate runtime acceptance gates. It does not submit prompts or terminal input.
 
 The source-built Ashlr Layer commissioner is a deterministic, read-only guide. It projects exact device, Input trust, receiver, rollback, candidate, and physical-acceptance gates; identifies one safe next action; and stores a private, expiring, content-bound human-only plan when evidence permits. Its plan always records writesAuthorized=false. It does not create a Work Louder Input backup, import or activate a profile, synchronize the board, change macOS permission, reset, flash firmware, or perform any HID or device-filesystem write. Codex Native uses its separate passive handoff and operator attestation; commissioner readiness does not prove native Codex behavior or Claude/cmux pane focus.
 

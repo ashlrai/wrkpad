@@ -5,7 +5,7 @@
 [![Security](https://github.com/ashlrai/wrkpad/actions/workflows/security.yml/badge.svg)](https://github.com/ashlrai/wrkpad/actions/workflows/security.yml)
 [![Licenses: MIT core and Apache-2.0 app](https://img.shields.io/badge/licenses-MIT%20core%20%7C%20Apache--2.0%20app-2f6feb)](#license)
 
-[Project landing page source](site/index.html) · [Machine-readable capabilities](site/capabilities.json)
+[Project landing page source](site/index.html) · [Machine-readable capabilities](site/capabilities.json) · [Organizational evaluation](ORGANIZATIONS.md)
 
 The checked-in landing page is source for local review; this branch does not
 claim that GitHub Pages or another hosted site has been deployed from it.
@@ -19,7 +19,7 @@ screen, so opaque black keycaps remain understandable without replacement caps
 or firmware lighting.
 
 > [!NOTE]
-> **Developer preview:** source, CI, and unsigned local packaging are available.
+> **Developer preview:** source, CI, and ad-hoc-sealed local preview packaging are available.
 > There is not yet a signed, notarized, immutable public macOS release. See the
 > [release evidence layers](docs/release.md) before making distribution claims.
 
@@ -172,7 +172,8 @@ follow [Setup and Flight Check](app/docs/setup.md).
 - No claim that a planned color is visible through opaque black keycaps; the
   screen is the authoritative legend.
 - No Developer ID-signed or notarized public macOS binary yet. CI builds and
-  validates an expected-unsigned package without uploading or publishing it.
+  validates a non-distribution ad-hoc-sealed package without uploading or
+  publishing it.
 
 See [device interoperability](protocol/device-interoperability.md), [ownership
 and recovery](docs/ownership-and-recovery.md), and [release readiness](docs/release.md).
@@ -225,8 +226,11 @@ npm run dev
 ```
 
 Follow the [desktop setup and Flight Check](app/docs/setup.md) before using the
-physical controls. `npm run package:mac` creates an unsigned, architecture-specific
-local directory build; it does not install, sign, notarize, or publish anything.
+physical controls. `npm run package:mac` creates an architecture-specific local
+directory build with a complete ad-hoc bundle seal. It remains unsigned for
+distribution; CI requires default Gatekeeper assessment to reject it, while a
+local machine's policy or prior explicit allowance can differ. The command does
+not install, Developer ID sign, notarize, or publish anything.
 
 The experimental Hybrid Native artifact is generated and checked offline with
 `npm run profile:generate-hybrid -- SOURCE.json OUTPUT.json` and

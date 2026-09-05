@@ -1,4 +1,4 @@
-name: Agent Board unsigned package audit
+name: Agent Board non-distribution package audit
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ defaults:
 
 jobs:
   package:
-    name: Verify unsigned macOS package
+    name: Verify ad-hoc-sealed macOS preview
     runs-on: macos-15
     timeout-minutes: 20
     steps:
@@ -25,7 +25,7 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run package:mac
-      - name: Verify bundle metadata and expected unsigned state
+      - name: Verify bundle metadata and non-distribution seal
         shell: bash
         run: |
           set -euo pipefail
@@ -40,6 +40,7 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")" = "$expected_version"
           architectures="$(lipo -archs "$executable")"
           [[ "$architectures" =~ ^(arm64|x86_64)(\ (arm64|x86_64))*$ ]]
+          codesign --verify --deep --strict --verbose=2 "$bundle"
           signature_info="$(codesign -dvvv "$bundle" 2>&1 || true)"
           if grep -q '^Authority=Developer ID Application:' <<<"$signature_info"; then
             echo "Audit package unexpectedly contains a Developer ID Application authority." >&2
@@ -50,11 +51,21 @@ jobs:
             echo "Audit package unexpectedly contains a signing team identifier." >&2
             exit 1
           fi
-          if ! { grep -q '^Signature=adhoc$' <<<"$signature_info" && grep -q '^TeamIdentifier=not set$' <<<"$signature_info"; } \
-            && ! grep -q 'code object is not signed at all' <<<"$signature_info"; then
-            echo "Audit package signature state was empty or unrecognized; refusing to classify it as expected-unsigned." >&2
+          if ! { grep -q '^Signature=adhoc$' <<<"$signature_info" && grep -q '^TeamIdentifier=not set$' <<<"$signature_info"; }; then
+            echo "Audit package must have a complete ad-hoc bundle signature with no team identity." >&2
             exit 1
           fi
+          macho_count=0
+          while IFS= read -r -d '' code; do
+            if file -b "$code" | grep -q '^Mach-O'; then
+              macho_count=$((macho_count + 1))
+              nested_info="$(codesign -dvvv "$code" 2>&1 || true)"
+              grep -q '^Signature=adhoc$' <<<"$nested_info"
+              grep -q '^TeamIdentifier=not set$' <<<"$nested_info"
+              ! grep -q '^Authority=' <<<"$nested_info"
+            fi
+          done < <(find "$bundle" -type f -print0)
+          test "$macho_count" -gt 0
           if spctl --assess --type execute "$bundle" >/dev/null 2>&1; then
             echo "Expected Gatekeeper to reject the non-distribution audit package." >&2
             exit 1
@@ -67,14 +78,17 @@ jobs:
             printf 'architectures=%s\n' "$architectures"
             printf 'app_asar_sha256=%s\n' "$checksum"
             printf 'source_sha=%s\n' "$GITHUB_SHA"
+            printf 'adhoc_sealed=true\n'
+            printf 'strict_verified=true\n'
+            printf 'nested_macho_count=%s\n' "$macho_count"
             printf 'developer_id_signed=false\n'
             printf 'notarized=false\n'
             printf 'published=false\n'
-          } | tee "$RUNNER_TEMP/ashlr-agent-board-unsigned-audit.manifest.txt"
+          } | tee "$RUNNER_TEMP/ashlr-agent-board-package-audit.manifest.txt"
       - name: Record non-distribution boundary
         run: |
           {
-            echo '### Unsigned package audit'
+            echo '### Non-distribution package audit'
             echo ''
             echo 'The package was built and inspected on this ephemeral runner.'
             echo 'No application archive or installable binary was uploaded or published.'
