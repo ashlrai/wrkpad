@@ -191,15 +191,20 @@ fn validate_digest(value: &str, label: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use std::env;
     use std::path::PathBuf;
 
     use super::{DeviceOwner, ExecutorRequest};
 
+    fn absolute(name: &str) -> PathBuf {
+        env::temp_dir().join(name)
+    }
+
     #[test]
     fn mutation_argv_is_fixed_and_shell_free() -> anyhow::Result<()> {
         let request = ExecutorRequest::DeviceApply {
-            input: PathBuf::from("/private/candidate.json"),
-            backup: PathBuf::from("/private/backup.json"),
+            input: absolute("candidate.json"),
+            backup: absolute("backup.json"),
             expected_revision: "a".repeat(64),
             idempotency_key: "b".repeat(64),
             owner: DeviceOwner::Auto,
@@ -224,17 +229,17 @@ mod tests {
             ExecutorRequest::DoctorStrict,
             ExecutorRequest::ProviderStatus,
             ExecutorRequest::DeviceSnapshot {
-                output: PathBuf::from("/private/snapshot.json"),
+                output: absolute("snapshot.json"),
                 owner: DeviceOwner::Input,
             },
             ExecutorRequest::DeviceValidate {
-                input: PathBuf::from("/private/snapshot.json"),
+                input: absolute("snapshot.json"),
                 expected_revision: "c".repeat(64),
                 owner: DeviceOwner::Input,
             },
             ExecutorRequest::ConfigDiff {
-                baseline: PathBuf::from("/private/base.json"),
-                candidate: PathBuf::from("/private/candidate.json"),
+                baseline: absolute("base.json"),
+                candidate: absolute("candidate.json"),
             },
         ];
         for request in requests {
@@ -252,15 +257,15 @@ mod tests {
     fn rejects_relative_paths_and_unbound_identifiers() {
         let request = ExecutorRequest::DeviceApply {
             input: PathBuf::from("candidate.json"),
-            backup: PathBuf::from("/private/backup.json"),
+            backup: absolute("backup.json"),
             expected_revision: "a".repeat(64),
             idempotency_key: "b".repeat(64),
             owner: DeviceOwner::Auto,
         };
         assert!(request.argv().is_err());
         let bad_key = ExecutorRequest::DeviceRestore {
-            input: PathBuf::from("/private/base.json"),
-            backup: PathBuf::from("/private/backup.json"),
+            input: absolute("base.json"),
+            backup: absolute("backup.json"),
             expected_revision: "a".repeat(64),
             idempotency_key: "free-form".to_owned(),
             owner: DeviceOwner::Auto,
