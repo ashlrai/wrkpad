@@ -13,6 +13,7 @@ pub mod occupancy;
 pub mod protocol;
 pub mod server;
 pub mod service;
+pub mod shadow;
 pub mod storage;
 pub mod tui;
 

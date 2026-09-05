@@ -284,7 +284,7 @@ test('distinguishes a missing cache without exposing its path', () => {
   const home = mkdtempSync(path.join(tmpdir(), 'input-profile-diagnostics-'))
   try {
     assert.deepEqual(inspectInputProfile(home), {
-      cacheStatus: 'missing', activeProfile: null, activeLayer: null, encoderDirection: 'unavailable', configuredLayers: [],
+      cacheStatus: 'missing', inputCacheSha256: null, activeProfile: null, activeLayer: null, encoderDirection: 'unavailable', configuredLayers: [],
     })
   } finally {
     rmSync(home, { recursive: true, force: true })

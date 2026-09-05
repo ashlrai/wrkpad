@@ -1,4 +1,5 @@
 const { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync } = require('node:fs')
+const { createHash } = require('node:crypto')
 const path = require('node:path')
 
 const MAX_KEYMAP_BYTES = 512 * 1024
@@ -12,6 +13,7 @@ const EXPECTED_ENCODER_KEYS = Object.freeze({
 function unavailable(cacheStatus) {
   return {
     cacheStatus,
+    inputCacheSha256: null,
     activeProfile: null,
     activeLayer: null,
     encoderDirection: 'unavailable',
@@ -227,8 +229,12 @@ function inspectInputProfile(home, deviceStorageId = DEFAULT_DEVICE_STORAGE_ID) 
     const stats = fstatSync(descriptor)
     if (!stats.isFile()) return unavailable('unsafe')
     if (stats.size < 2 || stats.size > MAX_KEYMAP_BYTES) return unavailable('invalid')
-    const text = readFileSync(descriptor, 'utf8')
-    return classifyInputKeymap(JSON.parse(text))
+    const bytes = readFileSync(descriptor)
+    const classified = classifyInputKeymap(JSON.parse(bytes.toString('utf8')))
+    return {
+      ...classified,
+      inputCacheSha256: createHash('sha256').update(bytes).digest('hex'),
+    }
   } catch (error) {
     return unavailable(error?.code === 'ENOENT' ? 'missing' : 'invalid')
   } finally {

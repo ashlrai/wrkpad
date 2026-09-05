@@ -139,6 +139,8 @@ export interface InputApplicationStatus {
 
 export interface InputProfileStatus {
   cacheStatus: 'available' | 'missing' | 'invalid' | 'unsafe'
+  /** Hash of the bounded local Input cache bytes; never a device-sync proof. */
+  inputCacheSha256?: string | null
   activeProfile: string | null
   activeLayer: string | null
   encoderDirection: 'correct' | 'reversed' | 'unrecognized' | 'unavailable'

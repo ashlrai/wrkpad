@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld('agentBoard', {
   getFlightSnapshot: () => ipcRenderer.invoke('board:getFlightSnapshot'),
   getMissionControl: () => ipcRenderer.invoke('board:getMissionControl'),
   getRecoveryGuide: () => ipcRenderer.invoke('board:getRecoveryGuide'),
+  getCommissioning: () => ipcRenderer.invoke('board:getCommissioning'),
+  prepareCommissioningPlan: () => ipcRenderer.invoke('board:prepareCommissioningPlan'),
   getNativeAcceptance: () => ipcRenderer.invoke('board:getNativeAcceptance'),
   prepareNativeAcceptance: () => ipcRenderer.invoke('board:prepareNativeAcceptance'),
   acceptNativeAcceptance: (attestations) => ipcRenderer.invoke('board:acceptNativeAcceptance', attestations),

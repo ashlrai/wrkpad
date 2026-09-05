@@ -12,6 +12,8 @@ import { agentProviderLabel, agentStateClassName, agentStateLabels, agentStateLe
 import AttentionDeck from './components/AttentionDeck'
 import FleetBrief from './components/FleetBrief'
 import NativeControlCheck, { type NativeControlCheckReceipt, type NativeControlCheckReport } from './components/NativeControlCheck'
+import CommissioningWizard from './components/CommissioningWizard'
+import type { CommissioningCoordinatorResponse } from './commissioning'
 import { expectedSignalsAfter, flightAcceptance, flightStepComplete, noSignalRecoveryNeeded, stepsForVariant, type FlightEvent, type FlightVariant } from './flight-check'
 import { nativeControlReportFresh } from './native-control-report'
 import './App.css'
@@ -1450,7 +1452,48 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
   const [nativeControlReceipt, setNativeControlReceipt] = useState<NativeControlCheckReceipt | null>(null)
   const [nativeControlBusy, setNativeControlBusy] = useState(false)
   const [nativeControlError, setNativeControlError] = useState<string | null>(null)
+  const [commissioning, setCommissioning] = useState<CommissioningCoordinatorResponse | null>(null)
+  const [commissioningBusy, setCommissioningBusy] = useState(false)
+  const [commissioningError, setCommissioningError] = useState<string | null>(null)
   const recoveryFocus = useRef<HTMLElement | null>(null)
+
+  const refreshCommissioning = useCallback(async () => {
+    if (!window.agentBoard?.getCommissioning || status.boardRoute !== 'ashlr_layer') return null
+    setCommissioningBusy(true)
+    setCommissioningError(null)
+    try {
+      const response = await window.agentBoard.getCommissioning()
+      setCommissioning(response)
+      if (!response.ok) setCommissioningError(response.message)
+      return response
+    } catch {
+      setCommissioningError('Commissioning evidence could not be collected safely. No configuration was changed.')
+      return null
+    } finally {
+      setCommissioningBusy(false)
+    }
+  }, [status.boardRoute])
+
+  const prepareCommissioning = useCallback(async () => {
+    if (!window.agentBoard?.prepareCommissioningPlan || status.boardRoute !== 'ashlr_layer' || commissioningBusy) return
+    setCommissioningBusy(true)
+    setCommissioningError(null)
+    try {
+      const response = await window.agentBoard.prepareCommissioningPlan()
+      setCommissioning(response)
+      if (!response.ok) setCommissioningError(response.message)
+    } catch {
+      setCommissioningError('The bounded plan could not be prepared safely. Input and the board were not changed.')
+    } finally {
+      setCommissioningBusy(false)
+    }
+  }, [commissioningBusy, status.boardRoute])
+
+  useEffect(() => {
+    if (status.boardRoute !== 'ashlr_layer') return
+    const timer = window.setTimeout(() => { void refreshCommissioning() }, 0)
+    return () => window.clearTimeout(timer)
+  }, [refreshCommissioning, status.boardRoute])
   const nativeCodexMicro = status.nativeCodexMicro ?? initialStatus.nativeCodexMicro
   const chatgptDesktop = status.chatgptDesktop ?? initialStatus.chatgptDesktop
   const nativeEvidenceKey = JSON.stringify([
@@ -1786,6 +1829,10 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
       setRepairBusy(false)
     }
   }
+  const openCommissioningHandoff = () => {
+    recoveryFocus.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    recoveryFocus.current?.focus()
+  }
   const revealRecoveryArtifact = async () => {
     const action = window.agentBoard?.revealRecoveryArtifact
     if (!action) return setRecoveryAction({ ok: false, message: 'This build cannot reveal the saved artifact. Use the full path shown above.' })
@@ -1823,6 +1870,20 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
   return <section className="setup-view">
     <div className="setup-intro"><span className="eyebrow">COMMISSIONING / TRUTHFUL READINESS</span><h2>Make every layer observable.</h2><p>USB identity observation, macOS authority, Input configuration, and native Codex integration are separate states. This checklist keeps them separate so “connected” never means more than we proved.</p></div>
     <BoardRouteRail route={status.boardRoute} saving={routeSaving} error={routeError} onChange={changeBoardRoute} />
+    {status.boardRoute === 'ashlr_layer' && commissioning?.snapshot && <CommissioningWizard
+      snapshot={commissioning.snapshot}
+      plan={commissioning.plan}
+      busy={commissioningBusy}
+      onRefresh={() => { void refreshCommissioning() }}
+      onPrepare={prepareCommissioning}
+      onManualHandoff={openCommissioningHandoff}
+      onFlightCheck={onFlightCheck}
+    />}
+    {status.boardRoute === 'ashlr_layer' && !commissioning?.snapshot && <section className="commissioner-loading" aria-busy={commissioningBusy}>
+      <div><span className="eyebrow">LOCAL COMMISSIONER</span><h3>{commissioningBusy ? 'Collecting bounded evidence…' : 'Commissioning evidence unavailable'}</h3><p>{commissioningError ?? 'No configuration was changed. Run the checks again to identify the first missing proof.'}</p></div>
+      <button type="button" disabled={commissioningBusy} onClick={() => void refreshCommissioning()}>{commissioningBusy ? <Activity className="spin" size={15} /> : <RotateCcw size={15} />} Run checks again</button>
+    </section>}
+    {status.boardRoute === 'ashlr_layer' && commissioningError && commissioning?.snapshot && <p className="commissioner-inline-error" role="alert">{commissioningError}</p>}
     <div className="setup-grid">
       <div className="setup-steps">
         {steps.map((step) => <article key={step.number} className={step.ready ? 'setup-step ready' : step.observed ? 'setup-step observed' : 'setup-step'}>

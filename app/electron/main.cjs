@@ -18,8 +18,11 @@ const { inspectInputApplicationRuntime } = require('./input-application-runtime.
 const { createCachedAsarHasher, inspectPackagedReceiverPeers, inspectReceiverRuntime, shouldRegisterShortcuts } = require('./receiver-runtime-diagnostics.cjs')
 const { createCmuxFocusAdapter } = require('./cmux-focus-adapter.cjs')
 const { hasFreshExactDualPlaneAshlrAttestation } = require('./dual-plane-attestation.cjs')
-const { writeGeneratedProfile } = require('./input-profile-generator.cjs')
+const { inspectGeneratedInputProfile, readSourceProfile, writeGeneratedProfile } = require('./input-profile-generator.cjs')
 const { buildRecoveryChecklist, observeRecoveryArtifact, readRecoveryReceipt, recoveryChecklistText, recoveryReceiptPath, removeRecoveryReceipt, writeRecoveryReceipt } = require('./recovery-receipt.cjs')
+const { readCommissioningJournal, writeCommissioningJournal } = require('./commissioning-journal.cjs')
+const { createCommissioningOperationCoordinator } = require('./commissioning-operations.cjs')
+const { projectCommissioningSnapshot } = require('./commissioning-evidence.cjs')
 const { acceptNativeAcceptance, evaluateNativeAcceptance, prepareNativeAcceptance, readNativeAcceptanceReceipt, removeNativeAcceptanceReceipt, stageNativeAcceptance, writeNativeAcceptanceReceipt } = require('./native-acceptance-receipt.cjs')
 const { createNativeAcceptanceOperationCoordinator } = require('./native-acceptance-operations.cjs')
 const { createNativeControlCheck, readNativeControlCheck, writeNativeControlCheck } = require('./native-control-check.cjs')
@@ -580,7 +583,7 @@ async function focusHighestPriorityAgentResult() {
   return focusAgentFromSnapshot(slot, mission)
 }
 
-ipcMain.handle('board:getStatus', trustedIpc(async () => {
+async function collectSystemStatus() {
   const settings = readSettings()
   const home = app.getPath('home')
   const codexExecutable = resolveTool('codex', { home })
@@ -624,7 +627,38 @@ ipcMain.handle('board:getStatus', trustedIpc(async () => {
     receiverRuntime: currentReceiverRuntime,
     inputApplication: currentReceiverRuntime.inputApplication,
   }
-}))
+}
+
+function candidateCommissioningEvidence() {
+  const receipt = readRecoveryReceipt(handoffPath())
+  const observed = observeRecoveryArtifact(receipt)
+  if (!receipt) return { status: 'missing', sha256: null }
+  if (!observed.available) return { status: 'invalid', sha256: null }
+  try {
+    const inspection = inspectGeneratedInputProfile(readSourceProfile(receipt.artifactPath), 'daily')
+    return inspection.status === 'match'
+      ? { status: 'verified', sha256: receipt.sha256 }
+      : { status: 'invalid', sha256: null }
+  } catch {
+    return { status: 'invalid', sha256: null }
+  }
+}
+
+async function collectCommissioningSnapshot() {
+  const status = await collectSystemStatus()
+  const candidate = candidateCommissioningEvidence()
+  return projectCommissioningSnapshot(status, candidate)
+}
+
+const commissioningOperations = createCommissioningOperationCoordinator({
+  collectSnapshot: collectCommissioningSnapshot,
+  readJournal: () => readCommissioningJournal(settingsPath()),
+  writeJournal: (journal, expectedRevision) => writeCommissioningJournal(settingsPath(), journal, expectedRevision),
+})
+
+ipcMain.handle('board:getStatus', trustedIpc(() => collectSystemStatus()))
+ipcMain.handle('board:getCommissioning', trustedIpc(() => commissioningOperations.get()))
+ipcMain.handle('board:prepareCommissioningPlan', trustedIpc(() => commissioningOperations.prepare()))
 ipcMain.handle('board:getFlightSnapshot', trustedIpc(() => publicFlightSnapshot()))
 ipcMain.handle('board:getMissionControl', trustedIpc(() => missionControl()))
 ipcMain.handle('board:getRecoveryGuide', trustedIpc(() => {
