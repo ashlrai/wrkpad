@@ -106,6 +106,24 @@ test('receipt saving aborts when stop wins during the preliminary gate probe', a
   assert.equal(wrote, false)
 })
 
+test('receipt saving rejects stale authoritative flight evidence before choosing a destination', async () => {
+  const { coordinator } = await activeCoordinator()
+  let chose = false
+  let wrote = false
+  const result = await saveBoundFlightReceipt({
+    coordinator,
+    verifyGates: async () => ({ ready: true }),
+    validateFlight: () => false,
+    chooseDestination: async () => { chose = true; return '/private/receipt.json' },
+    buildDocument: () => ({ status: 'passed' }),
+    writeDocument: () => { wrote = true },
+  })
+
+  assert.equal(result, null)
+  assert.equal(chose, false)
+  assert.equal(wrote, false)
+})
+
 test('receipt saving aborts when restart wins while the destination dialog is open', async () => {
   const { coordinator } = await activeCoordinator()
   const destination = deferred()

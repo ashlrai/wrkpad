@@ -113,3 +113,10 @@ For a future Input-controlled operation, first replace the mutated app from the
 verified official release, verify publisher, strict signature, and Gatekeeper
 before launch, perform only the approved foreground operation, quit Input, and
 reconcile both app integrity and device state afterward.
+
+## Subsequent evidence
+
+The [September 5 Ashlr Layer acceptance record](creator-micro-2-ashlr-layer-flight-check-2026-09-05.md)
+documents a later 20/20 physical shortcut run for one exact desk/profile/build.
+It does not rewrite this September 2 snapshot or clear native Codex/RGB,
+provider, Hybrid Native, distribution, or broader workflow gates.

@@ -2,7 +2,7 @@ const { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, screen, 
 const originalFilesystem = require('original-fs')
 const { spawn } = require('node:child_process')
 const { createHash, randomUUID } = require('node:crypto')
-const { existsSync, lstatSync, mkdirSync, renameSync, writeFileSync } = require('node:fs')
+const { existsSync, lstatSync, mkdirSync, renameSync, unlinkSync, writeFileSync } = require('node:fs')
 const path = require('node:path')
 const { ACTION_SPECS, executeSpec } = require('./action-registry.cjs')
 const { requireCompactAction, requireCompactWorkflowAction } = require('./compact-action-policy.cjs')
@@ -63,6 +63,21 @@ const inspectInputInstallationAsync = createInputInstallationInspector()
 const shortcutCallbackGuard = createShortcutCallbackGuard()
 const shortcutObservability = createShortcutObservability({ signalIds: Object.keys(HOTKEYS) })
 const cmuxFocusAdapter = createCmuxFocusAdapter({ foreground: () => openFixedApp('cmux') })
+const FLIGHT_COMPLETION_MAX_AGE_NS = 15n * 60n * 1_000_000_000n
+const FLIGHT_RUN_MAX_AGE_MS = 30 * 60 * 1_000
+
+function freshFlightForReceipt(flight) {
+  if (!flight || !Array.isArray(flight.rawEvents) || flight.rawEvents.length === 0) return false
+  const startedAt = Date.parse(flight.startedAt)
+  const lastEvent = flight.rawEvents.at(-1)
+  if (!Number.isFinite(startedAt) || Date.now() - startedAt < 0 || Date.now() - startedAt > FLIGHT_RUN_MAX_AGE_MS) return false
+  try {
+    const completionAge = process.hrtime.bigint() - BigInt(lastEvent.monotonicNs)
+    return completionAge >= 0n && completionAge <= FLIGHT_COMPLETION_MAX_AGE_NS
+  } catch {
+    return false
+  }
+}
 
 function resetFlightState() {
   flightAdmissionMutation += 1
@@ -964,13 +979,15 @@ ipcMain.handle('board:saveFlightReceipt', trustedIpc(async (_event, receipt) => 
   if (![...receipt.receivedSignals, ...receipt.missingSignals].every((signal) => allowedSignals.has(signal))) return null
   if (!receipt.events.every((item) => item && allowedSignals.has(item.signal) && typeof item.receivedAt === 'string')) return null
   const variant = receipt.profileKind === 'diagnostic' ? 'diagnostic' : 'daily'
-  const suggestedName = `ashlr-agent-board-flight-check-${new Date().toISOString().replace(/[:.]/g, '-')}.json`
+  const suggestedName = `ashlr-agent-board-flight-check-${new Date().toISOString().replace(/[:.]/g, '-')}-${randomUUID()}.json`
   return saveBoundFlightReceipt({
     coordinator: flightOperations,
     verifyGates: () => verifyBoundFlightGates(variant),
+    validateFlight: freshFlightForReceipt,
     chooseDestination: async () => {
-      const result = await dialog.showSaveDialog(mainWindow, { title: 'Save Flight Check receipt', defaultPath: path.join(app.getPath('documents'), suggestedName), filters: [{ name: 'JSON receipt', extensions: ['json'] }] })
-      return result.canceled || !result.filePath ? null : result.filePath
+      const receiptDirectory = path.join(app.getPath('userData'), 'flight-receipts')
+      mkdirSync(receiptDirectory, { recursive: true, mode: 0o700 })
+      return path.join(receiptDirectory, suggestedName)
     },
     buildDocument: ({ flight, admission }) => {
       const evaluation = evaluateFlightSignals(variant, flight.rawEvents, admission.evidence.boardRoute)
@@ -1004,8 +1021,13 @@ ipcMain.handle('board:saveFlightReceipt', trustedIpc(async (_event, receipt) => 
     },
     writeDocument: (destination, document) => {
       const temporaryPath = `${destination}.${randomUUID()}.tmp`
-      writeFileSync(temporaryPath, `${JSON.stringify(document, null, 2)}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
-      renameSync(temporaryPath, destination)
+      try {
+        writeFileSync(temporaryPath, `${JSON.stringify(document, null, 2)}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+        renameSync(temporaryPath, destination)
+      } catch (error) {
+        try { if (existsSync(temporaryPath)) unlinkSync(temporaryPath) } catch { /* best-effort private temp cleanup */ }
+        throw error
+      }
       if (document.status === 'passed') {
         try {
           const recovery = readRecoveryReceipt(handoffPath())
@@ -1017,7 +1039,7 @@ ipcMain.handle('board:saveFlightReceipt', trustedIpc(async (_event, receipt) => 
             writeRecoveryReceipt(handoffPath(), {
               ...recovery,
               acceptedCandidateSha256: boundCandidateSha256,
-              acceptedAt: document.exportedAt,
+              acceptedAt: document.rawEvents.at(-1)?.receivedAt ?? document.exportedAt,
             })
           }
         } catch {
@@ -1025,7 +1047,7 @@ ipcMain.handle('board:saveFlightReceipt', trustedIpc(async (_event, receipt) => 
           // update the private commissioner projection cannot rewrite it.
         }
       }
-      return destination
+      return { saved: true, filename: path.basename(destination) }
     },
   })
 }))

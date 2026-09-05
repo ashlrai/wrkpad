@@ -1273,7 +1273,7 @@ describe('operator interface', () => {
     fireEvent.click(screen.getByRole('button', { name: /End check/i }))
     await waitFor(() => expect(screen.getByText('READY WHEN YOU ARE')).toBeTruthy())
     expect(screen.getByText('Not started')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: /Export receipt/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Save sealed receipt/i })).toBeNull()
   })
 
   it('keeps daily and diagnostic profile acceptance separate', async () => {
@@ -1650,8 +1650,8 @@ describe('operator interface', () => {
     const setFlightCheck = vi.fn().mockResolvedValue({ acknowledged: true, active: true, startedAt })
     let resolveRestart: ((value: { acknowledged: boolean; active: boolean; startedAt: string | null }) => void) | undefined
     const restartFlightCheck = vi.fn().mockImplementation(() => new Promise<{ acknowledged: boolean; active: boolean; startedAt: string | null }>((resolve) => { resolveRestart = resolve }))
-    let resolveSave: ((value: string | null) => void) | undefined
-    const saveFlightReceipt = vi.fn().mockImplementation(() => new Promise<string | null>((resolve) => { resolveSave = resolve }))
+    let resolveSave: ((value: { saved: true; filename: string } | null) => void) | undefined
+    const saveFlightReceipt = vi.fn().mockImplementation(() => new Promise<{ saved: true; filename: string } | null>((resolve) => { resolveSave = resolve }))
     let controlHandler: ((signal: PhysicalSignalEnvelope) => void) | undefined
     window.agentBoard = {
       getStatus,
@@ -1689,10 +1689,14 @@ describe('operator interface', () => {
       }
     })
     expect(screen.getByText('ACCEPTANCE PASSED')).toBeTruthy()
-    expect(screen.getByRole('button', { name: /Export receipt/i })).toBeTruthy()
-    expect(screen.getByRole('button', { name: /Start operating/i })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: '20-control Ashlr route accepted' })).toBeTruthy()
+    expect(screen.getByText(/20-CONTROL ASHLR ROUTE ACCEPTED · NATIVE PATH UNPROVEN/i)).toBeTruthy()
+    expect(screen.queryByText(/USB identity observed — controls unproven/i)).toBeNull()
+    expect(screen.getByRole('button', { name: /Save sealed receipt/i })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Start operating/i })).toBeNull()
+    expect(screen.getByText(/Save the sealed receipt before operating/i)).toBeTruthy()
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Export receipt/i }))
+      fireEvent.click(screen.getByRole('button', { name: /Save sealed receipt/i }))
       await Promise.resolve()
     })
     expect(saveFlightReceipt).toHaveBeenCalledOnce()
@@ -1706,14 +1710,14 @@ describe('operator interface', () => {
     expect(screen.getByRole('heading', { name: 'This run was invalidated' })).toBeTruthy()
     expect(screen.getByText(/Recover every gate, then end and restart/i)).toBeTruthy()
     expect(screen.queryByText('ACCEPTANCE PASSED')).toBeNull()
-    expect(screen.queryByRole('button', { name: /Export receipt/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Save sealed receipt/i })).toBeNull()
     expect(screen.queryByRole('button', { name: /Start operating/i })).toBeNull()
     expect((screen.getByRole('button', { name: /End invalidated check/i }) as HTMLButtonElement).disabled).toBe(false)
     await act(async () => {
-      resolveSave?.('/tmp/stale-flight-receipt.json')
+      resolveSave?.({ saved: true, filename: 'stale-flight-receipt.json' })
       await Promise.resolve()
     })
-    expect(screen.queryByText('Receipt saved')).toBeNull()
+    expect(screen.queryByText('Receipt saved privately')).toBeNull()
 
     inputMutated = false
     await act(async () => {
@@ -1729,7 +1733,7 @@ describe('operator interface', () => {
     })
     expect(restartFlightCheck).toHaveBeenCalledWith('daily')
     expect(screen.queryByText('ACCEPTANCE PASSED')).toBeNull()
-    expect(screen.queryByRole('button', { name: /Export receipt/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Save sealed receipt/i })).toBeNull()
     expect(screen.queryByRole('button', { name: /Start operating/i })).toBeNull()
     expect(screen.getByText('THIS RUN CANNOT PASS')).toBeTruthy()
     await act(async () => {
@@ -1738,6 +1742,65 @@ describe('operator interface', () => {
     })
     expect(screen.queryByText('THIS RUN CANNOT PASS')).toBeNull()
     expect(screen.getByRole('heading', { name: 'Dial left' })).toBeTruthy()
+  })
+
+  it('requires a private sealed receipt before operating and never renders its parent path', async () => {
+    const startedAt = '2026-09-05T04:04:00.000Z'
+    const trustedStatus = {
+      boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified' as const,
+      ...trustedHardwareDiagnostics,
+      inputProfile: correctedInputProfile,
+      codex: true, claude: true, ashlr: false, boardRoute: 'ashlr_layer' as const, workspace: '/tmp', shortcutCount: 20,
+      shortcutRegistrations: [], workspaceSnapshot: null,
+    }
+    const setFlightCheck = vi.fn().mockImplementation((active: boolean) => Promise.resolve(active
+      ? { acknowledged: true, active: true, startedAt }
+      : { acknowledged: true, active: false, startedAt: null }))
+    const saveFlightReceipt = vi.fn().mockResolvedValue({
+      saved: true,
+      filename: 'ashlr-agent-board-flight-check-accepted.json',
+    })
+    let controlHandler: ((signal: PhysicalSignalEnvelope) => void) | undefined
+    window.agentBoard = {
+      getStatus: vi.fn().mockResolvedValue(trustedStatus),
+      getMissionControl: vi.fn().mockResolvedValue(initialUnavailableMission()),
+      focusAgentSlot: vi.fn(), setProfile: vi.fn(), setFlightCheck, restartFlightCheck: vi.fn(),
+      requestAction: vi.fn(), confirmAction: vi.fn(), beginHold: vi.fn(), cancelHold: vi.fn(),
+      chooseWorkspace: vi.fn(), saveFlightReceipt,
+      onControl: vi.fn((callback) => { controlHandler = callback; return () => {} }),
+    } as unknown as NonNullable<typeof window.agentBoard>
+
+    render(<App />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Flight Check' }))
+    const daily = await screen.findByRole('button', { name: 'Daily profile' })
+    await waitFor(() => expect((daily as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(daily)
+    await screen.findByRole('heading', { name: 'Dial left' })
+
+    let sequence = 0
+    act(() => {
+      for (const step of dailyFlightSteps) {
+        for (let repeat = 0; repeat < (step.requiredCount ?? 1); repeat += 1) {
+          for (const signalId of step.signals) {
+            sequence += 1
+            controlHandler?.({
+              schemaVersion: 1, sequence, signalId, source: 'global-shortcut', accelerator: `test-${signalId}`,
+              receivedAt: new Date(Date.parse(startedAt) + sequence).toISOString(), monotonicNs: String(sequence),
+            })
+          }
+        }
+      }
+    })
+
+    expect(screen.queryByRole('button', { name: /Start operating/i })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Save sealed receipt/i }))
+    expect(await screen.findByText('Receipt saved privately')).toBeTruthy()
+    expect(screen.getByText('ashlr-agent-board-flight-check-accepted.json')).toBeTruthy()
+    expect(document.body.textContent).not.toContain('/Users/')
+    const startOperating = screen.getByRole('button', { name: /Start operating/i })
+    fireEvent.click(startOperating)
+    await waitFor(() => expect(setFlightCheck).toHaveBeenLastCalledWith(false, 'daily'))
+    expect(screen.getByRole('tab', { name: 'Operate' }).getAttribute('aria-selected')).toBe('true')
   })
 
   it('fails closed when the fresh post-arm status receipt is rejected', async () => {
@@ -1771,7 +1834,7 @@ describe('operator interface', () => {
     expect(screen.getByText(/HARDWARE ACCEPTANCE \/ ASHLR INTERLOCK UNVERIFIED/i)).toBeTruthy()
     expect(screen.getByRole('button', { name: /Restore safe state/i })).toBeTruthy()
     expect(screen.queryByText('ACCEPTANCE PASSED')).toBeNull()
-    expect(screen.queryByRole('button', { name: /Export receipt/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Save sealed receipt/i })).toBeNull()
     expect(screen.queryByRole('button', { name: /Start operating/i })).toBeNull()
   })
 

@@ -520,14 +520,19 @@ of Hybrid Native or `14/14` as proof of its native Agent keys.
    communication-mode touch sensor—not a Flight Check gesture.
 4. Confirm USB is present, Setup says **One receiver · shortcut ownership
    available**, 20 desktop shortcuts are registered, and misroutes remain zero.
-5. Export a receipt only after all 20 daily signals pass.
-6. Stop Flight Check or return to Operate to release the interlock.
+5. Save the sealed receipt only after all 20 daily signals pass. The app writes
+   it privately under its local application-support directory and displays only
+   the filename; no save panel or local username is exposed.
+6. **Start operating** appears only after the save succeeds. Use it to release
+   the interlock and return to Operate.
 
 During Flight Check, the Electron main process disables mapped actions and Agent-slot focus. Mouse clicks on the board twin do not count. Keyboard input can generate the same shortcuts, so keep hands off the keyboard during acceptance.
 
 A passing receipt proves only that expected global shortcuts were observed in order while USB was detected and endpoints were registered. It is not cryptographic device identity, firmware qualification, native Codex RGB validation, provider activation, or permission to perform consequential actions.
 
-Receipts are written with mode `0600` and include a SHA-256 over the canonical payload. Store them privately and do not commit them.
+Receipts are written with mode `0600` and include a SHA-256 over the canonical
+payload. A completed run older than the bounded receipt window is rejected and
+must be repeated. Keep receipts private and do not commit them.
 
 ## Diagnostic bottom-row test
 

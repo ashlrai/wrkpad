@@ -54,6 +54,10 @@ For hardware acceptance, also record these independent local gates:
   mutation. Native consumption, visible lighting, and post-update Flight Check
   remain pending; see the canonical
   [post-flash evidence](../../docs/creator-micro-2-post-flash-2026-09-02.md).
+  A later [September 5 Ashlr Layer run](../../docs/creator-micro-2-ashlr-layer-flight-check-2026-09-05.md)
+  cleared the 20-control shortcut path only for its exact desk/profile/build;
+  native Codex/RGB, provider, distribution, and persisted-receipt gates remain
+  separate.
 
 These gates do not prove one another, a current Input profile, Input Monitoring,
 device synchronization, native Codex RPC success, provider receipt, or physical

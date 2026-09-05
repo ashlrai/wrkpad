@@ -56,7 +56,7 @@ declare global {
       copyRecoveryChecklist?(): Promise<AgentBoardRecoveryActionResult>
       dismissRecoveryHandoff?(): Promise<AgentBoardRecoveryActionResult>
       openInputMonitoringSettings?(): Promise<AgentBoardRecoveryActionResult>
-      saveFlightReceipt(receipt: Record<string, unknown>): Promise<string | null>
+      saveFlightReceipt(receipt: Record<string, unknown>): Promise<{ saved: true; filename: string } | null>
       onControl(callback: (signal: PhysicalSignalEnvelope) => void): () => void
     }
   }

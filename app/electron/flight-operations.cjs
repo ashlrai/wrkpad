@@ -87,6 +87,7 @@ function createFlightOperationCoordinator(session) {
 async function saveBoundFlightReceipt({
   coordinator,
   verifyGates,
+  validateFlight,
   chooseDestination,
   buildDocument,
   writeDocument,
@@ -106,6 +107,8 @@ async function saveBoundFlightReceipt({
     return null
   }
   if (!coordinator.isCaptureCurrent(capture)) return null
+  const preliminaryFlight = coordinator.snapshotForCapture(capture)
+  if (!preliminaryFlight || (typeof validateFlight === 'function' && !validateFlight(preliminaryFlight))) return null
 
   let destination
   try {
@@ -126,6 +129,7 @@ async function saveBoundFlightReceipt({
 
   const flight = coordinator.snapshotForCapture(capture)
   if (!flight) return null
+  if (typeof validateFlight === 'function' && !validateFlight(flight)) return null
   const document = buildDocument({ flight, admission: finalAdmission })
 
   // No asynchronous work may occur between this final binding check and the

@@ -391,6 +391,15 @@ the canonical
 [post-flash evidence record](docs/creator-micro-2-post-flash-2026-09-02.md) for
 timestamps, descriptor hashes, topology, and evidence boundaries.
 
+On September 5, the same desk and the exact Agent Board v0.2.0 build identified
+in the dated record completed the Ashlr Layer Flight Check with 20/20 physical
+controls, 24 expected callbacks, and zero misroutes. The macOS save sheet did
+not persist that run, so this is user-attested live acceptance rather than a
+machine-sealed receipt. Native Codex/RGB, exact Claude or cmux focus, Hybrid
+Native, provider, distribution, and broader workflow acceptance remain
+separate. See the
+[Ashlr Layer acceptance record](docs/creator-micro-2-ashlr-layer-flight-check-2026-09-05.md).
+
 Automated source checks and local package creation do not prove installed hooks,
 provider receipt, physical gesture completion, RGB support, signed distribution,
 or user acceptance.

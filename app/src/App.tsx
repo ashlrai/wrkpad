@@ -777,7 +777,7 @@ function App() {
       && request === flightRequest.current
       && flightRun.current.request === request
       && flightRun.current.underTest
-      && !flightRun.current.invalidated) setFlightExport(response)
+      && !flightRun.current.invalidated) setFlightExport(response.filename)
   }
 
   useEffect(() => cancelHold, [activeControl, cancelHold, profileId, view])
@@ -808,6 +808,25 @@ function App() {
   const nativeRoute = status.boardRoute === 'codex_native'
   const hybridRoute = status.boardRoute === 'hybrid_native'
   const nativeAgentKeys = nativeRoute || hybridRoute
+  const liveFlightAcceptance = flightAcceptance(
+    flightVariant,
+    flightEvents,
+    status.boardConnected,
+    status.shortcutCount,
+    shortcutCountForRoute(status.boardRoute),
+    status.boardRoute,
+  )
+  const liveFlightAccepted = flightPhase === 'active'
+    && liveFlightAcceptance.passed
+    && flightLiveGatesReady(status, flightVariant, dualPlaneAshlrLayerAttested)
+    && flightInvalidatedRun !== flightRequest.current
+  const footerHardwareState = liveFlightAccepted
+    ? hybridRoute
+      ? '14-GESTURE ASHLR ROUTE ACCEPTED · 6 NATIVE KEYS UNPROVEN'
+      : '20-CONTROL ASHLR ROUTE ACCEPTED · NATIVE PATH UNPROVEN'
+    : status.boardConnected
+      ? 'USB IDENTITY OBSERVED · CONTROLS UNPROVEN'
+      : 'USB IDENTITY NOT OBSERVED'
   const nativeEvidenceFresh = nativeCodexMicro.fresh === true
   const nativeControlContextKey = JSON.stringify([
     status.boardRoute,
@@ -1036,7 +1055,7 @@ function App() {
       /> : <SetupView status={status} recoveryGuide={recoveryGuide} onRefreshRecoveryGuide={refreshRecoveryGuide} onRefreshStatus={refreshStatus} onNativeControlReceipt={setNativeControlReceipt} routeSaving={routeSaving} routeError={routeError} onRouteChange={(route) => void declareBoardRoute(route)} onOperate={() => changeView('operate')} onFlightCheck={() => void changeView('flight')} />}
 
       <footer className="footer-bar">
-        <div><span className={status.boardConnected ? 'footer-led observed' : 'footer-led'} /> {status.boardConnected ? 'USB IDENTITY OBSERVED · CONTROLS UNPROVEN' : 'USB IDENTITY NOT OBSERVED'} · {hardware.mechanicalSwitches} SWITCHES · 1 TOUCH · 1 DIAL · 1 PLANAR STICK</div>
+        <div><span className={liveFlightAccepted || status.boardConnected ? 'footer-led observed' : 'footer-led'} /> {footerHardwareState} · {hardware.mechanicalSwitches} SWITCHES · 1 TOUCH · 1 DIAL · 1 PLANAR STICK</div>
         <div><ShieldCheck size={14} /> Consequential actions require confirmation or hold.</div>
         <div className="build-identity" aria-label="Agent Board build identity">
           <span>AGENT BOARD {receiverIdentity ? `v${receiverIdentity.appVersion}` : 'VERSION LOADING'}</span>
@@ -1388,7 +1407,7 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
           {active && runCannotPass && <div className="flight-start-actions"><button type="button" className="stop-flight" disabled={!selectedVariantReady} onClick={onRestart}><RotateCcw size={15} /> {selectedVariantReady ? dualPlaneConfigured ? 'End and re-establish layers' : 'End and restart' : 'Recover gates to restart'}</button><button type="button" className="stop-flight" onClick={onStop}><CircleStop size={15} /> End invalidated check</button></div>}
           {active && !complete && !runCannotPass && <button type="button" className="stop-flight" onClick={onStop}><CircleStop size={15} /> End check</button>}
           {phase === 'error' && <button type="button" className="stop-flight" onClick={onStop}><CircleStop size={15} /> Restore safe state</button>}
-          {complete && <button type="button" onClick={onExport}><Download size={15} /> Export receipt</button>}
+          {complete && !exportPath && <button type="button" onClick={onExport}><Download size={15} /> Save sealed receipt</button>}
         </div>
 
         <div className="signal-grid" aria-label="Flight Check signals">
@@ -1405,7 +1424,11 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
       </div>
 
       <aside className="flight-evidence">
-        <span className="eyebrow">LIVE RECEIPT</span><h3>{status.boardConnected ? 'USB identity observed — controls unproven' : 'USB identity not observed'}</h3>
+        <span className="eyebrow">LIVE RECEIPT</span><h3>{complete
+          ? hybridRoute
+            ? '14-gesture Ashlr route accepted — 6 native keys unproven'
+            : `${expectedSignals}-control Ashlr route accepted`
+          : status.boardConnected ? 'USB identity observed — controls unproven' : 'USB identity not observed'}</h3>
         <dl>
           <div><dt>USB</dt><dd className={status.boardConnected ? 'observed' : ''}>{status.boardConnected ? 'Identity observed' : 'Not observed'}</dd></div>
           <div><dt>Registered endpoints</dt><dd className={status.shortcutCount === expectedSignals ? 'ready' : ''}>{status.shortcutCount}/{expectedSignals}</dd></div>
@@ -1430,9 +1453,10 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
               : <>Use the top-left rotary dial—not the bottom-left layer and connection selector. If the Dual Plane profile is current, end the check, re-establish and prove native layer 1, then short-tap exactly once to Ashlr layer 2 and provide a fresh attestation. Never infer the selected layer from a zero-signal run. Otherwise open verified Work Louder Input alone, set the intended profile current, fully quit Input, and run a fresh check. Do not jump to firmware from one zero-signal receipt.</>}</p>
           <button type="button" onClick={onSetup}>Open recovery checklist</button>
         </div>}
-        {exportPath && !runInvalidated && <div className="exported-receipt"><Check size={14} /><span>Receipt saved</span><code title={exportPath}>{exportPath}</code></div>}
+        {exportPath && !runInvalidated && <div className="exported-receipt"><Check size={14} /><span>Receipt saved privately</span><code>{exportPath}</code></div>}
         {!status.boardConnected && <button type="button" className="flight-secondary" onClick={onSetup}>Open connection setup</button>}
-        {complete && <button type="button" className="flight-secondary" onClick={onOperate}>Start operating</button>}
+        {complete && exportPath && <button type="button" className="flight-secondary" onClick={onOperate}>Start operating</button>}
+        {complete && !exportPath && <p className="flight-save-required"><ShieldCheck size={13} /> Save the sealed receipt before operating. Actions remain suppressed until the save succeeds.</p>}
         <p className="flight-caveat"><ShieldCheck size={13} /> ACT10 and ACT11 are separate physical keys. A passing {hybridRoute ? '14-gesture hybrid' : 'Ashlr'} receipt does not validate AG00–AG05, native Codex task focus/RGB, exact Claude task or cmux pane focus, or authorize consequential actions.</p>
       </aside>
     </div>

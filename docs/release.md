@@ -87,3 +87,9 @@ for another Input-controlled operation. Native and Ashlr Layer physical
 acceptance remain pending. Use the canonical
 [post-flash evidence record](creator-micro-2-post-flash-2026-09-02.md); never
 reuse that desk receipt as acceptance for another device or release.
+
+The later [September 5 Ashlr Layer acceptance](creator-micro-2-ashlr-layer-flight-check-2026-09-05.md)
+clears the 20-control physical shortcut gate only for its exact desk, profile,
+and Agent Board build. It recorded 24 expected callbacks and zero misroutes,
+but the save sheet did not persist a machine-sealed receipt. Native Codex/RGB,
+Hybrid Native, provider, distribution, and workflow acceptance remain open.
