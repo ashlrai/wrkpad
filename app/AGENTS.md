@@ -21,7 +21,10 @@ These instructions extend the repository-root `AGENTS.md` for files under
 - Preserve bounded output, fixed executable lookup, argv execution, timeouts,
   navigation denial, sandboxing, context isolation, and schema validation.
 - New local writes must use new private files or an existing guarded atomic
-  lifecycle. Never mutate Input's database/cache or the device.
+  lifecycle. Never mutate Input's database/cache or the device directly. A
+  separate commissioning executor may operate visible, verified Input UI only
+  under the root enrollment and content-bound apply contract; the renderer and
+  ordinary action executors never receive that authority.
 - Derive the cache-current profile only from `activeProfileId`. A multi-layer
   cache has no uniquely observable active layer and must remain null/manual.
   UI and diagnostics must distinguish editor selection, cache-current state,

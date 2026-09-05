@@ -6,13 +6,15 @@ const path = require('node:path')
 const main = readFileSync(path.join(__dirname, 'main.cjs'), 'utf8')
 const preload = readFileSync(path.join(__dirname, 'preload.cjs'), 'utf8')
 
-test('commissioning IPC stays trusted, read-only, and argument-free', () => {
+test('commissioning IPC stays trusted and routes typed operations through the fixed executor', () => {
   assert.match(main, /ipcMain\.handle\('board:getCommissioning', trustedIpc\(\(\) => commissioningOperations\.get\(\)\)\)/)
   assert.match(main, /ipcMain\.handle\('board:prepareCommissioningPlan', trustedIpc\(\(\) => commissioningOperations\.prepare\(\)\)\)/)
   assert.match(preload, /getCommissioning: \(\) => ipcRenderer\.invoke\('board:getCommissioning'\)/)
   assert.match(preload, /prepareCommissioningPlan: \(\) => ipcRenderer\.invoke\('board:prepareCommissioningPlan'\)/)
+  assert.match(main, /ipcMain\.handle\('board:executeCommissioningOperation', trustedIpc\(\(_event, request\) => commissioningAgentOperations\.execute\(request\)\)\)/)
+  assert.match(preload, /executeCommissioningOperation: \(request\) => ipcRenderer\.invoke\('board:executeCommissioningOperation', request\)/)
 })
-test('renderer bridge exposes no commissioning apply or device-write capability', () => {
+test('renderer bridge exposes no direct commissioning apply or device-write capability', () => {
   assert.doesNotMatch(preload, /applyCommission|authorizeCommission|writeDevice|writeHid|resetDevice|flashFirmware/i)
   assert.doesNotMatch(main, /board:(?:applyCommission|authorizeCommission|writeDevice|writeHid|resetDevice|flashFirmware)/i)
 })

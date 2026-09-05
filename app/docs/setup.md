@@ -92,26 +92,48 @@ long-form checklist. Use it as the first diagnostic view:
 4. Select **Prepare commissioning plan** only after reviewing the named
    prerequisites. The app collects two snapshots, rejects drift, and writes a
    private mode-`0600` journal only when the evidence and plan validate. The
-   plan expires and always contains `authority: human_input_only` and
-   `writesAuthorized: false`.
-5. If **Open manual handoff** appears, follow the recovery card it reveals.
-   That handoff may validate and reveal a new offline artifact, but the operator
-   still performs the Input import, activation, and synchronization.
-6. Return to Setup and start a fresh Flight Check. Use only the intended board
+   current plan expires and contains `writesAuthorized: false` because no live
+   executor is configured.
+5. Inspect the implemented commissioner state from a stable `wrkpad` install:
+
+```bash
+wrkpad commissioner status --json
+```
+
+   Require `executor=not_configured`, `mutation_available=false`, and
+   `firmware_writes_available=false` to remain truthful until an embedded
+   executor ships. A capable external computer-use agent may still operate only
+   visible Input UI under one-time enrollment and a fresh content-bound plan;
+   there is no headless apply command in the current source.
+6. If **Open agent handoff** appears, let an enrolled Codex or Claude agent follow the visible recovery card against the bound candidate and rollback artifact.
+   That handoff may validate and reveal a new offline artifact. A capable
+   external agent may perform the visible import, activation, relaunch, and
+   readback; otherwise the user can follow the same bounded handoff.
+7. Return to Setup and start a fresh Flight Check. Use only the intended board
    during the run. No cached profile, prepared plan, or synthetic shortcut is
    acceptance; macOS still cannot cryptographically identify which keyboard
    emitted a global shortcut.
 
 The current source implementation deliberately does not create the external
-Work Louder Input backup. When the operator selects an ordinary export to
+Work Louder Input backup. When the user selects an ordinary export to
 create a corrected offline artifact, the private recovery receipt records the
 source path and SHA-256; the commissioner reopens that exact bounded file and
 requires the bytes to match before it marks the source-backup gate protected.
 This does not prove the export is the current device state or a complete
-rollback. Until that receipt exists, the runway remains at **Source backup · Human required**.
+rollback. Until that receipt exists, the runway remains at **Source backup ·
+Action required**.
 It also leaves physical acceptance in the existing Flight Check system rather
 than promoting its journal from cache state. This is a visible implementation
 boundary, not a request to bypass the gate.
+
+The [canonical commissioning authority](../../docs/commissioner-architecture.md#authority-model)
+defines the next supported automation layer: one-time enrollment, a one-use
+plan bound to exact app/device/artifact content, automatic vendor-UI
+before-state backup, visible UI import/activation, cold-relaunch checksum and
+semantic readback, and one bounded rollback. If the backup cannot be saved or
+reconciled, no write is allowed. Enrollment never permits TCC changes, direct
+cache/private-IPC/HID writes, reset, deletion, or firmware. Physical Flight
+Check still requires real board emissions.
 
 The local commissioner applies only to `ashlr_layer`. Codex Native keeps the
 separate handoff below, and Hybrid Native keeps its own 14+6 acceptance
@@ -409,23 +431,27 @@ prove import, activation, device synchronization, or physical behavior.
 3. Inspect the generated **Ashlr Agent Board Corrected** profile name, **Ashlr
    Daily** layer, Mic mapping, and
    dial mapping before importing it into Input.
-4. Use Command-Q to fully quit Agent Board, Codex/ChatGPT, Claude, and every
-   other board controller; closing a window is not enough. Power-cycle the
-   Creator Micro 2, open Input alone, choose **Import Profile**, and select the
-   generated JSON. Importing performs a board write but does not make the new
-   profile current. In Input 0.18.4, **Import Profile** is hidden when six
-   profiles already exist. If it is absent, export a backup and remove only an
-   unused ordinary profile; never delete or transform a protected `KV_OAI_*`
-   profile or layer.
-5. Resolve an existing same-name corrected profile before importing another:
-   export it as rollback, then remove only that ordinary corrected copy. On the
-   newly imported **Ashlr Agent Board Corrected** row, choose **Set as current
-   profile** and select **Ashlr Daily**. Wait for Input to finish. If it reports
-   `update error, retry`, keep Input as the only board controller and retry; do
-   not continue from an error.
-6. Use Command-Q to fully quit Input, relaunch it alone, and confirm **Ashlr
-   Agent Board Corrected** is still current with **Ashlr Daily** selected.
-   Input's `layout updated` message alone is not acceptance.
+4. Establish an Input-only window; closing a window is not enough. Power-cycle
+   the Creator Micro 2, open Input alone, choose **Import Profile**, and select
+   the generated JSON. Importing performs a board write but does not make the
+   new profile current. An enrolled executor may perform these visible UI steps
+   only when `wrkpad commissioner status --json` reports a configured mutation
+   path and its fresh plan binds the exact before-state and candidate digests.
+   The current source does not. In Input 0.18.4, **Import Profile** is hidden
+   when six profiles already exist; deletion is outside enrolled authority, so
+   automation must stop instead of making room.
+5. Resolve an existing same-name corrected profile before importing another.
+   The enrolled executor must stop on duplicate-name ambiguity and must never
+   delete a profile. In the guided path, export it as rollback and let the user
+   decide whether to remove only that ordinary corrected copy. On the newly
+   imported **Ashlr Agent Board Corrected** row, choose **Set as current
+   profile** and select **Ashlr Daily**. If Input reports `update error, retry`,
+   stop; an automated retry requires a fresh plan.
+6. Gracefully quit Input, relaunch it alone, and require fresh checksum plus
+   semantic readback for **Ashlr Agent Board Corrected** and **Ashlr Daily**.
+   An enrolled executor performs this automatically and attempts its bound
+   rollback once on mismatch. Input's `layout updated` message alone is not
+   acceptance.
 7. Reopen Agent Board and require its read-only cache receipt to report **Ashlr
    Agent Board Corrected**, **Ashlr Daily**, and the corrected directions. Then
    use **Open Input Monitoring settings** and manually verify the exact receiver

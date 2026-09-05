@@ -127,10 +127,14 @@ groups. A `match` result proves only the file. Neither command opens Input,
 imports or activates a profile, writes the device, changes firmware, or proves
 physical behavior.
 
-## Human import and rollback
+## Import and rollback
 
-Import and activation are persistent profile/device operations and remain
-human-controlled.
+Import and activation are persistent profile/device operations. The current
+source uses the guided steps below. A future configured executor may drive only
+the visible Input UI after one-time enrollment and a fresh content-bound plan
+that automatically protects the before-state, verifies cold-relaunch readback,
+and rolls back once on failure. Direct cache, IPC, HID, reset, deletion, and
+firmware authority remain unavailable.
 
 1. Turn on Creator Micro 2 Pro, connect a data-capable USB-C cable, hold the
    bottom-left touch surface for three seconds, select the white wired channel,
@@ -153,6 +157,11 @@ human-controlled.
 8. On any failure, reopen a currently verified Input copy alone, restore the
    recorded rollback profile through Input's UI, wait for completion, fully
    quit Input, and reconcile integrity and the rollback export again.
+
+An enrolled transaction must perform steps 3, 5, 7, and 8 as one bounded
+backup/apply/readback/rollback lifecycle. It stops before writing when export,
+identity, ownership, or plan evidence is incomplete. Physical acceptance below
+is never part of that automated success result.
 
 Do not reset, flash firmware, weaken a signature check, or keep retrying a
 mutated Input installation.

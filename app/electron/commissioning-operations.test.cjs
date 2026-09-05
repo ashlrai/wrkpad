@@ -70,13 +70,13 @@ test('observes current evidence without writing and returns only a current saved
   assert.equal(Object.hasOwn(state.coordinator, 'confirm'), false)
 })
 
-test('double-collects stable evidence, writes one CAS journal, and reports a human-only plan', async () => {
+test('double-collects stable evidence, writes one CAS journal, and reports an external-agent visible-UI plan', async () => {
   const state = fixture({ snapshots: [snapshot(), snapshot({}, '2026-09-04T20:00:01.000Z')] })
   const result = await state.coordinator.prepare()
   assert.equal(result.ok, true)
   assert.equal(result.code, 'plan_prepared')
   assert.equal(result.plan.outcome, 'ready')
-  assert.equal(result.plan.authority, 'human_input_only')
+  assert.equal(result.plan.authority, 'external_agent_visible_ui')
   assert.equal(result.plan.writesAuthorized, false)
   assert.equal(result.journalRevision, 1)
   assert.equal(state.getJournal().revision, 1)

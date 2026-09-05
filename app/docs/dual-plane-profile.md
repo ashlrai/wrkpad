@@ -55,7 +55,14 @@ Input's cache, writes HID, or changes the device. Verification requires the
 exact native layout in position 1, the exact Ashlr layout in position 2, and
 all 20 expected shortcut actions. A `match` result proves only the file.
 
-## Human import and acceptance
+## Import and acceptance
+
+The current source uses this guided procedure. A future configured executor may
+operate only the visible Input import/activation UI under the canonical
+[one-time enrollment and exact per-run authority](../../docs/commissioner-architecture.md#authority-model).
+It must protect a fresh before-state export, cold-relaunch for checksum and
+semantic readback, and attempt one bound rollback on failure. Physical
+observations in steps 5 and 6 remain separate real-control evidence.
 
 1. Re-run `npm run doctor` and require the verified Input result to remain
    current.

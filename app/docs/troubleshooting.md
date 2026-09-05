@@ -87,8 +87,9 @@ shortcut receipt, USB ownership, or physical acceptance.
 The Ashlr Layer commissioner is intentionally fail-closed. Its large status
 line names the highest current stage; the highlighted item in the six-stop
 runway names the first unresolved gate. Use **Run checks again** to repeat the
-bounded inspection after correcting the problem. A retry never imports a
-profile, changes permission, or writes the device.
+bounded inspection after correcting the problem. This read-only retry never
+imports a profile, changes permission, or writes the device. The future enrolled
+executor is a separate, one-use visible-UI transaction.
 
 | Gate | What to check | What not to infer |
 | --- | --- | --- |
@@ -109,20 +110,22 @@ Specific recovery rules:
   profile or firmware work after an unsupported device, untrusted Input copy,
   multiple receivers, denied permission, invalid candidate, or failed physical
   receipt.
-- **Source backup · Human required:** export an ordinary profile through Work
-  Louder Input; the commissioner does not perform that export. When the
+- **Source backup · Action required:** the current commissioner does not perform
+  the Work Louder Input export. The enrolled executor contract requires it to
+  create, hash, and reconcile a fresh vendor-UI export before the first write;
+  an unusable export blocks the transaction. When the
   exported source is selected for **Create corrected Input profile**, the
   private recovery receipt binds its path and SHA-256 and later requires the
   same bytes. Missing, moved, changed, or unsafe baseline files remain invalid.
-  Continue through the canonical [Input-only reconciliation](#input-only-reconciliation)
-  and preserve the export yourself.
+  Continue through the canonical [Input-only reconciliation](#input-only-reconciliation).
 - **Plan unavailable** or **evidence changed:** wait for the local environment
   to settle and prepare again. Plans are bound to two matching snapshots and
   expire; editing the candidate, changing the route, or changing receiver state
   invalidates the prior plan.
 - **Candidate verified but board still silent:** candidate validation concerns
-  the offline artifact only. Complete the human Input handoff, fully quit Input,
-  then run a new physical Flight Check.
+  the offline artifact only. Complete the guided Input handoff, or require the
+  enrolled executor's cold-relaunch readback, then run a new physical Flight
+  Check.
 
 The commissioner is not used for Codex Native or experimental Hybrid Native.
 Use the route-specific procedures in [Setup](setup.md) so an Ashlr shortcut
@@ -163,7 +166,11 @@ import or `layout updated` message proves neither current-profile activation nor
 physical emission.
 
 Use this single recovery procedure when the physical check remains silent, the
-cache is wrong, or Agent Board shows recent unresolved-index log evidence:
+cache is wrong, or Agent Board shows recent unresolved-index log evidence. The
+current source presents it as a guided procedure. A future configured executor
+may perform only the visible Input UI portions after one-time enrollment and a
+fresh content-bound plan; its automatic backup, readback, and one rollback are
+mandatory, not optional.
 
 1. Stop Flight Check so the action interlock returns to a known state.
 2. In Input's profile chooser, hover an ordinary Creator Micro 2 profile and
@@ -187,10 +194,13 @@ cache is wrong, or Agent Board shows recent unresolved-index log evidence:
    the imported row choose **Set as current profile**, then select **Ashlr
    Daily**.
 6. Wait for Input to finish. `layout updated` is not acceptance. If Input says
-   `update error, retry`, keep Input as the only board controller and retry; do
-   not continue from an error.
-7. Use Command-Q to fully quit Input and relaunch it alone. Confirm **Ashlr Agent
-   Board Corrected** is still current with **Ashlr Daily** selected.
+   `update error, retry`, stop. An enrolled executor consumes its authorization
+   and may not retry the write without a new plan.
+7. Gracefully quit Input and relaunch it alone. Confirm **Ashlr Agent Board
+   Corrected** is still current with **Ashlr Daily** selected. The enrolled
+   executor must additionally reconcile a fresh checksum and semantic readback;
+   on mismatch it performs exactly one bound rollback and verifies that
+   readback before reporting success or escalation.
 8. Reopen Agent Board, choose **Open Input Monitoring settings**, and manually
    verify the exact receiver build shown in Setup is enabled. Agent Board keeps
    this permission labeled human-unverified because it cannot read the protected
@@ -207,8 +217,9 @@ evidence.
 If Setup reports recurring Codex-protocol responses reaching Input, treat that
 as current controller co-presence only. It does not identify HID ownership or
 prove why a shortcut was silent, but it does mean the Input-only reconciliation
-window is not exclusive. End Flight Check and establish the human-guided
-Input-only window above; Agent Board does not quit applications automatically.
+window is not exclusive. End Flight Check and establish the guided Input-only
+window above. Only a configured, enrolled plan may gracefully quit/relaunch
+Input; it never kills applications or other controllers.
 
 If Flight Check receives zero raw signals, use the rotary dial at the left of
 the first row. The planar toggle/joystick is at the right. The bottom-left

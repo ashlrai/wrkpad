@@ -21,6 +21,7 @@ const { hasFreshExactDualPlaneAshlrAttestation } = require('./dual-plane-attesta
 const { inspectGeneratedInputProfile, readSourceProfileArtifact, writeGeneratedProfile } = require('./input-profile-generator.cjs')
 const { buildRecoveryChecklist, observeRecoveryArtifact, observeRecoveryBaseline, readRecoveryReceipt, recoveryChecklistText, recoveryReceiptPath, removeRecoveryReceipt, writeRecoveryReceipt } = require('./recovery-receipt.cjs')
 const { inspectCommissioningJournal, writeCommissioningJournal } = require('./commissioning-journal.cjs')
+const { createCommissioningAgentOperationExecutor } = require('./commissioning-agent-operations.cjs')
 const { createCommissioningOperationCoordinator } = require('./commissioning-operations.cjs')
 const { projectActiveFlightAcceptance, projectCommissioningSnapshot } = require('./commissioning-evidence.cjs')
 const { acceptNativeAcceptance, evaluateNativeAcceptance, prepareNativeAcceptance, readNativeAcceptanceReceipt, removeNativeAcceptanceReceipt, stageNativeAcceptance, writeNativeAcceptanceReceipt } = require('./native-acceptance-receipt.cjs')
@@ -685,10 +686,15 @@ const commissioningOperations = createCommissioningOperationCoordinator({
   },
   writeJournal: (journal, expectedRevision) => writeCommissioningJournal(settingsPath(), journal, expectedRevision),
 })
+const commissioningAgentOperations = createCommissioningAgentOperationExecutor({
+  inspect: () => commissioningOperations.get(),
+  plan: () => commissioningOperations.prepare(),
+})
 
 ipcMain.handle('board:getStatus', trustedIpc(() => collectSystemStatus()))
 ipcMain.handle('board:getCommissioning', trustedIpc(() => commissioningOperations.get()))
 ipcMain.handle('board:prepareCommissioningPlan', trustedIpc(() => commissioningOperations.prepare()))
+ipcMain.handle('board:executeCommissioningOperation', trustedIpc((_event, request) => commissioningAgentOperations.execute(request)))
 ipcMain.handle('board:getFlightSnapshot', trustedIpc(() => publicFlightSnapshot()))
 ipcMain.handle('board:getMissionControl', trustedIpc(() => missionControl()))
 ipcMain.handle('board:getRecoveryGuide', trustedIpc(() => {

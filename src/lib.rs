@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 pub mod client;
+pub mod commissioner;
 pub mod config;
 pub mod device;
 pub mod doctor;

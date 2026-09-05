@@ -2,7 +2,8 @@
 
 This is the canonical runbook for using wrkpad with Codex Desktop/CLI, Claude
 Code in cmux, Claude Desktop, Ashlr Agent Board, and Ashlr Hub. It tells an agent
-what it may inspect or automate and where a human must take over.
+what it may inspect, what a one-time enrollment may delegate, and which evidence
+still requires the user or real hardware.
 
 Repository instructions follow Codex's
 [`AGENTS.md` discovery](https://developers.openai.com/codex/guides/agents-md/).
@@ -59,12 +60,14 @@ proof of source identity, review, provenance, signing, or release.
 | Operation | Agent may run | Human required | Canonical procedure |
 | --- | --- | --- | --- |
 | Git/source inspection, doctors, status, tests, lint, build | Yes | No | `AGENTS.md` and preflight |
-| Generate a new offline profile or fixed unofficial native-layer artifact | Yes, in requested scope | Human reviews/imports/activates | [Agent Board setup](../app/docs/setup.md), [native-layer recovery](../app/docs/codex-native-layer-recovery.md) |
+| Generate a new offline profile or fixed unofficial native-layer artifact | Yes, in requested scope | Exact artifact still needs per-run authority | [Agent Board setup](../app/docs/setup.md), [native-layer recovery](../app/docs/codex-native-layer-recovery.md) |
 | Hook or LaunchAgent status and plan | Yes | Human authorizes exact apply plan | [Hook setup](hook-setup.md), [macOS service](macos-service.md) |
 | Codex hook trust and disposable provider receipt | No | Yes | [Hook runtime verification](hook-setup.md#runtime-verification) |
-| Input Monitoring or Input profile activation | No | Yes | [Agent Board setup](../app/docs/setup.md) |
-| Physical Flight Check | Agent may arm/suppress actions | Human moves every real control | [Flight Check](../app/docs/setup.md#run-flight-check) |
-| Full-quit/relaunch of Agent Board or Input | No automatic process action | Human uses Command-Q and reopens one intended build | [Troubleshooting](../app/docs/troubleshooting.md#multiple-agent-board-receivers-are-running) |
+| Input Monitoring | Agent may inspect visible state | User grants or changes macOS permission | [Agent Board setup](../app/docs/setup.md) |
+| Input UI import and profile activation | Enrolled agent may operate visible UI for one content-bound plan | User enrolls once; otherwise guided handoff | [Commissioning authority](commissioner-architecture.md#authority-model) |
+| Before-state backup, readback, and rollback | Enrolled executor must automate and verify all three or perform no write | User chooses retention and may revoke enrollment | [Protected apply and rollback](commissioner-architecture.md#protected-apply-and-rollback) |
+| Physical Flight Check | Agent may arm, guide, and record | A person moves every real control unless a separately qualified fixture exists | [Flight Check](../app/docs/setup.md#run-flight-check) |
+| Full-quit/relaunch of Agent Board or Input | No kill authority; enrolled plan may gracefully relaunch Input only | User handles other applications and unenrolled sessions | [Troubleshooting](../app/docs/troubleshooting.md#multiple-agent-board-receivers-are-running) |
 | Firmware, bootloader, HID, keymap, or device filesystem | No | Foreground human qualification after verified Input | [Firmware qualification](../app/docs/setup.md#3-verify-work-louder-input) |
 | Push, merge, release, deploy, publish, spend, credentials, provider approval | Only when explicitly requested | Explicit authorization and reconciliation | Project/release policy |
 
@@ -79,7 +82,7 @@ proof of source identity, review, provenance, signing, or release.
    connected.
 3. Confirm the stable binary is a user/system install, not a build-tree path.
    Require Setup to report **One receiver · shortcut ownership available**. If
-   it does not, ask the human to Command-Q every Agent Board copy and reopen one
+   it does not, ask the user to Command-Q every Agent Board copy and reopen one
    intended build. Never kill a process automatically; receiver exclusivity
    does not prove shortcut or physical receipt.
 4. Require Work Louder Input to report **publisher, signature, and Gatekeeper
@@ -92,8 +95,15 @@ proof of source identity, review, provenance, signing, or release.
 6. Have the operator trust only the exact wrkpad Codex hooks in `/hooks` and run
    one disposable Codex and Claude Code receipt. Claude Desktop chats do not
    expose the Claude Code hook lifecycle.
-7. Have the operator use Input's **Set as current profile** action for `Ashlr
-   Agent Board Corrected`, verify `Ashlr Daily`, and grant Input Monitoring.
+7. If the user previously enrolled visible Input UI commissioning, prepare one
+   fresh content-bound plan for `Ashlr Agent Board Corrected`. Require a new
+   private vendor-UI before-state export, candidate hash and semantic match,
+   exact Input and device identity, single-owner window, graceful relaunch,
+   checksum plus semantic readback, and one bounded rollback. If any element is
+   missing, use the guided handoff instead; never downgrade to cache editing,
+   private IPC, Reset Settings, profile deletion, raw HID, or synthetic keys.
+   Whether agent-operated or guided, make the candidate current, verify `Ashlr
+   Daily`, and have the user grant Input Monitoring.
    Inspect the read-only `input_profile` receipt, but do not treat it as board
    synchronization. If `input_runtime` reports a recent unresolved-index event,
    treat it as advisory log evidence that may predate the cache. A fresh
@@ -102,7 +112,8 @@ proof of source identity, review, provenance, signing, or release.
    and never delete or transform `KV_OAI_*`.
    A fresh `input_codex_protocol_traffic` warning means recurring Codex-protocol
    responses are reaching Input. Treat it as co-presence, not HID ownership or
-   root cause, and require a human Input-only window; never auto-quit controllers.
+   root cause, and require an exclusive Input-only window. Only an enrolled
+   content-bound plan may gracefully quit/relaunch Input; never kill controllers.
    If Agent Board generated a corrected artifact, preserve its private recovery
    handoff before the operator quits Codex and Agent Board. The private local
    receipt contains only the artifact path, SHA-256, and creation time; copied
@@ -112,7 +123,8 @@ proof of source identity, review, provenance, signing, or release.
    synchronization, permission, or physical acceptance. On the next launch,
    resume the numbered checklist in Setup.
 8. Arm Daily Flight Check. Wait for the screen to say actions are suppressed,
-   then have the operator complete all 20 gestures on the physical board.
+   then have the user complete all 20 gestures on the physical board. This
+   receipt is separate from the configuration readback and cannot be synthesized.
 9. Operate from Agent Board. Slot selection may foreground Codex Desktop or
    cmux; it does not prove exact Codex task or cmux pane focus and sends no
    prompt or terminal input.
@@ -146,8 +158,8 @@ closed for native qualification. See the canonical
 repeat the flash merely because native acceptance is still pending.
 
 An agent may prepare the vendor release identity, checksum, backups, and
-post-flash test plan. It must stop before quitting applications, entering a
-bootloader, or flashing. The human handoff must name:
+post-flash test plan. It must stop before entering a bootloader or flashing.
+The human handoff must name:
 
 - exact board identity, current firmware, candidate tag/asset/size/checksum;
 - direct-power and competing-owner requirements;
@@ -159,10 +171,11 @@ When the firmware RPCs succeed but every native control is silent, a missing
 `KV_OAI_*` layer is a separate configuration hypothesis. On explicit request,
 an agent may generate and validate the repository's fixed
 [unofficial layer artifact](../app/docs/codex-native-layer-recovery.md) offline.
-The agent must not import or activate it, edit Input's cache, write the device
-filesystem or HID channel, reset settings, or delete/transform a protected
-layer. A human-owned Input import and fresh physical Codex observations remain
-the acceptance gates.
+An enrolled agent may import and activate that exact artifact only through the
+visible Input UI and the same protected apply/readback/rollback contract. It
+must not edit Input's cache, use private IPC, write the device filesystem or HID
+channel directly, reset settings, or delete/transform a protected layer. Fresh
+physical Codex observations remain a separate acceptance gate.
 
 ## Agent handoff format
 
@@ -176,7 +189,7 @@ Packaged/installed: <exact state or not performed>
 Provider receipt: <accepted, failed, or not performed>
 Physical receipt: <accepted, failed, or not performed>
 Public release: <artifact/tag or not performed>
-Remaining human gates: <permission, firmware, trust, physical, approval>
+Remaining user or physical gates: <permission, firmware, trust, physical, approval>
 Rollback: <artifact or procedure, or explicitly unavailable>
 Receiver runtime: <exclusive, contended same build, contended distinct builds,
 or unavailable; never include process IDs, command lines, or local paths>

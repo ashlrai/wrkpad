@@ -1470,7 +1470,9 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
     setCommissioningBusy(true)
     setCommissioningError(null)
     try {
-      const response = await window.agentBoard.getCommissioning()
+      const response = window.agentBoard.executeCommissioningOperation
+        ? await window.agentBoard.executeCommissioningOperation({ operation: 'inspect', planId: null })
+        : await window.agentBoard.getCommissioning()
       setCommissioning(response)
       if (!response.ok) setCommissioningError(response.message)
       return response
@@ -1488,7 +1490,9 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
     setCommissioningBusy(true)
     setCommissioningError(null)
     try {
-      const response = await window.agentBoard.prepareCommissioningPlan()
+      const response = window.agentBoard.executeCommissioningOperation
+        ? await window.agentBoard.executeCommissioningOperation({ operation: 'plan', planId: null })
+        : await window.agentBoard.prepareCommissioningPlan()
       setCommissioning(response)
       if (!response.ok) setCommissioningError(response.message)
     } catch {
@@ -1882,6 +1886,7 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
     {status.boardRoute === 'ashlr_layer' && commissioning?.snapshot && <CommissioningWizard
       snapshot={commissioning.snapshot}
       plan={commissioning.plan}
+      agentOperation={commissioning.agentOperation ?? null}
       busy={commissioningBusy}
       onRefresh={() => { void refreshCommissioning() }}
       onPrepare={prepareCommissioning}

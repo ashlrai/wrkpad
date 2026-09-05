@@ -68,18 +68,18 @@ const commissioningProof = {
     next: 'Protect the current setup',
   },
   baseline: {
-    state: 'Human action required',
+    state: 'Protected before any write',
     title: 'Rollback point',
-    detail: 'A real export from Work Louder Input must be saved before device-controlled work. The vendor cache is not relabeled as a backup.',
-    evidence: 'Not created by this preview',
-    next: 'Export an ordinary profile',
+    detail: 'An enrolled executor must save, hash, and reconcile a fresh vendor-UI export before it may import anything. The vendor cache is never relabeled as a backup.',
+    evidence: 'Required live export digest',
+    next: 'Protect and verify before-state',
   },
   candidate: {
     state: 'Offline evidence',
     title: 'Validated candidate',
     detail: 'The managed artifact can be checked and hashed without opening Input. Validation does not import, activate, or synchronize it.',
     evidence: 'Private artifact digest',
-    next: 'Complete the manual handoff',
+    next: 'Authorize one exact plan',
   },
   physical: {
     state: 'Final acceptance gate',

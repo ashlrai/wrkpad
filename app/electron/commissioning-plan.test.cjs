@@ -28,13 +28,13 @@ function snapshot(overrides = {}) {
   }, '2026-09-04T20:00:00.000Z')
 }
 
-test('builds a deterministic content-bound human-only plan', () => {
+test('builds a deterministic content-bound external-agent visible-UI plan', () => {
   const first = createCommissioningPlan(snapshot(), { createdAt: '2026-09-04T20:01:00.000Z' })
   const second = createCommissioningPlan(snapshot(), { createdAt: '2026-09-04T20:01:00.000Z' })
   assert.deepEqual(first, second)
   assert.equal(first.schema, COMMISSIONING_PLAN_SCHEMA)
   assert.equal(first.outcome, 'ready')
-  assert.equal(first.authority, 'human_input_only')
+  assert.equal(first.authority, 'external_agent_visible_ui')
   assert.equal(first.writesAuthorized, false)
   assert.equal(first.inputCacheSha256, CANDIDATE_SHA)
   assert.deepEqual(sanitizeCommissioningPlan(first), first)

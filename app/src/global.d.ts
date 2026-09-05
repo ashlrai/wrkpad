@@ -1,6 +1,6 @@
 import type { BoardRoute, ExecutionResult, FlightSnapshot, MissionControlSnapshot, NativeAcceptanceActionResult, NativeAcceptanceAttestations, NativeAcceptanceSnapshot, PhysicalSignalEnvelope, ProfileId, ProfileRepairResult, SystemStatus } from './board'
 import type { NativeControlCheckReceipt, NativeControlCheckReport } from './components/NativeControlCheck'
-import type { CommissioningCoordinatorResponse } from './commissioning'
+import type { CommissioningCoordinatorResponse, CommissioningOperationRequest } from './commissioning'
 
 declare global {
   interface AgentBoardRecoveryHandoff {
@@ -32,6 +32,7 @@ declare global {
       getRecoveryGuide?(): Promise<AgentBoardRecoveryGuide>
       getCommissioning?(): Promise<CommissioningCoordinatorResponse>
       prepareCommissioningPlan?(): Promise<CommissioningCoordinatorResponse>
+      executeCommissioningOperation?(request: CommissioningOperationRequest): Promise<CommissioningCoordinatorResponse>
       getNativeAcceptance?(): Promise<NativeAcceptanceSnapshot>
       prepareNativeAcceptance?(): Promise<NativeAcceptanceActionResult>
       acceptNativeAcceptance?(attestations: NativeAcceptanceAttestations): Promise<NativeAcceptanceActionResult>

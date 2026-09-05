@@ -23,9 +23,11 @@ agents. Keep it concise and keep provider-specific files pointed here.
    the current profile from Input's editor/header, board synchronization from
    cache state, or physical acceptance from either. On explicit request, an
    agent may generate a new, fixed, reviewed, clearly unofficial `KV_OAI_*`
-   profile or layer-import artifact offline. Import, activation, cache/device/HID writes,
-   reset, deletion, and transformation of a live protected layer remain human
-   Input-only operations.
+   profile or layer-import artifact offline. Import and activation may be
+   agent-operated only through visible Work Louder Input UI under the enrolled,
+   content-bound authority in `docs/commissioner-architecture.md`. Direct
+   cache/device/HID writes, reset, deletion, firmware, and transformation of a
+   live protected layer remain unavailable.
 
 ## Repository map
 
@@ -38,20 +40,29 @@ agents. Keep it concise and keep provider-specific files pointed here.
 - `tools/`: dependency-free repository checks intended for humans and agents.
 - `.agents/skills/ashlr-delivery/`: shared Amplify, Verify, Polish, and Advance
   delivery workflow for Codex and Claude Code.
+- `.agents/skills/wrkpad-commissioner/`: repeatable Creator Micro 2 diagnosis,
+  visible-UI commissioning, readback, rollback, and physical-proof workflow.
 
 ## Safe automation boundary
 
 Agents may perform read-only probes, source edits within the requested scope,
 tests, builds, linting, and offline profile generation to a new file. Generating
-a content-bound hook or service plan is read-only; applying it is a separate
-mutation.
+a content-bound hook, service, or commissioning plan is read-only; applying it
+is a separate mutation. A user may enroll an agent once for visible Input UI
+commissioning, but every run still requires one expiring plan bound to the
+exact app, device class, route, before-state, candidate digest, UI actions,
+readback, and rollback artifact.
 
 Never automate or infer authorization for:
 
 - macOS TCC or Input Monitoring changes;
-- Work Louder Input import, profile activation, keymap, device-filesystem,
-  bootloader, HID, or firmware writes;
-- quitting or killing Codex, Input, Logitech, Claude, cmux, or another owner;
+- Work Louder Input cache/database edits, private IPC, remote debugging,
+  keymap/device-filesystem writes, bootloader, raw HID, reset, deletion, or
+  firmware writes; visible UI import and activation are the only enrolled
+  exception and must satisfy the canonical commissioning contract;
+- killing Codex, Input, Logitech, Claude, cmux, or another owner; an enrolled
+  plan may gracefully quit and relaunch Input only for its named exclusive
+  write/readback window;
 - Codex hook trust, provider permission approval, prompt submission, or Fleet
   inbox approval/rejection;
 - push, merge, deploy, publish, release, delete, spend, credential, or
@@ -104,8 +115,8 @@ git diff --check
 ```
 
 Do not silently install a missing verifier. Report the skipped gate and why.
-Hardware/provider work also requires the named manual acceptance receipt; CI
-cannot substitute for it.
+Hardware/provider work also requires the named physical or operator acceptance
+receipt; CI and an automated configuration readback cannot substitute for it.
 
 ## Change and review rules
 

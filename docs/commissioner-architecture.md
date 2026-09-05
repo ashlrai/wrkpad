@@ -1,6 +1,7 @@
 # Local commissioning architecture
 
-Status: design and read-only implementation contract
+Status: read-only implementation plus agent-operated commissioning authority
+contract
 
 ## Purpose
 
@@ -10,8 +11,16 @@ ownership, and physical acceptance as one ambiguous “connected” state.
 
 The commissioner is a local, deterministic control plane that turns those
 signals into an ordered recovery session. It never infers working hardware from
-USB, cache, or shortcut registration. The current shortcut receiver cannot
-cryptographically distinguish the Creator Micro 2 from another keyboard.
+USB, cache, shortcut registration, or a successful vendor UI message. The
+current shortcut receiver cannot cryptographically distinguish the Creator
+Micro 2 from another keyboard.
+
+The current source implements the evidence and planning path. The supported
+near-term mutation design lets an enrolled local agent operate the visible Work
+Louder Input UI for one exact import-and-activate run. It does not grant the
+agent a general device writer. Until an executor implements every invariant in
+this document, the plan must remain non-executable and the UI must describe the
+remaining handoff accurately.
 
 ## Evidence ladder
 
@@ -37,7 +46,7 @@ The current read-only commissioner derives these states from fresh evidence:
 3. `environment_verified`
 4. `baseline_captured`
 5. `candidate_verified`
-6. `manual_action_required`
+6. `authorization_required`
 7. `physical_check_ready`
 8. `commissioned` (active-run acceptance only)
 
@@ -56,12 +65,13 @@ A commissioning journal is private local state containing:
 - timestamps, expiry, and state transitions; and
 - sanitized operator-check/action receipts.
 
-A plan digest binds the current sanitized snapshot, route, baseline digest,
-candidate digest, Input-cache digest, intended outcome, and expiry. The current
-implementation has no confirmation or device-write API: preparing a plan only
-records a short-lived human-only handoff. A future device-specific fingerprint
-or executable-content identity must be added before any deterministic writer
-could be considered.
+A plan digest binds the current sanitized snapshot, route, protected
+before-state digest, candidate digest, Input application identity, device
+identity class, intended visible UI transitions, recovery action, and expiry.
+Preparing a plan does not authorize it. The current implementation has no
+commissioning executor, so its plan remains non-executable. An agent-operated
+executor must refuse to begin until the enrollment and per-run authority below
+match the fresh plan byte for byte.
 
 Records are written atomically with mode `0600`. Raw prompts, repository paths,
 window titles, key contents, device serials, and credentials are excluded.
@@ -75,24 +85,88 @@ There are four distinct authority classes:
 3. `confirm`: record operator intent for one expiring plan;
 4. `mutate`: change application or device state.
 
-This repository currently implements `observe` and `plan` only. `confirm` and
-`mutate` remain unavailable under the repository safety contract. The UI must
-say so plainly and lead the operator through the supported Work Louder Input
-action.
+This repository currently implements `observe` and `plan`. `confirm` and
+`mutate` describe the bounded agent-operated path and remain unavailable until
+an executor implements the complete contract. The UI must say which state is
+implemented instead of presenting an enrollment or plan as a completed write.
 
-If a future deterministic writer is approved, it must additionally enforce:
+### One-time enrollment
+
+Enrollment is an explicit local choice by the user to let an agent operate one
+verified Work Louder Input installation through its visible UI. It records:
+
+- the allowed Input bundle identity, version, publisher policy, and executable
+  content identity;
+- the allowed Creator Micro 2 identity class and board route;
+- the allowed operation set: protect before-state, import one exact candidate,
+  make that candidate current, gracefully relaunch Input for readback, and
+  perform one bounded rollback when verification fails;
+- a private backup location, retention policy, and revocation control; and
+- an expiry or explicit re-enrollment trigger for application, device, route,
+  permission, or policy changes.
+
+Enrollment is not macOS Accessibility or Input Monitoring permission, does not
+approve a particular profile, and does not authorize future candidate hashes.
+The user grants operating-system permissions through macOS. An agent may
+inspect their visible result but must not click through or alter TCC on the
+user's behalf.
+
+### Exact per-run authority
+
+Each commissioning run requires a fresh, one-use authorization bound to:
+
+- the enrollment identifier and exact Input content identity;
+- the supported device identity class and requested route;
+- the candidate file SHA-256 and strict semantic validation result;
+- the fresh before-state and rollback-artifact SHA-256 values;
+- the exact ordered UI actions, maximum write count, and terminal success text;
+- the expected post-write profile, layer, and configuration checksum;
+- the cold-relaunch readback procedure; and
+- a nonce and short expiry.
+
+Changing any bound byte, encountering an unexpected dialog, losing single-owner
+conditions, or consuming the authorization invalidates the run. “Continue,” a
+previous enrollment, and a matching filename are never substitutes for this
+content-bound authority.
+
+### Protected apply and rollback
+
+An agent-operated run must enforce all of the following:
 
 - exact product allowlisting;
 - a global single-writer lock;
 - proof that Work Louder Input and other owners are stopped;
-- a byte-preserving live backup before mutation;
-- minimal managed-file scope;
-- readback and semantic verification;
-- one bounded rollback attempt; and
-- an operator-attested acceptance receipt after the write.
+- a verified, byte-preserving before-state export from the live vendor UI before
+  mutation, stored privately without overwriting an existing file;
+- rejection when that export cannot be saved, parsed, hashed, or reconciled
+  with a fresh cold-relaunch readback;
+- visible Input UI import and activation of only the candidate digest named in
+  the plan;
+- graceful Input quit and relaunch, never a kill, followed by a fresh board
+  readback and exact checksum plus semantic verification;
+- one bounded UI rollback to the protected artifact when apply or readback
+  fails, followed by the same cold-relaunch readback; and
+- a terminal failed-and-escalated result if rollback cannot be verified.
+
+The app's “layout updated” message proves neither activation nor readback.
+Input's cache or database is diagnostic evidence only and must never be copied
+or relabeled as the protected backup. If the vendor export dialog cannot produce
+a valid file, commissioning stops before the first write.
 
 Reset, format, profile deletion, firmware flashing, and arbitrary HID/file
-commands remain outside that authority.
+commands remain outside that authority. Direct Input cache/database mutation,
+private renderer IPC, remote debugging, synthetic key events, and raw
+device-filesystem writes are never fallbacks.
+
+### Separate physical receipt
+
+Configuration success ends at verified readback. The agent may then arm Flight
+Check, suppress mapped actions, highlight each expected gesture, and record the
+real events. A person must still move the real control unless a separately
+qualified vendor electrical self-test or robotic fixture exists. Injected
+keyboard events cannot satisfy this gate. The receipt is bound to the current
+route, receiver generation, profile digest, device identity class, and time
+window; a later reconnect or configuration change invalidates it.
 
 ## Process boundaries
 
@@ -126,11 +200,14 @@ The wizard is intentionally linear:
 2. Explain the exact missing receipt.
 3. Protect the current configuration.
 4. Validate the intended profile.
-5. Review the short-lived human-only plan.
-6. Guide the supported human import/activation action.
-7. Re-inspect and arm Flight Check.
-8. Ask for one highlighted physical gesture at a time.
-9. Show provider-specific acceptance and a saved Flight receipt.
+5. Enroll the exact local UI authority once, or keep the guided handoff.
+6. Authorize one content-bound apply plan.
+7. Protect the live before-state, apply through visible Input UI, cold-relaunch,
+   and verify readback; roll back once on failure.
+8. Re-inspect and arm Flight Check.
+9. Ask for one highlighted physical gesture at a time.
+10. Show provider-specific acceptance and a saved Flight receipt.
 
-Every failure screen contains a safe retry and a concise evidence disclosure.
-No retry performs a mutation.
+Every failure screen contains a concise evidence disclosure. Read-only checks
+may be retried freely. A write retry requires a new plan and authorization;
+rollback is attempted at most once under the consumed plan.

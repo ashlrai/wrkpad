@@ -9,14 +9,21 @@ All notable changes will be documented here. The project follows semantic versio
 ### Added
 
 - A deterministic Ashlr Layer commissioner that projects six independent proof
-  gates, identifies one safe next action, and stores only a private, expiring,
-  human-only plan. It performs no Input, permission, HID, or device write.
+  gates, identifies one safe next action, and stores a private, expiring,
+  content-bound external-agent visible-UI plan. The embedded executor remains
+  unavailable until an exact device adapter passes apply/readback/rollback acceptance.
+- Rollback-first Rust commissioning primitives for exact device, vendor app,
+  provider bridge, executor, profile, revision, and readback binding, plus a
+  truthful `wrkpad commissioner status --json` command.
 - A public interactive commissioner evidence preview, machine-readable
   capability entry, and operator documentation that keep local diagnosis,
   manual configuration, and physical acceptance separate.
 - Shared Codex/Claude repository instructions, a route-aware read-only agent
   preflight with a versioned JSON Schema, and a canonical cross-provider agent
   operations runbook.
+- A repository-local `$wrkpad-commissioner` skill that gives Codex and Claude
+  agents the same bounded diagnosis, visible-UI readback, rollback, and
+  physical-proof workflow.
 - Automated agent-contract, documentation-link, DCO, Cargo Deny, Semgrep, and
   Gitleaks checks for public pull requests.
 - Ashlr Agent Board as the Apache-2.0 `app/` desktop companion, with independent

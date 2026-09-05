@@ -37,16 +37,17 @@ installation, one receiver, preserved source export, validated candidate, and
 an active operator-attested shortcut run—and names one safe next action at a time.
 
 The commissioner can observe sanitized evidence and save a private, expiring,
-content-bound plan. Every plan is `human_input_only` and
-`writesAuthorized: false`. The current implementation does not create the
-source export. After the operator selects that ordinary Input export for
+content-bound plan. Every current plan is `external_agent_visible_ui` and
+`writesAuthorized: false`. The embedded app does not create the source export.
+An enrolled external computer-use agent can drive the visible vendor UI under
+the canonical contract. After the user or that agent selects the ordinary Input export for
 offline repair, the app hashes it, records its bounded path and digest in the
 private recovery receipt, and revalidates the same bytes for the source-backup
 gate. This does not assert that the export represents the current board state
 or a complete rollback.
-It also does not import or activate a profile, change a macOS permission,
-synchronize the board, reset settings, update firmware, or issue a
-HID/device-filesystem write.
+The embedded app itself does not import or activate a profile, change a macOS
+permission, reset settings, update firmware, or issue a HID/device-filesystem
+write.
 
 This distinction is deliberate: candidate validation proves the offline file,
 cache agreement proves only inspected local cache state, and a fresh Flight

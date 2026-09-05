@@ -12,9 +12,21 @@ const snapshot: CommissioningSnapshot = {
 }
 const plan: CommissioningPlan = {
   schema: 'ai.ashlr.agent-board.commissioning-plan/v1', id: 'never-render-plan-id', createdAt: '2026-09-04T16:00:00.000Z', expiresAt: '2099-09-04T16:15:00.000Z', route: 'ashlr_layer', outcome: 'ready',
-  reason: '/Users/private/raw-reason-must-not-render', nextAction: 'raw-next-action-must-not-render', snapshotSha256: 'c'.repeat(64), candidateSha256: candidateHash, baselineSha256: 'a'.repeat(64), inputCacheSha256: null, authority: 'human_input_only', writesAuthorized: false,
+  reason: '/Users/private/raw-reason-must-not-render', nextAction: 'raw-next-action-must-not-render', snapshotSha256: 'c'.repeat(64), candidateSha256: candidateHash, baselineSha256: 'a'.repeat(64), inputCacheSha256: null, authority: 'external_agent_visible_ui', writesAuthorized: false,
 }
-const props = () => ({ snapshot, plan, busy: false, onRefresh: vi.fn(), onPrepare: vi.fn(), onManualHandoff: vi.fn(), onFlightCheck: vi.fn() })
+const agentOperation = {
+  schema: 'ai.ashlr.agent-board.commissioning-agent-operation/v1' as const,
+  requestedOperation: 'inspect' as const,
+  status: 'completed' as const,
+  internalExecutor: 'not_configured' as const,
+  capabilities: {
+    inspect: { availability: 'available' as const, executor: 'electron_main' as const, actor: 'agent' as const, safety: 'read' as const },
+    plan: { availability: 'available' as const, executor: 'electron_main' as const, actor: 'agent' as const, safety: 'local_record' as const },
+    apply: { availability: 'external_only' as const, executor: 'enrolled_agent_visible_ui' as const, actor: 'agent_or_operator' as const, safety: 'device_write' as const },
+    rollback: { availability: 'external_only' as const, executor: 'enrolled_agent_visible_ui' as const, actor: 'agent_or_operator' as const, safety: 'device_write' as const },
+  },
+}
+const props = () => ({ snapshot, plan, agentOperation, busy: false, onRefresh: vi.fn(), onPrepare: vi.fn(), onManualHandoff: vi.fn(), onFlightCheck: vi.fn() })
 afterEach(cleanup)
 
 describe('CommissioningWizard', () => {
@@ -30,21 +42,29 @@ describe('CommissioningWizard', () => {
     expect(document.querySelector('.commissioner-agent-lamps')?.children).toHaveLength(6)
   })
 
-  it('offers one primary handoff action and never implies write authority', () => {
+  it('offers one bounded external-agent handoff and never implies embedded write authority', () => {
     const callbacks = props()
     render(<CommissioningWizard {...callbacks} />)
     const next = screen.getByText('ONE SAFE NEXT ACTION').closest('.commissioner-next') as HTMLElement
-    fireEvent.click(within(next).getByRole('button', { name: 'Open manual handoff' }))
+    fireEvent.click(within(next).getByRole('button', { name: 'Open agent handoff' }))
     expect(callbacks.onManualHandoff).toHaveBeenCalledOnce()
-    expect(screen.getByText('Manual action required')).toBeTruthy()
-    expect(screen.getByText(/cannot authorize or perform profile import, activation, reset, firmware, or device writes/i)).toBeTruthy()
+    expect(screen.getByText('External agent workflow available')).toBeTruthy()
+    expect(screen.getByText(/embedded unattended executor is not configured/i)).toBeTruthy()
+    expect(screen.getByText(/reset, firmware, raw HID, and direct cache or device-file writes remain unavailable/i)).toBeTruthy()
     expect(screen.queryByRole('button', { name: /apply|write|activate|import/i })).toBeNull()
+  })
+
+  it('shows the typed operation availability without enabling an in-app apply', () => {
+    render(<CommissioningWizard {...props()} />)
+    expect(screen.getByRole('heading', { name: 'Typed commissioning surface' })).toBeTruthy()
+    expect(screen.getAllByText('External agent only')).toHaveLength(2)
+    expect(screen.getByText(/Internal executor · not configured/i)).toBeTruthy()
   })
 
   it('explains plan limits without rendering unbounded backend strings', () => {
     render(<CommissioningWizard {...props()} />)
     fireEvent.click(screen.getByText(/Review bounded commissioning plan/i))
-    expect(screen.getByText(/Confirming this plan does not apply it/i)).toBeTruthy()
+    expect(screen.getByText(/Preparing this plan does not apply it/i)).toBeTruthy()
     expect(screen.getByText(/Cache agreement, device synchronization, and physical acceptance remain separate/i)).toBeTruthy()
     expect(document.body.textContent).not.toContain(plan.id)
     expect(document.body.textContent).not.toContain(plan.reason)

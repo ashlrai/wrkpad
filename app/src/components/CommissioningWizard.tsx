@@ -1,9 +1,10 @@
 import { Activity, Check, ChevronRight, CircleAlert, Fingerprint, HardDrive, KeyRound, RadioTower, ShieldCheck, SlidersHorizontal } from 'lucide-react'
-import { COMMISSIONING_GATES, currentGateIndex, deriveCommissioningStage, gateState, nextCommissioningAction, type CommissioningAction, type CommissioningGateId, type CommissioningPlan, type CommissioningSnapshot } from '../commissioning'
+import { COMMISSIONING_GATES, currentGateIndex, deriveCommissioningStage, gateState, nextCommissioningAction, type CommissioningAction, type CommissioningAgentOperationState, type CommissioningGateId, type CommissioningOperation, type CommissioningOperationAvailability, type CommissioningPlan, type CommissioningSnapshot } from '../commissioning'
 
 export interface CommissioningWizardProps {
   snapshot: CommissioningSnapshot
   plan: CommissioningPlan | null
+  agentOperation: CommissioningAgentOperationState | null
   busy: boolean
   onRefresh: () => void | Promise<void>
   onPrepare: () => void | Promise<void>
@@ -21,12 +22,25 @@ const stageCopy = {
   device_exact: ['IDENTITY / OBSERVED', 'The board is here. Prove the route.', 'Next, verify the local receiver, Work Louder Input integrity, and macOS permission evidence.'],
   environment_verified: ['ENVIRONMENT / VERIFIED', 'Protect the source artifact.', 'Preserve the selected export before preparing a managed candidate.'],
   baseline_captured: ['SOURCE / PROTECTED', 'Build the plan, not the write.', 'Validate a candidate and bind it to current evidence without changing the board.'],
-  candidate_verified: ['CANDIDATE / VERIFIED', 'Prepare a human-only handoff.', 'A short-lived plan can now describe the manual work without authorizing it.'],
-  manual_action_required: ['OPERATOR / REQUIRED', 'Your hand stays on the controls.', 'Review the hashes, then complete the device action yourself in Work Louder Input.'],
+  candidate_verified: ['CANDIDATE / VERIFIED', 'Prepare a bound agent handoff.', 'A short-lived plan binds an enrolled external agent to the visible Input workflow without authorizing an in-app write.'],
+  manual_action_required: ['EXTERNAL AGENT / READY', 'Keep the run visible and bounded.', 'Review the hashes, then let an enrolled external agent continue through visible Work Louder Input UI.'],
   physical_check_ready: ['OPERATOR CHECK / READY', 'Attest the shortcut path.', 'Cache agreement is not device sync proof. Use only the intended board during the guided sequence.'],
   commissioned: ['ACTIVE RUN / ACCEPTED', 'Shortcut path accepted for this run.', 'The active operator-guided run passed. Saved receipts remain historical and do not commission a future session.'],
   blocked: ['COMMISSIONING / PAUSED', 'Stop at the failed gate.', 'Nothing downstream is treated as proven. Resolve the local blocker and run checks again.'],
 } as const
+
+const operationCopy: Record<CommissioningOperation, { label: string; detail: string }> = {
+  inspect: { label: 'Inspect', detail: 'Bounded evidence through Electron main.' },
+  plan: { label: 'Plan', detail: 'Private, expiring, content-bound local record.' },
+  apply: { label: 'Apply', detail: 'External visible-UI workflow; candidate, source backup, and cold-relaunch readback stay bound.' },
+  rollback: { label: 'Rollback', detail: 'External visible-UI restore only; the in-app executor cannot write the device.' },
+}
+const availabilityLabel: Record<CommissioningOperationAvailability, string> = {
+  available: 'Available here',
+  external_only: 'External agent only',
+  blocked: 'Blocked',
+  not_needed: 'Not needed',
+}
 
 const gateIcon = (id: CommissioningGateId) => {
   switch (id) {
@@ -53,7 +67,7 @@ const blockedLabel = (snapshot: CommissioningSnapshot, plan: CommissioningPlan |
   return null
 }
 
-export default function CommissioningWizard({ snapshot, plan, busy, onRefresh, onPrepare, onManualHandoff, onFlightCheck }: CommissioningWizardProps) {
+export default function CommissioningWizard({ snapshot, plan, agentOperation, busy, onRefresh, onPrepare, onManualHandoff, onFlightCheck }: CommissioningWizardProps) {
   const stage = deriveCommissioningStage(snapshot, plan)
   const copy = stageCopy[stage]
   const next = nextCommissioningAction(snapshot, plan)
@@ -88,13 +102,19 @@ export default function CommissioningWizard({ snapshot, plan, busy, onRefresh, o
       <div className="commissioner-next"><span className="eyebrow">ONE SAFE NEXT ACTION</span><h3>{next.label}</h3><p>{next.description}</p>
         <button type="button" disabled={busy} onClick={() => void callbacks[next.action]()}>{busy ? <Activity className="spin" size={16} /> : stage === 'commissioned' ? <Check size={16} /> : <ChevronRight size={16} />}{busy ? 'Checking bounded evidence…' : next.label}</button>
       </div>
-      <aside className="commissioner-boundary" aria-label="Commissioning authority boundary"><ShieldCheck size={19} /><div><span className="eyebrow">AUTHORITY BOUNDARY</span><strong>Manual action required</strong><p>Agent Board may inspect, validate, prepare, and verify. It cannot authorize or perform profile import, activation, reset, firmware, or device writes.</p></div></aside>
+      <aside className="commissioner-boundary" aria-label="Commissioning authority boundary"><ShieldCheck size={19} /><div><span className="eyebrow">AGENT COMMISSIONING</span><strong>External agent workflow available</strong><p>An enrolled Codex or Claude agent may back up, import, activate, cold-relaunch, verify, and roll back through visible Work Louder Input UI. The embedded unattended executor is not configured; reset, firmware, raw HID, and direct cache or device-file writes remain unavailable.</p></div></aside>
     </div>
 
+    {agentOperation && <section className="commissioner-agent-operations" aria-labelledby="commissioner-agent-operations-title">
+      <header><div><span className="eyebrow">AGENT OPERATIONS</span><h3 id="commissioner-agent-operations-title">Typed commissioning surface</h3></div><span className="commissioner-executor-status">Internal executor · not configured</span></header>
+      <ol>{(['inspect', 'plan', 'apply', 'rollback'] as const).map((operation) => { const capability = agentOperation.capabilities[operation]; return <li key={operation} className={`operation-${capability.availability}`}><div><strong>{operationCopy[operation].label}</strong><p>{operationCopy[operation].detail}</p></div><span>{availabilityLabel[capability.availability]}</span></li> })}</ol>
+      <p><ShieldCheck size={14} /> External-only means an enrolled agent uses the visible Work Louder Input UI. It does not make profile or device mutation available through Electron IPC.</p>
+    </section>}
+
     {plan && <details className="commissioner-plan"><summary>Review bounded commissioning plan <span>{plan.outcome.replaceAll('_', ' ')}</span></summary>
-      <div className="commissioner-plan-grid"><dl><div><dt>Route</dt><dd>Ashlr layer</dd></div><div><dt>Source backup</dt><dd><code>{compactHash(plan.baselineSha256)}</code></dd></div><div><dt>Candidate</dt><dd><code>{compactHash(plan.candidateSha256)}</code></dd></div><div><dt>Authority</dt><dd>Human input only</dd></div></dl>
-        <ul><li><Check size={13} /> Unmanaged profiles preserved</li><li><Check size={13} /> Source artifact remains available</li><li><Check size={13} /> Operator check stays mandatory</li></ul></div>
-      <p className="commissioner-manual-note"><CircleAlert size={15} /><span><strong>Confirming this plan does not apply it.</strong> The handoff provides manual Work Louder Input steps. Cache agreement, device synchronization, and physical acceptance remain separate.</span></p>
+      <div className="commissioner-plan-grid"><dl><div><dt>Route</dt><dd>Ashlr layer</dd></div><div><dt>Source backup</dt><dd><code>{compactHash(plan.baselineSha256)}</code></dd></div><div><dt>Candidate</dt><dd><code>{compactHash(plan.candidateSha256)}</code></dd></div><div><dt>Authority</dt><dd>Interactive Input UI</dd></div></dl>
+        <ul><li><Check size={13} /> Unmanaged profiles preserved</li><li><Check size={13} /> Source artifact remains available</li><li><Check size={13} /> Cold relaunch readback required</li></ul></div>
+      <p className="commissioner-manual-note"><CircleAlert size={15} /><span><strong>Preparing this plan does not apply it.</strong> An enrolled external agent may follow the visible Work Louder Input handoff. Cache agreement, device synchronization, and physical acceptance remain separate.</span></p>
     </details>}
 
     <details className="commissioner-evidence"><summary>Evidence by proof level <span>{COMMISSIONING_GATES.filter((gate) => ['observed', 'verified', 'accepted'].includes(gateState(snapshot, gate.id))).length}/{COMMISSIONING_GATES.length} gates</span></summary>

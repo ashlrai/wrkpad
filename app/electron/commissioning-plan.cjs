@@ -64,7 +64,7 @@ function sanitizeCommissioningPlan(value) {
   const lifetime = Date.parse(value.expiresAt) - Date.parse(value.createdAt)
   if (lifetime < MIN_PLAN_TTL_MS || lifetime > MAX_PLAN_TTL_MS) return null
   if (!OUTCOMES.has(value.outcome) || typeof value.reason !== 'string' || typeof value.nextAction !== 'string') return null
-  if (value.authority !== 'human_input_only' || value.writesAuthorized !== false) return null
+  if (value.authority !== 'external_agent_visible_ui' || value.writesAuthorized !== false) return null
   if (value.outcome === 'blocked') {
     if (!/^[a-z0-9_]{1,64}$/.test(value.reason) || value.nextAction !== 'resolve_blocker') return null
   } else {
@@ -83,7 +83,7 @@ function sanitizeCommissioningPlan(value) {
     candidateSha256: value.candidateSha256,
     baselineSha256: value.baselineSha256,
     inputCacheSha256: value.inputCacheSha256,
-    authority: 'human_input_only',
+    authority: 'external_agent_visible_ui',
     writesAuthorized: false,
   }
   if (value.id !== planId(payload)) return null
@@ -117,7 +117,7 @@ function createCommissioningPlan(snapshotValue, options = {}) {
     candidateSha256: snapshot.candidate.sha256,
     baselineSha256: snapshot.baseline.sha256,
     inputCacheSha256: snapshot.input.inputCacheSha256,
-    authority: 'human_input_only',
+    authority: 'external_agent_visible_ui',
     writesAuthorized: false,
   }
   const plan = sanitizeCommissioningPlan({ id: planId(payload), ...payload })

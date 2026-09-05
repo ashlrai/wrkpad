@@ -44,8 +44,10 @@ merge, deploy, publish, delete, spend, credential, or permission-approval action
 The recommended macOS configuration is a guarded
 [Dual Plane profile](app/docs/dual-plane-profile.md): Codex Native remains
 firmware layer 1, while layer 2 provides the stable mixed Codex + Claude Code
-workflow. Generation is offline; Input import, activation, and both physical
-acceptance checks remain explicit human operations.
+workflow. Generation is offline. A user may delegate visible Work Louder Input
+import and activation through the enrolled, content-bound commissioning
+contract; direct cache, HID, and firmware writes stay unavailable. Physical
+acceptance remains a separate real-control check.
 
 An opt-in [Hybrid Native experiment](app/docs/hybrid-native-profile.md) is also
 implemented in source. Its first layer leaves the six physical Agent keys
@@ -79,26 +81,33 @@ recommended cross-provider **Ashlr Layer** route. It replaces an ambiguous
 6. an active operator-attested shortcut run.
 
 The commissioner reads bounded local evidence, identifies the first missing
-proof, and can persist a private, expiring, content-bound plan with
-`writesAuthorized: false`. It never relabels Input's cache as a backup and
-never treats cache agreement as device synchronization. In the current source
-implementation, **Protect source export** means require the ordinary profile
-export selected for offline repair, hash it, retain its path and digest in the
-private recovery receipt, and revalidate the same bytes later. This preserves
-the selected source artifact; it does not prove that artifact is the current
-device configuration or a complete rollback. The app guides the operator when
-that export is missing; it does not create the Input export itself.
+proof, and persists a private, expiring, content-bound plan. In the current
+source build the embedded plan remains non-executable and records
+`writesAuthorized: false`; an internal unattended executor has not shipped.
+A capable enrolled Codex or Claude agent can use the repository runbook and
+visible Work Louder Input UI for one exact import-and-activate run. It binds the
+app identity, device class, route, before-state export, candidate digest,
+ordered UI actions, cold-relaunch readback, rollback artifact, nonce, and
+expiry. Drift or an unexpected dialog invalidates the run.
 
-This is diagnosis and orchestration, not headless board programming. Work
-Louder Input import, profile activation, device synchronization, macOS
-permission changes, reset, firmware, and every HID or device-filesystem write
-remain direct human actions. A fresh Flight Check is an operator attestation
-that the intended board alone was used while its global-shortcut sequence
-reached the active receiver; macOS does not cryptographically identify the
-source keyboard. The receipt is historical after the run and never commissions
-a future app or device session. Codex Native keeps its separate passive handoff because its
-firmware-owned keys, RGB, and visible task behavior cannot be inferred from the
-Ashlr shortcut route.
+The enrolled path must automatically save and hash a fresh vendor-UI
+before-state export, reject an unusable backup, activate only the authorized
+candidate, cold-relaunch Input, and verify exact checksum plus semantic
+readback. On failure it gets one bounded UI rollback attempt and verifies that
+readback too. It never relabels Input's cache as a backup and never treats
+“layout updated” as synchronization. If a protected rollback cannot be created,
+the first write is forbidden.
+
+This is guarded visible-UI commissioning, not headless board programming.
+Direct Input cache/database edits, private IPC, remote debugging, reset,
+firmware, raw HID, and device-filesystem writes remain unavailable. macOS
+permission changes stay user-controlled. A fresh Flight Check separately
+records that the intended real board was used while its shortcut sequence
+reached the active receiver; injected keys cannot satisfy it and macOS does not
+cryptographically identify the source keyboard. The receipt is historical
+after the run and never commissions a future app or device session. Codex
+Native keeps its separate passive handoff because its firmware-owned keys, RGB,
+and visible task behavior cannot be inferred from the Ashlr shortcut route.
 
 See the [commissioner architecture](docs/commissioner-architecture.md), then
 follow [Setup and Flight Check](app/docs/setup.md).
@@ -153,18 +162,21 @@ follow [Setup and Flight Check](app/docs/setup.md).
   results, and disables shortcut ownership when more than one Agent Board
   receiver is running.
 - The Ashlr Layer commissioner turns those receipts into an ordered six-gate
-  runway and one safe next action. Its plan and private journal are source-tested;
-  no plan grants device-write authority.
+  runway and one safe next action. Its read-only plan and private journal are
+  source-tested. External computer-use agents can follow the enrolled visible-UI
+  contract; the embedded unattended executor remains unconfigured.
 - Both components sanitize private provider content and distinguish source,
   package, integration, provider, physical, and user acceptance.
 
 ## Deliberate boundaries
 
-- No mutation of Work Louder Input's cache/database, active profile, keymap,
-  firmware, bootloader, or device filesystem. The app can create a new private
-  offline profile export for an operator to review and import manually.
-- No automatic quitting or killing of ChatGPT Desktop, Work Louder Input,
-  Logitech, Karabiner, or provider processes.
+- No direct mutation of Work Louder Input's cache/database, keymap, firmware,
+  bootloader, HID channel, or device filesystem. The enrolled commissioning
+  design is limited to visible Input UI import/activation with protected backup,
+  cold-relaunch readback, and one bounded rollback.
+- No killing of ChatGPT Desktop, Work Louder Input, Logitech, Karabiner, or
+  provider processes. A content-bound commissioning plan may gracefully quit
+  and relaunch Input only for its named exclusive write/readback window.
 - No exact Codex task or cmux pane focus.
 - Hybrid Native's six physical Agent keys remain Codex-only; the mixed screen
   queue does not give those keys exact Claude Code or cmux pane selection.
@@ -294,7 +306,11 @@ app's strict profile verifier and route tests, and the
 relabel either established route's result as Hybrid Native readiness.
 
 See the [agent operations runbook](docs/agent-operations.md) for the daily
-Codex/Claude workflow and human handoff gates.
+Codex/Claude workflow, enrollment boundary, and remaining physical gates.
+Codex and Claude agents can load the repository-local
+[`$wrkpad-commissioner`](.agents/skills/wrkpad-commissioner/SKILL.md) skill to
+advance the same evidence, visible-UI readback, and rollback sequence without
+rediscovering it.
 
 Core gates:
 
@@ -339,6 +355,8 @@ Repository map:
 - [`docs/architecture.md`](docs/architecture.md) — core components and trust boundaries.
 - [`docs/agent-operations.md`](docs/agent-operations.md) — shared Codex, Claude,
   hardware, and release workflow for humans and agents.
+- [`.agents/skills/wrkpad-commissioner/`](.agents/skills/wrkpad-commissioner/) —
+  reusable commissioning workflow for capable local agents.
 - [`docs/creator-micro-2-post-flash-2026-09-02.md`](docs/creator-micro-2-post-flash-2026-09-02.md) —
   canonical dated desk evidence and remaining acceptance gates.
 - [`SECURITY.md`](SECURITY.md), [`CONTRIBUTING.md`](CONTRIBUTING.md),

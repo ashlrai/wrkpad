@@ -80,15 +80,23 @@ and reversible offline artifacts are allowed. Never infer authority—even from
 - push, merge, deploy, publish, release, or external communication;
 - deletion or destructive cleanup;
 - purchases, paid services, credentials, or production/provider activation;
-- firmware, bootloader, HID, keymap, or device-filesystem writes;
+- firmware, bootloader, raw HID, direct keymap/device-filesystem writes, reset,
+  deletion, private Input IPC, or Input cache/database edits;
 - macOS TCC, Input Monitoring, Accessibility, or other permission changes;
-- quitting or killing applications or competing device owners;
+- killing applications or competing device owners;
 - provider approval, hook trust, inbox decisions, or consequential fleet action;
 - prompt submission, terminal input, or claims of exact task/thread/pane focus.
 
 Stop immediately before such an action and obtain explicit authorization for
-the exact target and consequence. Preserve confirmation, hold, rollback, and
-human physical-operation gates already present in the project.
+the exact target and consequence. The one narrow exception is enrolled Creator
+Micro 2 commissioning: after one-time local enrollment, an agent may gracefully
+quit/relaunch Work Louder Input and drive its visible import/activation UI only
+under a fresh, one-use plan bound to the exact app identity, device class,
+route, before-state backup, candidate digest, ordered actions, readback, and
+rollback artifact. Any drift or unexpected dialog fails closed. Enrollment
+never authorizes TCC changes, direct cache/HID writes, reset, deletion,
+firmware, or a future profile. Preserve confirmation, hold, rollback, and real
+physical-operation gates already present in the project.
 
 ## Finish with a truthful handoff
 

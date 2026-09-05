@@ -4,7 +4,7 @@ import { commissioningPlanCurrent, currentGateIndex, deriveCommissioningStage, g
 const candidateHash = 'b'.repeat(64)
 const plan: CommissioningPlan = {
   schema: 'ai.ashlr.agent-board.commissioning-plan/v1', id: 'plan-01', createdAt: '2026-09-04T16:00:00.000Z', expiresAt: '2026-09-04T16:15:00.000Z', route: 'ashlr_layer', outcome: 'ready',
-  reason: 'manual handoff required', nextAction: 'open handoff', snapshotSha256: 'c'.repeat(64), candidateSha256: candidateHash, baselineSha256: 'a'.repeat(64), inputCacheSha256: null, authority: 'human_input_only', writesAuthorized: false,
+  reason: 'external agent handoff required', nextAction: 'open handoff', snapshotSha256: 'c'.repeat(64), candidateSha256: candidateHash, baselineSha256: 'a'.repeat(64), inputCacheSha256: null, authority: 'external_agent_visible_ui', writesAuthorized: false,
 }
 const base: CommissioningSnapshot = {
   schema: 'ai.ashlr.agent-board.commissioning-snapshot/v1', observedAt: '2026-09-04T16:00:00.000Z', route: 'ashlr_layer', device: { status: 'exact', vidPid: '303A:8298' },
@@ -34,8 +34,8 @@ describe('commissioning selectors', () => {
 
   it('never turns planning into write authority', () => {
     const action = nextCommissioningAction(base, plan, Date.parse(plan.createdAt))
-    expect(action).toMatchObject({ action: 'manual_handoff', label: 'Open manual handoff' })
-    expect(plan.authority).toBe('human_input_only')
+    expect(action).toMatchObject({ action: 'manual_handoff', label: 'Open agent handoff' })
+    expect(plan.authority).toBe('external_agent_visible_ui')
     expect(plan.writesAuthorized).toBe(false)
     expect(action).not.toHaveProperty('apply')
   })

@@ -23,11 +23,35 @@ export type CommissioningPlan = {
   candidateSha256: string | null
   baselineSha256: string | null
   inputCacheSha256: string | null
-  authority: 'human_input_only'
+  authority: 'external_agent_visible_ui'
   writesAuthorized: false
 }
 
-export type CommissioningCoordinatorResponse = { ok: boolean; code: string; message: string; snapshot: CommissioningSnapshot | null; plan: CommissioningPlan | null; journalRevision: number | null }
+export type CommissioningOperation = 'inspect' | 'plan' | 'apply' | 'rollback'
+export type CommissioningOperationRequest = { operation: 'inspect' | 'plan'; planId: null } | { operation: 'apply' | 'rollback'; planId: string }
+export type CommissioningOperationAvailability = 'available' | 'external_only' | 'blocked' | 'not_needed'
+export type CommissioningOperationCapability = {
+  availability: CommissioningOperationAvailability
+  executor: 'electron_main' | 'enrolled_agent_visible_ui' | 'none'
+  actor: 'agent' | 'agent_or_operator'
+  safety: 'read' | 'local_record' | 'device_write'
+}
+export type CommissioningAgentOperationState = {
+  schema: 'ai.ashlr.agent-board.commissioning-agent-operation/v1'
+  requestedOperation: CommissioningOperation | null
+  status: 'completed' | 'blocked' | 'external_handoff_required' | 'not_needed'
+  internalExecutor: 'not_configured'
+  capabilities: Record<CommissioningOperation, CommissioningOperationCapability>
+}
+export type CommissioningCoordinatorResponse = {
+  ok: boolean
+  code: string
+  message: string
+  snapshot: CommissioningSnapshot | null
+  plan: CommissioningPlan | null
+  journalRevision: number | null
+  agentOperation?: CommissioningAgentOperationState
+}
 export type CommissioningStage = 'disconnected' | 'device_exact' | 'environment_verified' | 'baseline_captured' | 'candidate_verified' | 'manual_action_required' | 'physical_check_ready' | 'commissioned' | 'blocked'
 export type CommissioningAction = 'refresh' | 'prepare' | 'manual_handoff' | 'flight_check'
 export type CommissioningNextAction = { action: CommissioningAction; label: string; description: string }
@@ -82,11 +106,11 @@ export function nextCommissioningAction(snapshot: CommissioningSnapshot, plan: C
     case 'device_exact': return { action: 'refresh', label: 'Verify local environment', description: 'Re-check app integrity, receiver exclusivity, and permission evidence.' }
     case 'environment_verified': return { action: 'prepare', label: 'Protect source export', description: 'Preserve the selected source artifact before candidate work.' }
     case 'baseline_captured': return { action: 'prepare', label: 'Prepare commissioning plan', description: 'Validate the candidate without writing to the board.' }
-    case 'candidate_verified': return { action: 'prepare', label: 'Prepare commissioning plan', description: 'Bind current evidence to a short-lived, human-only handoff.' }
+    case 'candidate_verified': return { action: 'prepare', label: 'Prepare commissioning plan', description: 'Bind current evidence to a short-lived external-agent handoff with rollback evidence.' }
     case 'manual_action_required':
       return !commissioningPlanCurrent(plan, now)
         ? { action: 'prepare', label: 'Refresh commissioning plan', description: 'Prepare a fresh plan because the previous evidence binding expired.' }
-        : { action: 'manual_handoff', label: 'Open manual handoff', description: 'Complete the exact device action yourself in Work Louder Input.' }
+        : { action: 'manual_handoff', label: 'Open agent handoff', description: 'Continue through visible Work Louder Input UI with an enrolled external agent.' }
     case 'physical_check_ready': return { action: 'flight_check', label: 'Start operator check', description: 'Use only the intended board controls to attest the shortcut path for this active run.' }
     case 'commissioned': return { action: 'flight_check', label: 'Open Flight Check', description: 'Review or repeat the active operator-attested shortcut run.' }
     case 'blocked': return { action: 'refresh', label: 'Run checks again', description: 'Re-check bounded local evidence after resolving the failed gate.' }
