@@ -232,6 +232,6 @@ test('main status and Flight Check paths await the shared worker-backed inspecto
   assert.match(source, /createInputInstallationInspector/u)
   assert.doesNotMatch(source, /require\('\.\/input-installation-diagnostics\.cjs'\)/u)
   assert.match(source, /const inputInstallation = await inspectCurrentInputInstallation\(forceInput\)[\s\S]*const board = await boardConnected\(\)[\s\S]*const settings = readSettings\(\)[\s\S]*const currentReceiverRuntime = synchronizeShortcutOwnership\(settings\.boardRoute\)\.runtime/u)
-  assert.match(source, /const inputInstallationPending = inspectCurrentInputInstallation\(\)[\s\S]*const currentReceiverRuntime = synchronizeShortcutOwnership\(settings\.boardRoute\)\.runtime[\s\S]*\[inputInstallation, board,[\s\S]*inputInstallationPending/u)
+  assert.match(source, /const inputInstallationPending = inspectCurrentInputInstallation\(\)[\s\S]*const currentReceiverRuntime = reconcileShortcuts[\s\S]*synchronizeShortcutOwnership\(settings\.boardRoute\)\.runtime[\s\S]*inspectCurrentReceiverRuntime\(\)[\s\S]*\[inputInstallation, board,[\s\S]*inputInstallationPending/u)
   assert.match(source, /const \[inputInstallation, board, codex, claude, ashlr, workspaceSnapshot, chatgptInspection\] = await Promise\.all/u)
 })

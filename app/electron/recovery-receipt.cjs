@@ -38,11 +38,17 @@ function recoveryReceiptPath(settingsFilePath) {
 function sanitizeRecoveryReceipt(value) {
   if (!value || value.schema !== RECOVERY_SCHEMA) return null
   if (!validLocalPath(value.artifactPath) || !/^[0-9a-f]{64}$/.test(value.sha256) || !validIsoTimestamp(value.createdAt)) return null
+  const hasBaseline = value.baselinePath !== undefined || value.baselineSha256 !== undefined
+  if (hasBaseline && (!validLocalPath(value.baselinePath) || !/^[0-9a-f]{64}$/.test(value.baselineSha256))) return null
+  const hasAcceptance = value.acceptedCandidateSha256 !== undefined || value.acceptedAt !== undefined
+  if (hasAcceptance && (!/^[0-9a-f]{64}$/.test(value.acceptedCandidateSha256) || !validIsoTimestamp(value.acceptedAt))) return null
   return {
     schema: RECOVERY_SCHEMA,
     artifactPath: value.artifactPath,
     sha256: value.sha256,
     createdAt: value.createdAt,
+    ...(hasBaseline ? { baselinePath: value.baselinePath, baselineSha256: value.baselineSha256 } : {}),
+    ...(hasAcceptance ? { acceptedCandidateSha256: value.acceptedCandidateSha256, acceptedAt: value.acceptedAt } : {}),
   }
 }
 
@@ -94,6 +100,11 @@ function observeRecoveryArtifact(receipt) {
   }
 }
 
+function observeRecoveryBaseline(receipt) {
+  if (!receipt?.baselinePath || !receipt?.baselineSha256) return { status: 'missing', available: false }
+  return observeRecoveryArtifact({ artifactPath: receipt.baselinePath, sha256: receipt.baselineSha256 })
+}
+
 function removeRecoveryReceipt(filePath) {
   if (!validLocalPath(filePath)) return false
   try {
@@ -108,8 +119,9 @@ function removeRecoveryReceipt(filePath) {
 
 function buildRecoveryChecklist(receipt, observation = observeRecoveryArtifact(receipt)) {
   const artifactName = receipt ? path.basename(receipt.artifactPath) : null
+  const baselineName = receipt?.baselinePath ? path.basename(receipt.baselinePath) : null
   const artifact = receipt && observation?.available
-    ? `Keep the ordinary Input export as your rollback backup. The corrected artifact is ${artifactName}; verify the displayed SHA-256 before import.`
+    ? `Keep the ordinary Input export${baselineName ? ` ${baselineName}` : ''} as your rollback backup. The corrected artifact is ${artifactName}; verify the displayed SHA-256 before import.`
     : receipt
       ? `The recorded corrected artifact ${artifactName} is missing, moved, unsafe, or does not match its saved SHA-256. Locate the exact file and verify it, or create a new corrected artifact before opening Input. Do not import a guessed file.`
     : 'In Input’s profile chooser, hover an ordinary US Creator Micro 2 profile and choose Export Profile. Keep that export as your rollback backup, then return here and choose Create corrected Input profile.'
@@ -141,6 +153,7 @@ module.exports = {
   buildRecoveryChecklist,
   readRecoveryReceipt,
   observeRecoveryArtifact,
+  observeRecoveryBaseline,
   recoveryChecklistText,
   recoveryReceiptPath,
   removeRecoveryReceipt,

@@ -65,6 +65,44 @@ The desktop app consumes bounded `wrkpad status --json` output. Each component
 remains useful independently: the core has a TUI and JSON API; the app clearly
 marks missing observers and optional CLIs as unavailable.
 
+## Local commissioner: one safe next action
+
+The Agent Board Setup view includes a deterministic commissioner for the
+recommended cross-provider **Ashlr Layer** route. It replaces an ambiguous
+“connected” indicator with six independently labeled gates:
+
+1. exact Creator Micro 2 USB identity;
+2. Work Louder Input installation trust;
+3. one trusted shortcut receiver and permission evidence;
+4. a preserved source export;
+5. a strictly validated offline candidate; and
+6. an active operator-attested shortcut run.
+
+The commissioner reads bounded local evidence, identifies the first missing
+proof, and can persist a private, expiring, content-bound plan with
+`writesAuthorized: false`. It never relabels Input's cache as a backup and
+never treats cache agreement as device synchronization. In the current source
+implementation, **Protect source export** means require the ordinary profile
+export selected for offline repair, hash it, retain its path and digest in the
+private recovery receipt, and revalidate the same bytes later. This preserves
+the selected source artifact; it does not prove that artifact is the current
+device configuration or a complete rollback. The app guides the operator when
+that export is missing; it does not create the Input export itself.
+
+This is diagnosis and orchestration, not headless board programming. Work
+Louder Input import, profile activation, device synchronization, macOS
+permission changes, reset, firmware, and every HID or device-filesystem write
+remain direct human actions. A fresh Flight Check is an operator attestation
+that the intended board alone was used while its global-shortcut sequence
+reached the active receiver; macOS does not cryptographically identify the
+source keyboard. The receipt is historical after the run and never commissions
+a future app or device session. Codex Native keeps its separate passive handoff because its
+firmware-owned keys, RGB, and visible task behavior cannot be inferred from the
+Ashlr shortcut route.
+
+See the [commissioner architecture](docs/commissioner-architecture.md), then
+follow [Setup and Flight Check](app/docs/setup.md).
+
 ## What works now
 
 - `wrkpad doctor` separates USB, HID, tool, and process evidence without opening
@@ -114,6 +152,9 @@ marks missing observers and optional CLIs as unavailable.
   verifies only sanitized Work Louder Input publisher/signature/Gatekeeper
   results, and disables shortcut ownership when more than one Agent Board
   receiver is running.
+- The Ashlr Layer commissioner turns those receipts into an ordered six-gate
+  runway and one safe next action. Its plan and private journal are source-tested;
+  no plan grants device-write authority.
 - Both components sanitize private provider content and distinguish source,
   package, integration, provider, physical, and user acceptance.
 

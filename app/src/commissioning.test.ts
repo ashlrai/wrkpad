@@ -24,10 +24,12 @@ describe('commissioning selectors', () => {
   })
 
   it('requires candidate-bound physical acceptance', () => {
-    const accepted = { ...base, input: { ...base.input, cacheStatus: 'candidate' as const, inputCacheSha256: candidateHash }, physicalAcceptance: { status: 'accepted' as const, candidateSha256: candidateHash, acceptedAt: base.observedAt } }
+    const accepted = { ...base, input: { ...base.input, cacheStatus: 'candidate' as const }, physicalAcceptance: { status: 'accepted' as const, candidateSha256: candidateHash, acceptedAt: base.observedAt } }
     expect(deriveCommissioningStage(accepted, plan)).toBe('commissioned')
     expect(gateState(accepted, 'physical')).toBe('accepted')
     expect(deriveCommissioningStage({ ...accepted, physicalAcceptance: { ...accepted.physicalAcceptance, candidateSha256: 'other' } }, plan)).toBe('physical_check_ready')
+    expect(deriveCommissioningStage({ ...accepted, input: { ...accepted.input, cacheStatus: 'different' } }, null)).toBe('candidate_verified')
+    expect(nextCommissioningAction(accepted, plan)).toMatchObject({ action: 'flight_check', label: 'Open Flight Check' })
   })
 
   it('never turns planning into write authority', () => {
@@ -39,7 +41,7 @@ describe('commissioning selectors', () => {
   })
 
   it('expires plans closed and locates the first unresolved gate', () => {
-    expect(commissioningPlanCurrent(plan, Date.parse(plan.expiresAt))).toBe(true)
+    expect(commissioningPlanCurrent(plan, Date.parse(plan.expiresAt))).toBe(false)
     expect(commissioningPlanCurrent(plan, Date.parse(plan.expiresAt) + 1)).toBe(false)
     expect(nextCommissioningAction(base, plan, Date.parse(plan.expiresAt) + 1).action).toBe('prepare')
     expect(currentGateIndex({ ...base, receiver: { status: 'absent', inputMonitoring: 'unknown' } })).toBe(2)

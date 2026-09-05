@@ -13,18 +13,18 @@ export interface CommissioningWizardProps {
 
 const gateExplanation: Record<CommissioningGateId, string> = {
   device: 'Exact USB identity observed; control behavior is not inferred.', input: 'Installed app trust and integrity evidence.',
-  receiver: 'One trusted receiver plus Input Monitoring permission.', baseline: 'A private rollback point captured before candidate work.',
-  candidate: 'The managed candidate passed semantic validation.', physical: 'Fresh real-board receipts bound to this candidate.',
+  receiver: 'One trusted receiver. Permission is accepted only through the later operator check.', baseline: 'A private source export preserved before candidate work; it is not asserted to be the current board state.',
+  candidate: 'The managed candidate passed semantic validation.', physical: 'An operator-attested global-shortcut run for the active session; keyboard source is not cryptographically identifiable.',
 }
 const stageCopy = {
   disconnected: ['DISCOVERY / LOCAL ONLY', 'Connect one exact board.', 'Waiting for a Creator Micro 2 over USB. Detection proves identity only.'],
   device_exact: ['IDENTITY / OBSERVED', 'The board is here. Prove the route.', 'Next, verify the local receiver, Work Louder Input integrity, and macOS permission evidence.'],
-  environment_verified: ['ENVIRONMENT / VERIFIED', 'Protect what already works.', 'Capture a private rollback baseline before preparing a managed candidate.'],
-  baseline_captured: ['RECOVERY / PROTECTED', 'Build the plan, not the write.', 'Validate a candidate and bind it to current evidence without changing the board.'],
+  environment_verified: ['ENVIRONMENT / VERIFIED', 'Protect the source artifact.', 'Preserve the selected export before preparing a managed candidate.'],
+  baseline_captured: ['SOURCE / PROTECTED', 'Build the plan, not the write.', 'Validate a candidate and bind it to current evidence without changing the board.'],
   candidate_verified: ['CANDIDATE / VERIFIED', 'Prepare a human-only handoff.', 'A short-lived plan can now describe the manual work without authorizing it.'],
   manual_action_required: ['OPERATOR / REQUIRED', 'Your hand stays on the controls.', 'Review the hashes, then complete the device action yourself in Work Louder Input.'],
-  physical_check_ready: ['HARDWARE / READY TO PROVE', 'Press the real controls.', 'Cache agreement is not device sync proof. A fresh physical sequence is the acceptance gate.'],
-  commissioned: ['ACCEPTANCE / COMPLETE', 'This board is commissioned.', 'Identity, environment, candidate, and physical evidence are distinct and current.'],
+  physical_check_ready: ['OPERATOR CHECK / READY', 'Attest the shortcut path.', 'Cache agreement is not device sync proof. Use only the intended board during the guided sequence.'],
+  commissioned: ['ACTIVE RUN / ACCEPTED', 'Shortcut path accepted for this run.', 'The active operator-guided run passed. Saved receipts remain historical and do not commission a future session.'],
   blocked: ['COMMISSIONING / PAUSED', 'Stop at the failed gate.', 'Nothing downstream is treated as proven. Resolve the local blocker and run checks again.'],
 } as const
 
@@ -43,9 +43,10 @@ const blockedLabel = (snapshot: CommissioningSnapshot, plan: CommissioningPlan |
   if (snapshot.device.status === 'ambiguous') return 'More than one eligible board was observed.'
   if (snapshot.device.status === 'unsupported') return 'The connected device is not the exact supported model.'
   if (snapshot.input.installation === 'untrusted' || snapshot.input.installation === 'multiple') return 'Work Louder Input trust could not be established.'
+  if (snapshot.input.cacheStatus === 'invalid' || snapshot.input.cacheStatus === 'unsafe') return 'Work Louder Input cache evidence is invalid or unsafe.'
   if (snapshot.receiver.status === 'multiple' || snapshot.receiver.status === 'untrusted') return 'Receiver exclusivity or integrity failed.'
   if (snapshot.receiver.inputMonitoring === 'denied') return 'Input Monitoring permission is denied.'
-  if (snapshot.baseline.status === 'invalid') return 'The rollback baseline is invalid.'
+  if (snapshot.baseline.status === 'invalid') return 'The protected source export is invalid.'
   if (snapshot.candidate.status === 'invalid') return 'The candidate failed validation.'
   if (snapshot.physicalAcceptance.status === 'failed') return 'A physical control reached the wrong destination.'
   if (plan?.outcome === 'blocked') return 'The bounded plan is blocked.'
@@ -58,7 +59,7 @@ export default function CommissioningWizard({ snapshot, plan, busy, onRefresh, o
   const next = nextCommissioningAction(snapshot, plan)
   const currentIndex = currentGateIndex(snapshot)
   const blocker = blockedLabel(snapshot, plan)
-  const callbacks: Record<CommissioningAction, () => void | Promise<void>> = { refresh: onRefresh, prepare: onPrepare, manual_handoff: onManualHandoff, flight_check: onFlightCheck, review_receipt: onFlightCheck }
+  const callbacks: Record<CommissioningAction, () => void | Promise<void>> = { refresh: onRefresh, prepare: onPrepare, manual_handoff: onManualHandoff, flight_check: onFlightCheck }
 
   return <section className="commissioner" aria-labelledby="commissioner-title" aria-busy={busy}>
     <header className="commissioner-hero">
@@ -91,8 +92,8 @@ export default function CommissioningWizard({ snapshot, plan, busy, onRefresh, o
     </div>
 
     {plan && <details className="commissioner-plan"><summary>Review bounded commissioning plan <span>{plan.outcome.replaceAll('_', ' ')}</span></summary>
-      <div className="commissioner-plan-grid"><dl><div><dt>Route</dt><dd>Ashlr layer</dd></div><div><dt>Baseline</dt><dd><code>{compactHash(plan.baselineSha256)}</code></dd></div><div><dt>Candidate</dt><dd><code>{compactHash(plan.candidateSha256)}</code></dd></div><div><dt>Authority</dt><dd>Human input only</dd></div></dl>
-        <ul><li><Check size={13} /> Unmanaged profiles preserved</li><li><Check size={13} /> Rollback remains available</li><li><Check size={13} /> Physical check stays mandatory</li></ul></div>
+      <div className="commissioner-plan-grid"><dl><div><dt>Route</dt><dd>Ashlr layer</dd></div><div><dt>Source backup</dt><dd><code>{compactHash(plan.baselineSha256)}</code></dd></div><div><dt>Candidate</dt><dd><code>{compactHash(plan.candidateSha256)}</code></dd></div><div><dt>Authority</dt><dd>Human input only</dd></div></dl>
+        <ul><li><Check size={13} /> Unmanaged profiles preserved</li><li><Check size={13} /> Source artifact remains available</li><li><Check size={13} /> Operator check stays mandatory</li></ul></div>
       <p className="commissioner-manual-note"><CircleAlert size={15} /><span><strong>Confirming this plan does not apply it.</strong> The handoff provides manual Work Louder Input steps. Cache agreement, device synchronization, and physical acceptance remain separate.</span></p>
     </details>}
 

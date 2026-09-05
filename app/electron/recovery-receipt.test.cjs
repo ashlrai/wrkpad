@@ -10,6 +10,7 @@ const {
   buildRecoveryChecklist,
   readRecoveryReceipt,
   observeRecoveryArtifact,
+  observeRecoveryBaseline,
   recoveryChecklistText,
   recoveryReceiptPath,
   removeRecoveryReceipt,
@@ -93,12 +94,39 @@ test('re-hashes a bounded regular artifact and rejects replacement or symlink st
   }
 })
 
+test('persists and independently observes the selected source backup', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'agent-board-baseline-'))
+  try {
+    const artifactPath = path.join(root, 'corrected.json')
+    const baselinePath = path.join(root, 'ordinary-export.json')
+    writeFileSync(artifactPath, '{"profile":"corrected"}\n')
+    writeFileSync(baselinePath, '{"profile":"ordinary"}\n')
+    const extended = {
+      artifactPath,
+      sha256: createHash('sha256').update(readFileSync(artifactPath)).digest('hex'),
+      baselinePath,
+      baselineSha256: createHash('sha256').update(readFileSync(baselinePath)).digest('hex'),
+      createdAt: receipt.createdAt,
+      acceptedCandidateSha256: createHash('sha256').update(readFileSync(artifactPath)).digest('hex'),
+      acceptedAt: '2026-09-01T20:05:00.000Z',
+    }
+    const filePath = recoveryReceiptPath(path.join(root, 'settings.json'))
+    assert.deepEqual(writeRecoveryReceipt(filePath, extended), { schema: RECOVERY_SCHEMA, ...extended })
+    assert.deepEqual(observeRecoveryBaseline(readRecoveryReceipt(filePath)), { status: 'available', available: true })
+    writeFileSync(baselinePath, '{"profile":"changed"}\n')
+    assert.deepEqual(observeRecoveryBaseline(readRecoveryReceipt(filePath)), { status: 'hash_mismatch', available: false })
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test('rejects control and bidi characters in persisted paths', () => {
   const root = mkdtempSync(path.join(tmpdir(), 'agent-board-path-'))
   try {
     const filePath = recoveryReceiptPath(path.join(root, 'settings.json'))
     assert.throws(() => writeRecoveryReceipt(filePath, { ...receipt, artifactPath: `${root}/bad\n2. injected.json` }), /invalid/)
     assert.throws(() => writeRecoveryReceipt(filePath, { ...receipt, artifactPath: `${root}/bad\u202eevil.json` }), /invalid/)
+    assert.throws(() => writeRecoveryReceipt(filePath, { ...receipt, acceptedCandidateSha256: 'a'.repeat(64) }), /invalid/)
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

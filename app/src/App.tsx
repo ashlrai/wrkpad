@@ -1456,6 +1456,14 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
   const [commissioningBusy, setCommissioningBusy] = useState(false)
   const [commissioningError, setCommissioningError] = useState<string | null>(null)
   const recoveryFocus = useRef<HTMLElement | null>(null)
+  const commissioningEvidenceKey = JSON.stringify([
+    status.boardRoute, status.boardConnected, status.boardVidPid,
+    status.inputInstallation?.status, status.inputInstallation?.version,
+    status.inputProfile?.cacheStatus, status.inputProfile?.activeProfile,
+    status.inputProfile?.activeLayer, status.inputProfile?.encoderDirection,
+    status.receiverRuntime?.status, status.receiverRuntime?.instanceCount,
+    status.receiverRuntime?.distinctBuildCount, status.receiverRuntime?.currentAsarSha256,
+  ])
 
   const refreshCommissioning = useCallback(async () => {
     if (!window.agentBoard?.getCommissioning || status.boardRoute !== 'ashlr_layer') return null
@@ -1467,6 +1475,7 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
       if (!response.ok) setCommissioningError(response.message)
       return response
     } catch {
+      setCommissioning(null)
       setCommissioningError('Commissioning evidence could not be collected safely. No configuration was changed.')
       return null
     } finally {
@@ -1493,7 +1502,7 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
     if (status.boardRoute !== 'ashlr_layer') return
     const timer = window.setTimeout(() => { void refreshCommissioning() }, 0)
     return () => window.clearTimeout(timer)
-  }, [refreshCommissioning, status.boardRoute])
+  }, [commissioningEvidenceKey, refreshCommissioning, status.boardRoute])
   const nativeCodexMicro = status.nativeCodexMicro ?? initialStatus.nativeCodexMicro
   const chatgptDesktop = status.chatgptDesktop ?? initialStatus.chatgptDesktop
   const nativeEvidenceKey = JSON.stringify([

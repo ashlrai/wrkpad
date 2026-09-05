@@ -19,7 +19,7 @@ function evidence(overrides = {}) {
       version: '0.18.4',
       running: 'quit',
       cacheStatus: 'candidate',
-      inputCacheSha256: CANDIDATE_SHA,
+      inputCacheSha256: 'c'.repeat(64),
     },
     receiver: { status: 'single_trusted', inputMonitoring: 'granted' },
     candidate: { status: 'verified', sha256: CANDIDATE_SHA },
@@ -33,7 +33,7 @@ test('creates a strict privacy-projected Ashlr Layer snapshot', () => {
   const snapshot = createCommissioningSnapshot(evidence(), '2026-09-04T20:00:00.000Z')
   assert.equal(snapshot.schema, COMMISSIONING_SNAPSHOT_SCHEMA)
   assert.equal(snapshot.route, 'ashlr_layer')
-  assert.equal(snapshot.input.inputCacheSha256, CANDIDATE_SHA)
+  assert.equal(snapshot.input.inputCacheSha256, 'c'.repeat(64))
   assert.deepEqual(sanitizeCommissioningSnapshot(snapshot), snapshot)
   assert.doesNotMatch(JSON.stringify(snapshot), /Users|serial|prompt|transcript|workspace|artifactPath/)
 })
@@ -94,14 +94,11 @@ test('semantic snapshot hashes ignore collection time but bind all commissioning
   assert.notEqual(commissioningSnapshotSha256(first), commissioningSnapshotSha256(changed))
 })
 
-test('rejects malformed, future acceptance, cache inconsistency, extra privacy fields, and other routes', () => {
+test('rejects malformed, future acceptance, extra privacy fields, and other routes', () => {
   const snapshot = createCommissioningSnapshot(evidence(), '2026-09-04T20:00:00.000Z')
   assert.equal(sanitizeCommissioningSnapshot({ ...snapshot, serial: 'private' }), null)
   assert.equal(sanitizeCommissioningSnapshot({ ...snapshot, route: 'codex_native' }), null)
-  assert.equal(sanitizeCommissioningSnapshot({
-    ...snapshot,
-    input: { ...snapshot.input, inputCacheSha256: 'c'.repeat(64) },
-  }), null)
+  assert.ok(sanitizeCommissioningSnapshot({ ...snapshot, input: { ...snapshot.input, inputCacheSha256: 'd'.repeat(64) } }))
   assert.equal(sanitizeCommissioningSnapshot({
     ...snapshot,
     physicalAcceptance: {
@@ -111,4 +108,11 @@ test('rejects malformed, future acceptance, cache inconsistency, extra privacy f
     },
   }), null)
   assert.throws(() => createCommissioningSnapshot({ ...evidence(), workspace: '/private' }), /invalid or privacy-unbounded/)
+})
+
+test('blocks invalid cache evidence instead of erasing it as drift', () => {
+  const invalid = createCommissioningSnapshot(evidence({
+    input: { ...evidence().input, cacheStatus: 'invalid', inputCacheSha256: null },
+  }), '2026-09-04T20:00:00.000Z')
+  assert.equal(evaluateCommissioningOutcome(invalid).reason, 'input_cache_invalid')
 })

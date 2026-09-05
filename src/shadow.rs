@@ -1,4 +1,3 @@
-use hidapi::HidDevice;
 use serde::Serialize;
 use serde_json::Value;
 use thiserror::Error;
@@ -12,6 +11,7 @@ const VENDOR_USAGE_PAGE: u16 = 0xFF00;
 const VENDOR_USAGE: u16 = 0x0001;
 const MAX_SHADOW_MESSAGE_BYTES: usize = 4 * 1024;
 const MAX_EVENTS_PER_REPORT: usize = 16;
+#[cfg(test)]
 const MAX_READ_TIMEOUT_MS: u16 = 5_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -100,6 +100,7 @@ pub enum ShadowEvent {
     },
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ShadowPoll {
@@ -111,8 +112,10 @@ pub enum ShadowPoll {
 pub enum ShadowError {
     #[error("the HID identity is not an exact supported Creator Micro 2 vendor collection")]
     UnsupportedIdentity,
+    #[cfg(test)]
     #[error("the shadow read timeout exceeds the bounded maximum")]
     TimeoutTooLong,
+    #[cfg(test)]
     #[error("the HID read failed")]
     ReadFailed,
     #[error("the input was not a supported Report 6 frame")]
@@ -179,31 +182,12 @@ impl ShadowDecoder {
     }
 }
 
-/// Reads one bounded report from an already-open device. This function cannot
-/// open, claim, or write a HID device; the caller remains responsible for
-/// establishing the exact descriptor identity before supplying the handle.
-pub fn read_shadow_timeout(
-    device: &HidDevice,
-    observation: &DeviceObservation,
-    decoder: &mut ShadowDecoder,
-    timeout_ms: u16,
-) -> Result<ShadowPoll, ShadowError> {
-    if !supports_shadow_identity(observation) {
-        return Err(ShadowError::UnsupportedIdentity);
-    }
-    read_once(device, decoder, timeout_ms)
-}
-
+#[cfg(test)]
 trait ReadOnlyTransport {
     fn read_timeout(&self, buffer: &mut [u8], timeout_ms: i32) -> Result<usize, ()>;
 }
 
-impl ReadOnlyTransport for HidDevice {
-    fn read_timeout(&self, buffer: &mut [u8], timeout_ms: i32) -> Result<usize, ()> {
-        HidDevice::read_timeout(self, buffer, timeout_ms).map_err(|_| ())
-    }
-}
-
+#[cfg(test)]
 fn read_once<T: ReadOnlyTransport>(
     transport: &T,
     decoder: &mut ShadowDecoder,

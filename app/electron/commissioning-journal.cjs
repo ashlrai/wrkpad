@@ -26,6 +26,7 @@ const MAX_COMMISSIONING_JOURNAL_BYTES = 64 * 1024
 const MAX_COMMISSIONING_EVENTS = 32
 const MAX_LOCAL_PATH_LENGTH = 4096
 const SHA256_PATTERN = /^[0-9a-f]{64}$/
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 const OUTCOMES = new Set(['ready', 'manual_export_required', 'blocked', 'already_configured'])
 
 function exactKeys(value, keys) {
@@ -205,9 +206,46 @@ function stateMatchesExpected(state, expectedRevision) {
   return state.status === 'valid' && state.journal.revision === expectedRevision
 }
 
+function reclaimDeadLock(lockPath, directory, directoryStats) {
+  let descriptor
+  try {
+    const currentDirectory = lstatSync(directory)
+    if (currentDirectory.isSymbolicLink() || !sameFileIdentity(currentDirectory, directoryStats)) return false
+    const pathStats = lstatSync(lockPath)
+    if (pathStats.isSymbolicLink() || !pathStats.isFile() || (pathStats.mode & 0o077) !== 0
+      || pathStats.size < 2 || pathStats.size > 256) return false
+    descriptor = openSync(lockPath, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0))
+    const stats = fstatSync(descriptor)
+    if (!stats.isFile() || !sameFileIdentity(stats, pathStats) || (stats.mode & 0o077) !== 0) return false
+    const owner = JSON.parse(readFileSync(descriptor, 'utf8'))
+    if (!exactKeys(owner, ['pid', 'nonce']) || !Number.isSafeInteger(owner.pid) || owner.pid < 1
+      || !UUID_PATTERN.test(owner.nonce ?? '')) return false
+    try {
+      process.kill(owner.pid, 0)
+      return false
+    } catch (error) {
+      if (error?.code !== 'ESRCH') return false
+    }
+    const published = lstatSync(lockPath)
+    if (published.isSymbolicLink() || !published.isFile() || !sameFileIdentity(published, stats)) return false
+    unlinkSync(lockPath)
+    return true
+  } catch {
+    return false
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor)
+  }
+}
+
 function acquireLock(directory, directoryStats) {
   const lockPath = path.join(directory, COMMISSIONING_LOCK_FILENAME)
-  const descriptor = openSync(lockPath, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0), 0o600)
+  let descriptor
+  try {
+    descriptor = openSync(lockPath, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0), 0o600)
+  } catch (error) {
+    if (error?.code !== 'EEXIST' || !reclaimDeadLock(lockPath, directory, directoryStats)) throw error
+    descriptor = openSync(lockPath, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0), 0o600)
+  }
   try {
     const body = `${JSON.stringify({ pid: process.pid, nonce: randomUUID() })}\n`
     writeFileSync(descriptor, body, { encoding: 'utf8' })

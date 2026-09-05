@@ -9,7 +9,7 @@ const VERSION_PATTERN = /^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$/
 const DEVICE_STATUSES = new Set(['exact', 'absent', 'unsupported', 'ambiguous'])
 const INSTALLATION_STATUSES = new Set(['trusted', 'unavailable', 'untrusted', 'multiple'])
 const RUNNING_STATUSES = new Set(['running', 'quit', 'unknown'])
-const CACHE_STATUSES = new Set(['candidate', 'different', 'missing', 'unknown'])
+const CACHE_STATUSES = new Set(['candidate', 'different', 'missing', 'unknown', 'invalid', 'unsafe'])
 const RECEIVER_STATUSES = new Set(['single_trusted', 'absent', 'multiple', 'untrusted', 'unknown'])
 const MONITORING_STATUSES = new Set(['granted', 'denied', 'unknown'])
 const CANDIDATE_STATUSES = new Set(['verified', 'missing', 'invalid'])
@@ -110,8 +110,11 @@ function sanitizeCommissioningSnapshot(value) {
   const physicalAcceptance = sanitizePhysicalAcceptance(value.physicalAcceptance)
   if (!device || !input || !receiver || !candidate || !baseline || !physicalAcceptance) return null
 
-  if (input.cacheStatus === 'candidate' && input.inputCacheSha256 !== candidate.sha256) return null
-  if (input.cacheStatus === 'different' && candidate.sha256 && input.inputCacheSha256 === candidate.sha256) return null
+  // Input's internal keymap cache and the import artifact are different
+  // serialization domains. The cache digest protects the observed bytes; the
+  // `candidate` label is earned by strict semantic classification below the
+  // IPC boundary, not by impossible cross-format byte equality.
+  if (input.cacheStatus === 'candidate' && candidate.status !== 'verified') return null
   if (physicalAcceptance.status === 'accepted' && physicalAcceptance.candidateSha256 !== candidate.sha256) return null
   if (Date.parse(physicalAcceptance.acceptedAt ?? value.observedAt) > Date.parse(value.observedAt)) return null
 
@@ -158,8 +161,9 @@ function evaluateCommissioningOutcome(value) {
   if (!snapshot) return blocked('snapshot_invalid')
   if (snapshot.device.status !== 'exact') return blocked(`device_${snapshot.device.status}`)
   if (snapshot.input.installation !== 'trusted') return blocked(`input_${snapshot.input.installation}`)
+  if (snapshot.input.cacheStatus === 'invalid' || snapshot.input.cacheStatus === 'unsafe') return blocked(`input_cache_${snapshot.input.cacheStatus}`)
   if (snapshot.receiver.status !== 'single_trusted') return blocked(`receiver_${snapshot.receiver.status}`)
-  if (snapshot.receiver.inputMonitoring !== 'granted') return blocked(`input_monitoring_${snapshot.receiver.inputMonitoring}`)
+  if (snapshot.receiver.inputMonitoring === 'denied') return blocked('input_monitoring_denied')
   if (snapshot.candidate.status !== 'verified') return blocked(`candidate_${snapshot.candidate.status}`)
   if (snapshot.baseline.status === 'invalid') return blocked('baseline_invalid')
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import {
   AudioLines,
   Bot,
@@ -315,7 +315,7 @@ export default function CompactDeckApp() {
     }
   }, [bridge])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.repeat || event.isComposing) return
       const binding = preferences.shortcuts.find((candidate) => shortcutMatches(event, candidate.chord))

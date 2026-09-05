@@ -8,6 +8,12 @@ All notable changes will be documented here. The project follows semantic versio
 
 ### Added
 
+- A deterministic Ashlr Layer commissioner that projects six independent proof
+  gates, identifies one safe next action, and stores only a private, expiring,
+  human-only plan. It performs no Input, permission, HID, or device write.
+- A public interactive commissioner evidence preview, machine-readable
+  capability entry, and operator documentation that keep local diagnosis,
+  manual configuration, and physical acceptance separate.
 - Shared Codex/Claude repository instructions, a route-aware read-only agent
   preflight with a versioned JSON Schema, and a canonical cross-provider agent
   operations runbook.

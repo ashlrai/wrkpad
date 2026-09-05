@@ -18,11 +18,11 @@ const { inspectInputApplicationRuntime } = require('./input-application-runtime.
 const { createCachedAsarHasher, inspectPackagedReceiverPeers, inspectReceiverRuntime, shouldRegisterShortcuts } = require('./receiver-runtime-diagnostics.cjs')
 const { createCmuxFocusAdapter } = require('./cmux-focus-adapter.cjs')
 const { hasFreshExactDualPlaneAshlrAttestation } = require('./dual-plane-attestation.cjs')
-const { inspectGeneratedInputProfile, readSourceProfile, writeGeneratedProfile } = require('./input-profile-generator.cjs')
-const { buildRecoveryChecklist, observeRecoveryArtifact, readRecoveryReceipt, recoveryChecklistText, recoveryReceiptPath, removeRecoveryReceipt, writeRecoveryReceipt } = require('./recovery-receipt.cjs')
-const { readCommissioningJournal, writeCommissioningJournal } = require('./commissioning-journal.cjs')
+const { inspectGeneratedInputProfile, readSourceProfileArtifact, writeGeneratedProfile } = require('./input-profile-generator.cjs')
+const { buildRecoveryChecklist, observeRecoveryArtifact, observeRecoveryBaseline, readRecoveryReceipt, recoveryChecklistText, recoveryReceiptPath, removeRecoveryReceipt, writeRecoveryReceipt } = require('./recovery-receipt.cjs')
+const { inspectCommissioningJournal, writeCommissioningJournal } = require('./commissioning-journal.cjs')
 const { createCommissioningOperationCoordinator } = require('./commissioning-operations.cjs')
-const { projectCommissioningSnapshot } = require('./commissioning-evidence.cjs')
+const { projectActiveFlightAcceptance, projectCommissioningSnapshot } = require('./commissioning-evidence.cjs')
 const { acceptNativeAcceptance, evaluateNativeAcceptance, prepareNativeAcceptance, readNativeAcceptanceReceipt, removeNativeAcceptanceReceipt, stageNativeAcceptance, writeNativeAcceptanceReceipt } = require('./native-acceptance-receipt.cjs')
 const { createNativeAcceptanceOperationCoordinator } = require('./native-acceptance-operations.cjs')
 const { createNativeControlCheck, readNativeControlCheck, writeNativeControlCheck } = require('./native-control-check.cjs')
@@ -583,7 +583,7 @@ async function focusHighestPriorityAgentResult() {
   return focusAgentFromSnapshot(slot, mission)
 }
 
-async function collectSystemStatus() {
+async function collectSystemStatus({ reconcileShortcuts = true } = {}) {
   const settings = readSettings()
   const home = app.getPath('home')
   const codexExecutable = resolveTool('codex', { home })
@@ -592,7 +592,9 @@ async function collectSystemStatus() {
   // Start the longest bounded probe before the synchronous receiver check so
   // the renderer's outer deadline covers the complete status operation.
   const inputInstallationPending = inspectCurrentInputInstallation()
-  const currentReceiverRuntime = synchronizeShortcutOwnership(settings.boardRoute).runtime
+  const currentReceiverRuntime = reconcileShortcuts
+    ? synchronizeShortcutOwnership(settings.boardRoute).runtime
+    : inspectCurrentReceiverRuntime()
   const [inputInstallation, board, codex, claude, ashlr, workspaceSnapshot, chatgptInspection] = await Promise.all([
     inputInstallationPending, boardConnected(), codexExecutable ? commandExists(codexExecutable) : false,
     claudeExecutable ? commandExists(claudeExecutable) : false,
@@ -629,30 +631,58 @@ async function collectSystemStatus() {
   }
 }
 
-function candidateCommissioningEvidence() {
+function commissioningArtifactEvidence() {
   const receipt = readRecoveryReceipt(handoffPath())
-  const observed = observeRecoveryArtifact(receipt)
-  if (!receipt) return { status: 'missing', sha256: null }
-  if (!observed.available) return { status: 'invalid', sha256: null }
+  const baselineObserved = observeRecoveryBaseline(receipt)
+  const baseline = baselineObserved.available
+    ? { status: 'captured', sha256: receipt.baselineSha256 }
+    : receipt?.baselinePath
+      ? { status: 'invalid', sha256: null }
+      : { status: 'missing', sha256: null }
+  if (!receipt) return { candidate: { status: 'missing', sha256: null }, baseline }
   try {
-    const inspection = inspectGeneratedInputProfile(readSourceProfile(receipt.artifactPath), 'daily')
-    return inspection.status === 'match'
+    // Parse and hash the same bounded read so the candidate digest cannot race
+    // a second file open.
+    const artifact = readSourceProfileArtifact(receipt.artifactPath)
+    const inspection = inspectGeneratedInputProfile(artifact.value, 'daily')
+    const candidate = artifact.sha256 === receipt.sha256 && inspection.status === 'match'
       ? { status: 'verified', sha256: receipt.sha256 }
       : { status: 'invalid', sha256: null }
+    return { candidate, baseline }
   } catch {
-    return { status: 'invalid', sha256: null }
+    return { candidate: { status: 'invalid', sha256: null }, baseline }
   }
 }
 
 async function collectCommissioningSnapshot() {
-  const status = await collectSystemStatus()
-  const candidate = candidateCommissioningEvidence()
-  return projectCommissioningSnapshot(status, candidate)
+  // Planning observes the current receiver state without registering,
+  // unregistering, or otherwise reconciling global shortcut ownership.
+  const status = await collectSystemStatus({ reconcileShortcuts: false })
+  const artifacts = commissioningArtifactEvidence()
+  const flight = flightSession.snapshot()
+  const evaluation = activeFlightAdmission?.variant === 'daily'
+    && flight.active === true
+    && flight.invalidated !== true
+    ? evaluateFlightSignals('daily', flight.rawEvents, 'ashlr_layer')
+    : null
+  // A saved receipt is historical evidence only. It must never promote a new
+  // process, USB attachment, or permission state to commissioned.
+  const physicalAcceptance = projectActiveFlightAcceptance(
+    activeFlightAdmission,
+    flight,
+    evaluation,
+    artifacts.candidate,
+  )
+  return projectCommissioningSnapshot(status, artifacts.candidate, artifacts.baseline, physicalAcceptance)
 }
 
 const commissioningOperations = createCommissioningOperationCoordinator({
   collectSnapshot: collectCommissioningSnapshot,
-  readJournal: () => readCommissioningJournal(settingsPath()),
+  readJournal: () => {
+    const state = inspectCommissioningJournal(settingsPath())
+    if (state.status === 'invalid') throw new TypeError('commissioning journal is invalid')
+    return state.journal
+  },
   writeJournal: (journal, expectedRevision) => writeCommissioningJournal(settingsPath(), journal, expectedRevision),
 })
 
@@ -664,7 +694,13 @@ ipcMain.handle('board:getMissionControl', trustedIpc(() => missionControl()))
 ipcMain.handle('board:getRecoveryGuide', trustedIpc(() => {
   const handoff = readRecoveryReceipt(handoffPath())
   const artifact = observeRecoveryArtifact(handoff)
-  return { handoff, artifact, steps: buildRecoveryChecklist(handoff, artifact) }
+  const publicHandoff = handoff ? {
+    schema: handoff.schema,
+    artifactPath: handoff.artifactPath,
+    sha256: handoff.sha256,
+    createdAt: handoff.createdAt,
+  } : null
+  return { handoff: publicHandoff, artifact, steps: buildRecoveryChecklist(handoff, artifact) }
 }))
 ipcMain.handle('board:getNativeAcceptance', trustedIpc(() => nativeAcceptanceOperations.get()))
 ipcMain.handle('board:prepareNativeAcceptance', trustedIpc(() => nativeAcceptanceOperations.prepare()))
@@ -783,6 +819,7 @@ ipcMain.handle('board:setFlightCheck', trustedIpc(async (_event, active, variant
     state = flightOperations.stop()
   }
   if (mutation === flightAdmissionMutation) {
+    const artifacts = commissioningArtifactEvidence()
     activeFlightAdmission = state.acknowledged && state.active && admission?.ready === true
       ? {
           variant,
@@ -790,6 +827,7 @@ ipcMain.handle('board:setFlightCheck', trustedIpc(async (_event, active, variant
           attestedAt: dualPlaneAshlrLayerSelected ? attestation.attestedAt : null,
           dualPlaneAshlrLayerSelected,
           inputProfileFingerprint: inputProfileFingerprint(admission),
+          candidateSha256: artifacts.candidate.status === 'verified' ? artifacts.candidate.sha256 : null,
         }
       : null
   }
@@ -850,6 +888,8 @@ ipcMain.handle('board:createCorrectedInputProfile', trustedIpc(async () => {
       writeRecoveryReceipt(handoffPath(), {
         artifactPath: artifact.outputPath,
         sha256: artifact.sha256,
+        baselinePath: source.filePaths[0],
+        baselineSha256: artifact.sourceSha256,
         createdAt: new Date().toISOString(),
       })
     } catch {
@@ -960,6 +1000,25 @@ ipcMain.handle('board:saveFlightReceipt', trustedIpc(async (_event, receipt) => 
       const temporaryPath = `${destination}.${randomUUID()}.tmp`
       writeFileSync(temporaryPath, `${JSON.stringify(document, null, 2)}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
       renameSync(temporaryPath, destination)
+      if (document.status === 'passed') {
+        try {
+          const recovery = readRecoveryReceipt(handoffPath())
+          const artifacts = commissioningArtifactEvidence()
+          const boundCandidateSha256 = activeFlightAdmission?.candidateSha256
+          if (recovery && typeof boundCandidateSha256 === 'string'
+            && artifacts.candidate.status === 'verified'
+            && artifacts.candidate.sha256 === boundCandidateSha256) {
+            writeRecoveryReceipt(handoffPath(), {
+              ...recovery,
+              acceptedCandidateSha256: boundCandidateSha256,
+              acceptedAt: document.exportedAt,
+            })
+          }
+        } catch {
+          // The operator's explicit Flight receipt is still valid. Failure to
+          // update the private commissioner projection cannot rewrite it.
+        }
+      }
       return destination
     },
   })

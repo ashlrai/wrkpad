@@ -29,6 +29,33 @@ Every slot combines provider, task title, icon, text state, and color. The exper
 | Idle | A known session is inactive | Purple |
 | Available | No session occupies the slot | Black |
 
+## Commission the Ashlr Layer without guessing
+
+Setup includes a deterministic local commissioner for the cross-provider
+**Ashlr Layer** route. It presents one proof runway—exact device, trusted Input
+installation, one receiver, preserved source export, validated candidate, and
+an active operator-attested shortcut run—and names one safe next action at a time.
+
+The commissioner can observe sanitized evidence and save a private, expiring,
+content-bound plan. Every plan is `human_input_only` and
+`writesAuthorized: false`. The current implementation does not create the
+source export. After the operator selects that ordinary Input export for
+offline repair, the app hashes it, records its bounded path and digest in the
+private recovery receipt, and revalidates the same bytes for the source-backup
+gate. This does not assert that the export represents the current board state
+or a complete rollback.
+It also does not import or activate a profile, change a macOS permission,
+synchronize the board, reset settings, update firmware, or issue a
+HID/device-filesystem write.
+
+This distinction is deliberate: candidate validation proves the offline file,
+cache agreement proves only inspected local cache state, and a fresh Flight
+Check proves only that the operator-attested global-shortcut sequence reached
+the active receiver. macOS does not cryptographically identify its keyboard
+source, and the saved receipt cannot commission a later session. Codex
+Native uses a separate passive restart-safe handoff and operator attestation;
+the Ashlr commissioner does not claim native Codex key or RGB acceptance.
+
 ## What it does today
 
 - Shows six stable, provider-neutral agent slots sourced from `wrkpad status --json`.
@@ -44,6 +71,8 @@ Every slot combines provider, task title, icon, text state, and color. The exper
   ACT06–ACT09 with guarded fleet controls.
 - Separates immediate, confirm, and press-and-hold actions in the Electron main process.
 - Runs an interlocked Ashlr Layer Flight Check and exports a hashed local receipt.
+- Converts Ashlr Layer setup evidence into a six-gate commissioning runway and
+  a private read-only plan without granting device-write authority.
 - Presents separate Codex Native and Ashlr Layer setup flight plans, with a
   private restart-safe native handoff that rejects stale VID:PID/Desktop-metadata
   context and records only explicit operator observations. In Codex Native mode,
@@ -129,6 +158,7 @@ one runner, so screenshot refreshes remain under human visual review.
 ## Documentation
 
 - [Setup and Flight Check](docs/setup.md)
+- [Local commissioner architecture](../docs/commissioner-architecture.md)
 - [Controls and state model](docs/controls.md)
 - [Architecture and trust boundaries](docs/architecture.md)
 - [Provider compatibility contracts](docs/provider-contracts.md)

@@ -75,6 +75,49 @@ desk configuration. Generate, import, roll back, and test it only through the
 artifact contains twenty action definitions total; the mixed first layer
 references fourteen and leaves all six Agent keys Codex-only.
 
+### Ashlr Layer local commissioner
+
+When **Ashlr Layer** is declared, Setup opens a local commissioner above the
+long-form checklist. Use it as the first diagnostic view:
+
+1. Read the highlighted proof gate. The runway keeps exact USB identity, Input
+   installation trust, receiver/permission evidence, rollback, candidate, and
+   physical acceptance separate.
+2. Select **Run checks again**, **Detect my board**, or **Verify local
+   environment** to refresh bounded read-only evidence. These controls do not
+   register a new shortcut, change Input, request permission, or open the
+   device.
+3. Expand **Evidence by proof level** when a gate is unclear. The state and
+   text label are authoritative; color is only redundant emphasis.
+4. Select **Prepare commissioning plan** only after reviewing the named
+   prerequisites. The app collects two snapshots, rejects drift, and writes a
+   private mode-`0600` journal only when the evidence and plan validate. The
+   plan expires and always contains `authority: human_input_only` and
+   `writesAuthorized: false`.
+5. If **Open manual handoff** appears, follow the recovery card it reveals.
+   That handoff may validate and reveal a new offline artifact, but the operator
+   still performs the Input import, activation, and synchronization.
+6. Return to Setup and start a fresh Flight Check. Use only the intended board
+   during the run. No cached profile, prepared plan, or synthetic shortcut is
+   acceptance; macOS still cannot cryptographically identify which keyboard
+   emitted a global shortcut.
+
+The current source implementation deliberately does not create the external
+Work Louder Input backup. When the operator selects an ordinary export to
+create a corrected offline artifact, the private recovery receipt records the
+source path and SHA-256; the commissioner reopens that exact bounded file and
+requires the bytes to match before it marks the source-backup gate protected.
+This does not prove the export is the current device state or a complete
+rollback. Until that receipt exists, the runway remains at **Source backup · Human required**.
+It also leaves physical acceptance in the existing Flight Check system rather
+than promoting its journal from cache state. This is a visible implementation
+boundary, not a request to bypass the gate.
+
+The local commissioner applies only to `ashlr_layer`. Codex Native keeps the
+separate handoff below, and Hybrid Native keeps its own 14+6 acceptance
+contract. Never use an Ashlr Layer commissioner result as proof of native
+Codex keys, native RGB, exact Codex task focus, or exact Claude/cmux pane focus.
+
 ### Codex Native restart-safe handoff
 
 The Codex Native route has its own Setup flight plan. It does not require Work

@@ -31,6 +31,12 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 
 ### Added
 
+- A local Ashlr Layer commissioning runway with exact device, Input trust,
+  receiver, rollback, candidate, and physical-proof gates; a single safe next
+  action; and a private, expiring, content-bound plan that always records
+  `writesAuthorized: false`.
+- A documented fail-closed recovery path for each commissioner gate, including
+  the current human-only backup and Work Louder Input handoff boundary.
 - A fail-closed `profile:check` CLI for exact generated one-layer daily and
   diagnostic Work Louder profiles, including adversarial schema and action-map
   checks. A match proves only the selected JSON artifact.

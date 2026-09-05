@@ -16,20 +16,53 @@ function receiverStatus(receiver) {
   return 'unknown'
 }
 
-function projectCommissioningSnapshot(status, candidate, observedAt = new Date().toISOString()) {
+function exactDailyCache(profile) {
+  return profile?.cacheStatus === 'available'
+    && profile.activeProfile === 'Ashlr Agent Board Corrected'
+    && profile.activeLayer === 'Ashlr Daily'
+    && profile.encoderDirection === 'correct'
+    && Array.isArray(profile.configuredLayers)
+    && profile.configuredLayers.length === 1
+    && profile.configuredLayers[0]?.name === 'Ashlr Daily'
+    && profile.configuredLayers[0]?.mapping === 'ashlr_daily'
+    && profile.configuredLayers[0]?.encoderDirection === 'correct'
+}
+
+function projectActiveFlightAcceptance(activeAdmission, flight, evaluation, candidate) {
+  const pending = { status: 'pending', candidateSha256: null, acceptedAt: null }
+  if (activeAdmission?.variant !== 'daily'
+    || typeof activeAdmission.candidateSha256 !== 'string'
+    || activeAdmission.candidateSha256 !== candidate?.sha256
+    || flight?.active !== true
+    || flight.invalidated === true
+    || evaluation?.status !== 'passed') return pending
+  const acceptedAt = flight.rawEvents?.at(-1)?.receivedAt
+  return typeof acceptedAt === 'string'
+    ? { status: 'accepted', candidateSha256: candidate.sha256, acceptedAt }
+    : pending
+}
+
+function projectCommissioningSnapshot(
+  status,
+  candidate,
+  baseline = { status: 'missing', sha256: null },
+  physicalAcceptance = { status: 'pending', candidateSha256: null, acceptedAt: null },
+  observedAt = new Date().toISOString(),
+) {
   if (!status || status.boardRoute !== 'ashlr_layer') {
     throw new TypeError('Ashlr Layer must be declared before commissioning')
   }
   const cacheSha256 = status.inputProfile?.inputCacheSha256 ?? null
-  const cacheStatus = status.inputProfile?.cacheStatus === 'missing'
+  const rawCacheStatus = status.inputProfile?.cacheStatus
+  const cacheStatus = rawCacheStatus === 'missing'
     ? 'missing'
-    : cacheSha256 && candidate?.status === 'verified' && cacheSha256 === candidate.sha256
+    : rawCacheStatus === 'invalid' || rawCacheStatus === 'unsafe'
+      ? rawCacheStatus
+    : rawCacheStatus === 'available' && cacheSha256 && candidate?.status === 'verified' && exactDailyCache(status.inputProfile)
       ? 'candidate'
-    : cacheSha256
-      ? 'different'
-      : 'unknown'
-  const callbackObserved = status.shortcutTelemetry?.totalObserved > 0
-    && status.shortcutTelemetry?.last?.outcome === 'allowed'
+      : rawCacheStatus === 'available' && cacheSha256
+        ? 'different'
+        : 'unknown'
 
   return createCommissioningSnapshot({
     device: status.boardConnected && status.boardVidPid === '303A:8298'
@@ -50,15 +83,17 @@ function projectCommissioningSnapshot(status, candidate, observedAt = new Date()
     },
     receiver: {
       status: receiverStatus(status.receiverRuntime),
-      // A current allowed callback proves that this receiver can receive the
-      // shortcut path. It does not prove that the board emitted the event.
-      inputMonitoring: callbackObserved ? 'granted' : 'unknown',
+      // macOS does not expose a trustworthy read API for this TCC setting. A
+      // global shortcut may come from the laptop keyboard, so it is never
+      // promoted into permission or physical-board proof.
+      inputMonitoring: 'unknown',
     },
     candidate,
-    // The vendor cache is deliberately not relabeled as a rollback baseline.
-    baseline: { status: 'missing', sha256: null },
-    physicalAcceptance: { status: 'pending', candidateSha256: null, acceptedAt: null },
+    // The vendor cache is deliberately not relabeled as a protected source
+    // export or as proof of the current board state.
+    baseline,
+    physicalAcceptance,
   }, observedAt)
 }
 
-module.exports = { projectCommissioningSnapshot }
+module.exports = { exactDailyCache, projectActiveFlightAcceptance, projectCommissioningSnapshot }

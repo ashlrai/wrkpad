@@ -16,3 +16,14 @@ test('renderer bridge exposes no commissioning apply or device-write capability'
   assert.doesNotMatch(preload, /applyCommission|authorizeCommission|writeDevice|writeHid|resetDevice|flashFirmware/i)
   assert.doesNotMatch(main, /board:(?:applyCommission|authorizeCommission|writeDevice|writeHid|resetDevice|flashFirmware)/i)
 })
+
+test('commissioning collection never reconciles shortcut ownership', () => {
+  assert.match(main, /collectSystemStatus\(\{ reconcileShortcuts: false \}\)/)
+})
+
+test('saved acceptance remains historical and cannot promote a restarted commissioner', () => {
+  assert.match(main, /A saved receipt is historical evidence only/)
+  assert.match(main, /projectActiveFlightAcceptance\([\s\S]*activeFlightAdmission,[\s\S]*flight,[\s\S]*evaluation,[\s\S]*artifacts\.candidate/)
+  assert.doesNotMatch(main, /physicalAcceptance:\s*artifacts\./)
+  assert.match(main, /candidateSha256:\s*artifacts\.candidate\.status === 'verified'/)
+})

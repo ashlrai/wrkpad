@@ -123,3 +123,14 @@ test('refuses a symlinked private directory and malformed or non-next revisions'
   assert.throws(() => writeCommissioningJournal(settingsPath, { ...journal, revision: 2 }, null), /invalid|next CAS/)
   assert.equal(sanitizeCommissioningJournal({ ...journal, rawPath: '/private' }), null)
 })
+
+test('reclaims a valid private lock only when its owner is dead', (t) => {
+  const settingsPath = temporarySettings(t)
+  const { snapshot, plan } = fixture()
+  const journal = createCommissioningJournal(snapshot, plan, '2026-09-04T20:01:00.000Z')
+  const directory = path.dirname(commissioningJournalPath(settingsPath))
+  mkdirSync(directory, { recursive: true, mode: 0o700 })
+  const lockPath = path.join(directory, '.journal.lock')
+  writeFileSync(lockPath, `${JSON.stringify({ pid: 2147483647, nonce: '00000000-0000-4000-8000-000000000000' })}\n`, { mode: 0o600 })
+  assert.deepEqual(writeCommissioningJournal(settingsPath, journal, null), journal)
+})

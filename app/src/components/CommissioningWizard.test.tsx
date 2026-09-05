@@ -24,7 +24,7 @@ describe('CommissioningWizard', () => {
     const spine = screen.getByRole('list', { name: 'Commissioning proof levels' })
     expect(within(spine).getByText('Exact device')).toBeTruthy()
     expect(within(spine).getByText('Receiver')).toBeTruthy()
-    expect(within(spine).getByText('Physical proof')).toBeTruthy()
+    expect(within(spine).getByText('Shortcut path')).toBeTruthy()
     expect(document.querySelector('.commissioner-dial')).toBeTruthy()
     expect(document.querySelector('.commissioner-stick')).toBeTruthy()
     expect(document.querySelector('.commissioner-agent-lamps')?.children).toHaveLength(6)
@@ -62,5 +62,19 @@ describe('CommissioningWizard', () => {
   it('disables its sole action while checks are running', () => {
     render(<CommissioningWizard {...props()} busy />)
     expect((screen.getByRole('button', { name: 'Checking bounded evidence…' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('describes active operator acceptance without claiming durable board proof', () => {
+    const callbacks = props()
+    const accepted = {
+      ...snapshot,
+      input: { ...snapshot.input, cacheStatus: 'candidate' as const },
+      physicalAcceptance: { status: 'accepted' as const, candidateSha256: candidateHash, acceptedAt: snapshot.observedAt },
+    }
+    render(<CommissioningWizard {...callbacks} snapshot={accepted} />)
+    expect(screen.getByText('Shortcut path accepted for this run.')).toBeTruthy()
+    expect(screen.queryByText(/This board is commissioned/i)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Open Flight Check' }))
+    expect(callbacks.onFlightCheck).toHaveBeenCalledOnce()
   })
 })

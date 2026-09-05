@@ -1411,7 +1411,7 @@ describe('operator interface', () => {
 
     render(<App />)
     fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
-    expect(await screen.findByText(new RegExp(expectedGuidance, 'i'))).toBeTruthy()
+    expect(await screen.findByText((content) => content.toLowerCase().includes(expectedGuidance.toLowerCase()))).toBeTruthy()
   })
 
   it('keeps the known Input 0.18.4 resource mutation fail closed through stopped-state recovery', async () => {

@@ -45,6 +45,51 @@ const scenes = {
   ],
 }
 
+const commissioningProof = {
+  device: {
+    state: 'Observed, not accepted',
+    title: 'Exact USB identity',
+    detail: 'An allowlisted Creator Micro 2 is present. That does not establish its active layer, shortcut mapping, or a working key.',
+    evidence: 'Bounded USB receipt',
+    next: 'Verify local environment',
+  },
+  input: {
+    state: 'Installation trust',
+    title: 'Work Louder Input integrity',
+    detail: 'Publisher, signature, and Gatekeeper evidence can qualify the installed controller. It does not prove the current profile or board synchronization.',
+    evidence: 'Sanitized fixed-path probe',
+    next: 'Verify one receiver',
+  },
+  receiver: {
+    state: 'Desktop path only',
+    title: 'One trusted shortcut receiver',
+    detail: 'Receiver exclusivity and a permitted callback establish the laptop path. They do not prove that the physical board emitted the shortcut.',
+    evidence: 'Receiver and callback receipt',
+    next: 'Protect the current setup',
+  },
+  baseline: {
+    state: 'Human action required',
+    title: 'Rollback point',
+    detail: 'A real export from Work Louder Input must be saved before device-controlled work. The vendor cache is not relabeled as a backup.',
+    evidence: 'Not created by this preview',
+    next: 'Export an ordinary profile',
+  },
+  candidate: {
+    state: 'Offline evidence',
+    title: 'Validated candidate',
+    detail: 'The managed artifact can be checked and hashed without opening Input. Validation does not import, activate, or synchronize it.',
+    evidence: 'Private artifact digest',
+    next: 'Complete the manual handoff',
+  },
+  physical: {
+    state: 'Final acceptance gate',
+    title: 'Fresh real-key proof',
+    detail: 'Only a new Flight Check shows that the intended physical gesture reached the receiver. A green cache state cannot substitute for it.',
+    evidence: 'Pending physical receipt',
+    next: 'Press each highlighted control',
+  },
+}
+
 const board = document.querySelector('#demo-board')
 const routeButtons = [...document.querySelectorAll('[data-route]')]
 const viewButtons = [...document.querySelectorAll('[data-view]:not(#demo-board)')]
@@ -53,6 +98,8 @@ const controls = [...document.querySelectorAll('[data-control]')]
 const heroControls = [...document.querySelectorAll('[data-hero-target]')]
 const agents = [...document.querySelectorAll('[data-slot]')]
 const announcement = document.querySelector('#demo-announcement')
+const proofButtons = [...document.querySelectorAll('[data-proof]')]
+const commissionerAnnouncement = document.querySelector('#commissioner-announcement')
 let route = 'ashlr'
 let view = 'hardware'
 let scene = 'build'
@@ -160,6 +207,17 @@ heroControls.forEach((heroControl) => heroControl.addEventListener('click', () =
   chooseControl(control, 'Hero twin')
   document.querySelector('#demo').scrollIntoView()
   control.focus({ preventScroll: true })
+}))
+proofButtons.forEach((button) => button.addEventListener('click', () => {
+  const proof = commissioningProof[button.dataset.proof]
+  if (!proof) return
+  proofButtons.forEach((candidate) => candidate.setAttribute('aria-pressed', String(candidate === button)))
+  document.querySelector('#proof-state').textContent = proof.state
+  document.querySelector('#proof-title').textContent = proof.title
+  document.querySelector('#proof-detail').textContent = proof.detail
+  document.querySelector('#proof-evidence').textContent = proof.evidence
+  document.querySelector('#proof-next').textContent = proof.next
+  commissionerAnnouncement.textContent = `${proof.title} selected. Synthetic evidence only; no local or hardware state was read.`
 }))
 
 document.addEventListener('keydown', (event) => {

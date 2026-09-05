@@ -82,6 +82,52 @@ IDs, command lines, app paths, or raw process output.
 **Exclusive** proves only the observed receiver count, not Input Monitoring,
 shortcut receipt, USB ownership, or physical acceptance.
 
+## The local commissioner stops at one proof gate
+
+The Ashlr Layer commissioner is intentionally fail-closed. Its large status
+line names the highest current stage; the highlighted item in the six-stop
+runway names the first unresolved gate. Use **Run checks again** to repeat the
+bounded inspection after correcting the problem. A retry never imports a
+profile, changes permission, or writes the device.
+
+| Gate | What to check | What not to infer |
+| --- | --- | --- |
+| Exact device | Direct USB-C data connection and exact supported identity | Active layer or working key |
+| Input trust | One verified official Input installation | Current profile or synchronized board |
+| Receiver | One trusted Agent Board receiver and a current allowed callback | The callback came from the board |
+| Source backup | The selected ordinary Work Louder Input export is preserved outside the cache | It is the current device state or a complete rollback |
+| Candidate | The newly saved artifact passes the strict offline verifier | Imported, current, or synchronized |
+| Shortcut path | The active operator-attested Flight sequence reaches the intended receiver | The OS identified the physical keyboard source or a future session is accepted |
+
+Specific recovery rules:
+
+- **Commissioning evidence unavailable:** keep the Ashlr Layer declared, ensure
+  exactly one intended Agent Board build is running, and select **Run checks
+  again**. The app discards malformed or privacy-unbounded snapshots instead of
+  showing partial evidence.
+- **Commissioning is paused:** resolve the one named blocker. Do not continue to
+  profile or firmware work after an unsupported device, untrusted Input copy,
+  multiple receivers, denied permission, invalid candidate, or failed physical
+  receipt.
+- **Source backup · Human required:** export an ordinary profile through Work
+  Louder Input; the commissioner does not perform that export. When the
+  exported source is selected for **Create corrected Input profile**, the
+  private recovery receipt binds its path and SHA-256 and later requires the
+  same bytes. Missing, moved, changed, or unsafe baseline files remain invalid.
+  Continue through the canonical [Input-only reconciliation](#input-only-reconciliation)
+  and preserve the export yourself.
+- **Plan unavailable** or **evidence changed:** wait for the local environment
+  to settle and prepare again. Plans are bound to two matching snapshots and
+  expire; editing the candidate, changing the route, or changing receiver state
+  invalidates the prior plan.
+- **Candidate verified but board still silent:** candidate validation concerns
+  the offline artifact only. Complete the human Input handoff, fully quit Input,
+  then run a new physical Flight Check.
+
+The commissioner is not used for Codex Native or experimental Hybrid Native.
+Use the route-specific procedures in [Setup](setup.md) so an Ashlr shortcut
+receipt is never presented as native Codex or combined 14+6 acceptance.
+
 ## Shortcuts are missing or controls do nothing
 
 1. Confirm Work Louder Input is installed and open.

@@ -533,27 +533,36 @@ function writeGeneratedDualPlaneProfile(sourcePath, outputPath) {
   }
 }
 
-function readSourceProfile(sourcePath) {
+function readSourceProfileArtifact(sourcePath) {
   let descriptor
   try {
     descriptor = openSync(sourcePath, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0))
     const stats = fstatSync(descriptor)
     if (!stats.isFile() || stats.size < 2 || stats.size > MAX_SOURCE_BYTES) throw new Error('Profile export must be a JSON file no larger than 512 KiB')
-    return JSON.parse(readFileSync(descriptor, 'utf8'))
+    const bytes = readFileSync(descriptor)
+    return {
+      value: JSON.parse(bytes.toString('utf8')),
+      sha256: createHash('sha256').update(bytes).digest('hex'),
+    }
   } finally {
     if (descriptor !== undefined) closeSync(descriptor)
   }
 }
 
+function readSourceProfile(sourcePath) {
+  return readSourceProfileArtifact(sourcePath).value
+}
+
 function writeGeneratedProfile(sourcePath, outputPath, variant = 'daily') {
-  const source = readSourceProfile(sourcePath)
-  const output = `${JSON.stringify(generateInputProfile(source, variant), null, 2)}\n`
+  const source = readSourceProfileArtifact(sourcePath)
+  const output = `${JSON.stringify(generateInputProfile(source.value, variant), null, 2)}\n`
   // A generated repair is always a new private artifact. It never modifies the
   // source export, Input's cache, or the device.
   writeFileSync(outputPath, output, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
   return {
     outputPath,
     variant,
+    sourceSha256: source.sha256,
     sha256: createHash('sha256').update(output).digest('hex'),
     actions: shortcutActions.length,
     physicalGestures: 20,
@@ -582,6 +591,7 @@ module.exports = {
   layerHasExactCodexNativeLayout,
   layerHasExactHybridNativeLayout,
   readSourceProfile,
+  readSourceProfileArtifact,
   safeLights,
   writeGeneratedCodexNativeRecoveryLayer,
   writeGeneratedDualPlaneProfile,

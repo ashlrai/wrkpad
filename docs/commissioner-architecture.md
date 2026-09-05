@@ -9,8 +9,9 @@ interpret USB identifiers, profile caches, macOS permissions, application
 ownership, and physical acceptance as one ambiguous “connected” state.
 
 The commissioner is a local, deterministic control plane that turns those
-signals into an ordered recovery session. It never claims a working key until a
-fresh physical event reaches the intended receiver.
+signals into an ordered recovery session. It never infers working hardware from
+USB, cache, or shortcut registration. The current shortcut receiver cannot
+cryptographically distinguish the Creator Micro 2 from another keyboard.
 
 ## Evidence ladder
 
@@ -22,27 +23,23 @@ fresh physical event reaches the intended receiver.
 | Receiver readiness | The expected shortcut receiver is live | The board emits that shortcut |
 | Shadow receipt | A matching physical report was observed | The mapped application action ran |
 | Action receipt | The intended application handled the event | Every control or provider works |
-| Physical acceptance | The required fresh gestures passed | Future sessions cannot drift |
+| Active operator check | The operator-attested shortcut sequence reached this active receiver | The OS identified the physical keyboard source or a future session is accepted |
 
 User-facing copy must identify the highest proven level and the next missing
 receipt. It must not collapse the ladder into a green dot.
 
 ## State machine
 
-The read-only commissioner recognizes these monotonic states:
+The current read-only commissioner derives these states from fresh evidence:
 
 1. `disconnected`
 2. `device_exact`
-3. `route_selected`
-4. `install_trusted`
-5. `baseline_captured`
-6. `candidate_verified`
-7. `awaiting_confirmation`
-8. `human_action_required`
-9. `sync_unproven`
-10. `flight_armed`
-11. `physical_accepted`
-12. `commissioned`
+3. `environment_verified`
+4. `baseline_captured`
+5. `candidate_verified`
+6. `manual_action_required`
+7. `physical_check_ready`
+8. `commissioned` (active-run acceptance only)
 
 `blocked` is used when an invariant fails and the next action cannot proceed.
 The reducer derives state from typed evidence. Renderers and LLM output cannot
@@ -50,23 +47,21 @@ promote it.
 
 ## Session and plan records
 
-A commissioning session is private local state containing:
+A commissioning journal is private local state containing:
 
-- a random session identifier;
 - exact product and vendor identifiers;
-- a salted device fingerprint, never the raw serial;
 - requested route;
 - baseline and candidate SHA-256 digests;
-- inspected executable identity and trust result;
-- owner/receiver observations;
+- bounded installation trust and receiver observations;
 - timestamps, expiry, and state transitions; and
-- sanitized physical/action receipts.
+- sanitized operator-check/action receipts.
 
-A plan digest binds the device fingerprint, route, baseline digest, candidate
-digest, executable identity, requested operations, and expiry. Confirmation is
-one-use and only authorizes that exact plan. In the current implementation,
-confirmation advances to `human_action_required`; it does not grant a device
-write.
+A plan digest binds the current sanitized snapshot, route, baseline digest,
+candidate digest, Input-cache digest, intended outcome, and expiry. The current
+implementation has no confirmation or device-write API: preparing a plan only
+records a short-lived human-only handoff. A future device-specific fingerprint
+or executable-content identity must be added before any deterministic writer
+could be considered.
 
 Records are written atomically with mode `0600`. Raw prompts, repository paths,
 window titles, key contents, device serials, and credentials are excluded.
@@ -80,9 +75,10 @@ There are four distinct authority classes:
 3. `confirm`: record operator intent for one expiring plan;
 4. `mutate`: change application or device state.
 
-This repository currently implements the first three only. `mutate` remains
-unavailable under the repository safety contract. The UI must say so plainly
-and lead the operator through the supported Work Louder Input action.
+This repository currently implements `observe` and `plan` only. `confirm` and
+`mutate` remain unavailable under the repository safety contract. The UI must
+say so plainly and lead the operator through the supported Work Louder Input
+action.
 
 If a future deterministic writer is approved, it must additionally enforce:
 
@@ -93,7 +89,7 @@ If a future deterministic writer is approved, it must additionally enforce:
 - minimal managed-file scope;
 - readback and semantic verification;
 - one bounded rollback attempt; and
-- a physical acceptance receipt after the write.
+- an operator-attested acceptance receipt after the write.
 
 Reset, format, profile deletion, firmware flashing, and arbitrary HID/file
 commands remain outside that authority.
@@ -130,11 +126,11 @@ The wizard is intentionally linear:
 2. Explain the exact missing receipt.
 3. Protect the current configuration.
 4. Validate the intended profile.
-5. Bind one confirmation to the plan.
+5. Review the short-lived human-only plan.
 6. Guide the supported human import/activation action.
 7. Re-inspect and arm Flight Check.
 8. Ask for one highlighted physical gesture at a time.
-9. Show provider-specific acceptance and a durable receipt.
+9. Show provider-specific acceptance and a saved Flight receipt.
 
 Every failure screen contains a safe retry and a concise evidence disclosure.
 No retry performs a mutation.

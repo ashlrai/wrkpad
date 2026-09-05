@@ -7,10 +7,13 @@
 - Security: https://github.com/ashlrai/wrkpad/blob/main/SECURITY.md
 - Controls: https://github.com/ashlrai/wrkpad/blob/main/app/docs/controls.md
 - Setup: https://github.com/ashlrai/wrkpad/blob/main/app/docs/setup.md
+- Local commissioner: https://github.com/ashlrai/wrkpad/blob/main/docs/commissioner-architecture.md
 - Release evidence: https://github.com/ashlrai/wrkpad/blob/main/docs/release.md
 - Capabilities: capabilities.json
 
 The core is MIT; the desktop app is Apache-2.0. This is a developer preview with no signed public binary. Checked-in landing-page source does not prove a GitHub Pages deployment. Device operation is observe-only. Provider approvals and release authority remain outside wrkpad. The landing demo is synthetic. An Amplify, Verify, Polish, and Advance delivery contract is proposed for Codex and Claude Code/cmux; the current landing does not claim that contract is released. It does not submit prompts or terminal input.
+
+The source-built Ashlr Layer commissioner is a deterministic, read-only guide. It projects exact device, Input trust, receiver, rollback, candidate, and physical-acceptance gates; identifies one safe next action; and stores a private, expiring, content-bound human-only plan when evidence permits. Its plan always records writesAuthorized=false. It does not create a Work Louder Input backup, import or activate a profile, synchronize the board, change macOS permission, reset, flash firmware, or perform any HID or device-filesystem write. Codex Native uses its separate passive handoff and operator attestation; commissioner readiness does not prove native Codex behavior or Claude/cmux pane focus.
 
 Hybrid Native is an opt-in source experiment, not an accepted or released configuration. Its offline generator creates two layers and twenty shared action definitions. The mixed first layer references fourteen action, joystick, and dial shortcuts while six physical Agent keys remain Codex-only; the second layer is the full twenty-shortcut Ashlr Daily fallback. The generator, strict verifier, route ownership policy, and fourteen-signal evaluator are source-tested. Input import, device synchronization, six native key observations, fourteen physical shortcut signals, native RGB, and combined 14+6 acceptance remain unproven. The mixed screen queue does not give the six physical Agent keys Claude selection. Claude slots can foreground cmux but cannot select an exact workspace or pane, and terminal input is always prohibited.
 

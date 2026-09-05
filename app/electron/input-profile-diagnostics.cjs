@@ -231,10 +231,8 @@ function inspectInputProfile(home, deviceStorageId = DEFAULT_DEVICE_STORAGE_ID) 
     if (stats.size < 2 || stats.size > MAX_KEYMAP_BYTES) return unavailable('invalid')
     const bytes = readFileSync(descriptor)
     const classified = classifyInputKeymap(JSON.parse(bytes.toString('utf8')))
-    return {
-      ...classified,
-      inputCacheSha256: createHash('sha256').update(bytes).digest('hex'),
-    }
+    if (classified.cacheStatus !== 'available') return classified
+    return { ...classified, inputCacheSha256: createHash('sha256').update(bytes).digest('hex') }
   } catch (error) {
     return unavailable(error?.code === 'ENOENT' ? 'missing' : 'invalid')
   } finally {
