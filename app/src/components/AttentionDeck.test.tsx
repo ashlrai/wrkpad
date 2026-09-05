@@ -17,18 +17,23 @@ const agents: AgentSlotSummary[] = [
 
 describe('black-cap attention runway', () => {
   it('mirrors the physical anchors and exposes every state without relying on color', () => {
-    render(<AttentionDeck agents={agents} selectedSlot={2} source="observer_online" onSelect={() => {}} onFocus={() => {}} />)
-    expect(screen.getByText('DIAL')).toBeTruthy()
-    expect(screen.getByText('STICK')).toBeTruthy()
+    render(<AttentionDeck agents={agents} selectedSlot={2} source="observer_online" boardRoute="ashlr_layer" onSelect={() => {}} onFocus={() => {}} />)
+    const topRow = screen.getByText('DIAL').parentElement
+    expect(Array.from(topRow?.children ?? []).map((node) => node.textContent?.includes('AG0') ? node.textContent?.slice(0, 4) : node.textContent)).toEqual(['DIAL', 'AG00', 'AG01', 'STICK'])
     expect(screen.getByRole('button', { name: /Agent 2, AG01, Claude Code, ashlr-hub, Needs you/i }).getAttribute('aria-pressed')).toBe('true')
     expect(screen.getByRole('button', { name: /Agent 4.*Ready to review/i })).toBeTruthy()
     expect(screen.getByRole('button', { name: /Agent 5.*Local agent.*Idle/i })).toBeTruthy()
     expect(screen.getByLabelText('Agent state legend for opaque keycaps').textContent).toContain('ErrorNeeds youWorkingReady to reviewIdleAvailable')
+    expect(screen.getByText('Unified physical map')).toBeTruthy()
+    expect(screen.getByText(/same mixed Codex \+ Claude Code slots in every workflow lens/i)).toBeTruthy()
+    const handoff = screen.getByText('Provider handoff:').closest('.appsense-handoff')
+    expect(handoff?.textContent).toMatch(/foreground ChatGPT or cmux/i)
+    expect(handoff?.textContent).toMatch(/cmux pane focus is upgradeable only after capability negotiation and human-enabled access/i)
   })
 
   it('selects an empty key without inventing a focus target', () => {
     const onSelect = vi.fn(); const onFocus = vi.fn()
-    render(<AttentionDeck agents={agents} selectedSlot={1} source="observer_online" onSelect={onSelect} onFocus={onFocus} />)
+    render(<AttentionDeck agents={agents} selectedSlot={1} source="observer_online" boardRoute="ashlr_layer" onSelect={onSelect} onFocus={onFocus} />)
     fireEvent.click(screen.getByRole('button', { name: /Agent 6.*Available/i }))
     expect(onSelect).toHaveBeenCalledWith(6)
     expect(onFocus).not.toHaveBeenCalled()
@@ -36,15 +41,36 @@ describe('black-cap attention runway', () => {
 
   it('announces only new urgent transitions through one polite status region', async () => {
     const calm = agents.map((agent) => ({ ...agent, state: agent.state === 'error' || agent.state === 'needs_input' ? 'idle' as const : agent.state }))
-    const { rerender } = render(<AttentionDeck agents={calm} selectedSlot={1} source="observer_online" onSelect={() => {}} onFocus={() => {}} />)
+    const { rerender } = render(<AttentionDeck agents={calm} selectedSlot={1} source="observer_online" boardRoute="ashlr_layer" onSelect={() => {}} onFocus={() => {}} />)
     const status = screen.getByRole('status')
     expect(status.getAttribute('aria-live')).toBe('polite')
     expect(status.textContent).toBe('')
 
-    rerender(<AttentionDeck agents={agents} selectedSlot={1} source="observer_online" onSelect={() => {}} onFocus={() => {}} />)
+    rerender(<AttentionDeck agents={agents} selectedSlot={1} source="observer_online" boardRoute="ashlr_layer" onSelect={() => {}} onFocus={() => {}} />)
     await waitFor(() => expect(status.textContent).toBe('Agent 1, Codex, gateway, error. Agent 2, Claude Code, ashlr-hub, needs you.'))
 
-    rerender(<AttentionDeck agents={agents.map((agent) => agent.slot === 2 ? { ...agent, state: 'error' as const } : agent)} selectedSlot={1} source="observer_online" onSelect={() => {}} onFocus={() => {}} />)
+    rerender(<AttentionDeck agents={agents.map((agent) => agent.slot === 2 ? { ...agent, state: 'error' as const } : agent)} selectedSlot={1} source="observer_online" boardRoute="ashlr_layer" onSelect={() => {}} onFocus={() => {}} />)
     await waitFor(() => expect(status.textContent).toBe('Agent 2, Claude Code, ashlr-hub, error.'))
+  })
+
+  it('keeps mixed slots as the default and makes provider lenses visual-only', () => {
+    render(<AttentionDeck agents={agents} selectedSlot={1} source="observer_online" boardRoute="codex_native" onSelect={() => {}} onFocus={() => {}} />)
+    expect(screen.getByRole('button', { name: 'Mixed' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getAllByRole('button', { name: /Agent [1-6], AG0/ })).toHaveLength(6)
+    expect(screen.getByText('Mixed screen map · Codex-only physical route')).toBeTruthy()
+    expect(screen.getByText(/physical AG00–AG05 are owned by Codex/i)).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Codex' }))
+    expect(screen.getByRole('button', { name: 'Codex' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getAllByRole('button', { name: /Agent [1-6], AG0/ })).toHaveLength(6)
+    expect(screen.getByRole('button', { name: /Agent 2.*Claude Code.*Outside the current screen lens/i }).className).toContain('outside-lens')
+    expect(screen.getByRole('button', { name: /Agent 1.*Codex/i }).className).not.toContain('outside-lens')
+  })
+
+  it('states the Hybrid Native ownership boundary without promising Claude pane focus', () => {
+    render(<AttentionDeck agents={agents} selectedSlot={1} source="observer_online" boardRoute="hybrid_native" onSelect={() => {}} onFocus={() => {}} />)
+    expect(screen.getByText('Mixed screen map · split physical ownership')).toBeTruthy()
+    expect(screen.getByText(/AG00–AG05 remain Codex-native/i)).toBeTruthy()
+    expect(screen.getByText(/exact Claude task or cmux pane focus remains unavailable/i)).toBeTruthy()
   })
 })

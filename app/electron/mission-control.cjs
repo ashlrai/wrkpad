@@ -4,6 +4,8 @@ const path = require('node:path')
 const { resolveTool } = require('./tool-resolver.cjs')
 
 const MAX_JSON_BYTES = 2 * 1024 * 1024
+const MAX_AGENT_SNAPSHOT_AGE_MS = 30_000
+const MAX_AGENT_SNAPSHOT_FUTURE_SKEW_MS = 5_000
 const PROVIDERS = new Set(['codex', 'claude', 'manual', 'unknown'])
 const STATES = new Set(['off', 'idle', 'unread', 'working', 'needs_input', 'error'])
 
@@ -28,7 +30,7 @@ function invalid(code, message) {
   return { ok: false, code, message }
 }
 
-function validateAgentPayload(raw) {
+function validateAgentPayload(raw, options = {}) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     return invalid('invalid_payload', 'wrkpad status must return a JSON object.')
   }
@@ -37,6 +39,48 @@ function validateAgentPayload(raw) {
   }
   if (!Array.isArray(raw.slots)) {
     return invalid('invalid_slots', 'Expected wrkpad field slots to be an array.')
+  }
+  if (!Number.isSafeInteger(raw.revision) || raw.revision < 0) {
+    return invalid('invalid_revision', 'Expected wrkpad field revision to be a non-negative safe integer.')
+  }
+  if (!timestampField(raw.generated_at)) {
+    return invalid('invalid_generated_at', 'Expected wrkpad field generated_at to be a bounded timestamp.')
+  }
+  if (!finiteCountField(raw.unassigned_active_sessions)) {
+    return invalid('invalid_unassigned_sessions', 'Expected wrkpad field unassigned_active_sessions to be a non-negative safe integer.')
+  }
+  if (raw.slots.length !== 6) {
+    return invalid('invalid_slot_count', 'Expected exactly six wrkpad slots.')
+  }
+  const seen = new Set()
+  for (const [index, candidate] of raw.slots.entries()) {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+      return invalid('invalid_slot', 'Expected each wrkpad slot to be an object.')
+    }
+    if (!Number.isInteger(candidate.slot) || candidate.slot < 1 || candidate.slot > 6) {
+      return invalid('invalid_slot_number', 'Expected every wrkpad slot number to be between 1 and 6.')
+    }
+    if (seen.has(candidate.slot)) {
+      return invalid('duplicate_slot', 'Expected every wrkpad slot number to be unique.')
+    }
+    seen.add(candidate.slot)
+    if (candidate.slot !== index + 1) {
+      return invalid('invalid_slot_order', 'Expected wrkpad slots in ascending physical order.')
+    }
+    if (candidate.session !== undefined && (!candidate.session || typeof candidate.session !== 'object' || Array.isArray(candidate.session))) {
+      return invalid('invalid_session', 'Expected an occupied wrkpad slot session to be an object.')
+    }
+  }
+  if (options.now !== undefined) {
+    const now = options.now instanceof Date && Number.isFinite(options.now.getTime()) ? options.now.getTime() : NaN
+    if (!Number.isFinite(now)) return invalid('invalid_validation_time', 'Agent snapshot validation requires a valid current time.')
+    const generatedAt = Date.parse(raw.generated_at)
+    if (generatedAt > now + MAX_AGENT_SNAPSHOT_FUTURE_SKEW_MS) {
+      return invalid('future_snapshot', 'wrkpad status returned a snapshot from the future.')
+    }
+    if (now - generatedAt > MAX_AGENT_SNAPSHOT_AGE_MS) {
+      return invalid('stale_snapshot', 'wrkpad status returned a stale snapshot.')
+    }
   }
   return valid()
 }
@@ -184,7 +228,7 @@ async function collectMissionControl(home) {
   ])
   const agentPayload = agentsResult.status === 'fulfilled' ? agentsResult.value : null
   const fleetPayload = fleetResult.status === 'fulfilled' ? fleetResult.value : null
-  const validAgentPayload = isValidAgentPayload(agentPayload)
+  const validAgentPayload = validateAgentPayload(agentPayload, { now: new Date() }).ok
   const validFleetPayload = isValidFleetPayload(fleetPayload)
   return {
     schemaVersion: 1,
@@ -205,6 +249,8 @@ function appForProvider(provider) {
 }
 
 module.exports = {
+  MAX_AGENT_SNAPSHOT_AGE_MS,
+  MAX_AGENT_SNAPSHOT_FUTURE_SKEW_MS,
   appForProvider,
   collectMissionControl,
   detectClaudeHookHazards,

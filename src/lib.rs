@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 pub mod client;
+pub mod commissioner;
 pub mod config;
 pub mod device;
 pub mod doctor;
@@ -13,6 +14,7 @@ pub mod occupancy;
 pub mod protocol;
 pub mod server;
 pub mod service;
+pub mod shadow;
 pub mod storage;
 pub mod tui;
 

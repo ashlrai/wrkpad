@@ -51,7 +51,11 @@ Batch ingestion, long polling, and acknowledgement are planned additions and are
 }
 ```
 
-The server accepts the raw provider identity only over authenticated loopback, combines provider, session ID, and working directory under HMAC-SHA-256, then clears `cwd` before reducer persistence. Hook adapters retain only allow-listed labels.
+The server accepts the raw provider identity only over authenticated loopback and
+combines only the versioned `wrkpad.hasp.session.v1` domain, canonical provider
+tag, and provider-local session ID under HMAC-SHA-256. Working directory presence
+or spelling cannot change that private binding. The server clears `cwd` before
+reducer persistence, and hook adapters retain only allow-listed labels.
 
 Provider values: `claude`, `codex`, `manual`, and `unknown`.
 
@@ -67,6 +71,11 @@ Event kinds:
 - `heartbeat`
 - `session_end`
 
+Direct protocol clients supply `event_id` for retry idempotency. The bundled
+hook adapter has no retry path and assigns a fresh UUIDv4 to every delivered
+lifecycle signal, so two different signals in one provider turn cannot collapse
+solely because they map to the same visible state.
+
 ## State priority
 
 The visible order is:
@@ -75,7 +84,7 @@ The visible order is:
 error > needs_input > working > unread > idle > off
 ```
 
-Provider events have semantic clearing rules. For example, `turn_complete` clears ordinary working/attention state into unread but cannot clear error. A future latch-based reducer may add explicit error and attention identifiers without changing the visible priority order.
+Provider events have semantic clearing rules. For example, `turn_complete` clears ordinary working/attention state into unread but cannot clear error. For an existing private session binding, a non-duplicate event whose `at` timestamp predates the current record is rejected with `422` and cannot change its state, metadata, slot, revision, or persisted event history. An exact duplicate `event_id` remains idempotent even after a newer event. A future latch-based reducer may add explicit error and attention identifiers without changing the visible priority order.
 
 ## Sticky slots and overflow
 
@@ -85,13 +94,22 @@ Provider events have semantic clearing rules. For example, `turn_complete` clear
 4. Error, needs-input, working, and unread slots are protected.
 5. If no safe slot exists, ingestion returns `409 Conflict`; no active slot is repainted.
 
-Duplicate `event_id` values return the previous revision without a second state transition.
+Duplicate `event_id` values return the current revision without a second state transition.
 
 ## Response and snapshot
 
-Accepted ingestion returns `202`; an exact duplicate returns `200`. Validation failures return structured `dev.wrkpad.error/v1` JSON.
+Accepted ingestion returns `202`; an exact duplicate returns `200`. Validation
+failures, including out-of-order events, return structured
+`dev.wrkpad.error/v1` JSON with `422`.
 
 The state schema is `dev.wrkpad.hasp.state/v1`. It always returns six entries in slot order. `session_id` in a snapshot is an opaque `hmac-sha256:` binding, not the provider ID.
+
+This correction does not change either wire schema. Existing bindings created by
+the earlier unversioned derivation cannot be migrated because their raw provider
+session IDs were intentionally never persisted. After upgrading, the next event
+for each provider session may take a new slot; the operator may use the existing
+authenticated forget flow once per stale pre-upgrade slot, potentially for all
+six slots.
 
 ## Privacy contract
 

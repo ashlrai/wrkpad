@@ -25,14 +25,16 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
-          node-version: 22
+          node-version-file: .node-version
           cache: npm
           cache-dependency-path: app/package-lock.json
       - run: npm ci
       - run: npm run lint
       - run: npm test
       - run: npm run build
-      - run: npm audit --audit-level=high
+      # Lockfile auditing is centralized in security.yml. Keeping it out of
+      # this source job avoids npm's retiring quick-audit endpoint and gives
+      # dependency review, CodeQL, and source scans one authoritative workflow.
 
   package-macos:
     name: Agent Board package smoke
@@ -42,20 +44,58 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
-          node-version: 22
+          node-version-file: .node-version
           cache: npm
           cache-dependency-path: app/package-lock.json
       - run: npm ci
       - run: npm run package:mac
-      - name: Verify hardened unsigned package
+      - name: Verify hardened non-distribution package
         shell: bash
         run: |
+          set -euo pipefail
           bundle="$(find release -type d -name 'Ashlr Agent Board.app' -print -quit)"
           test -n "$bundle"
+          node scripts/verify-packaged-requires.cjs "$bundle/Contents/Resources/app.asar"
           plist="$bundle/Contents/Info.plist"
+          executable="$bundle/Contents/MacOS/Ashlr Agent Board"
+          expected_version="$(node -p "require('./package.json').version")"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist")" = "ai.ashlr.agent-board"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")" = "$expected_version"
+          architectures="$(lipo -archs "$executable")"
+          [[ "$architectures" =~ ^(arm64|x86_64)(\ (arm64|x86_64))*$ ]]
           test "$(/usr/libexec/PlistBuddy -c 'Print :NSAppTransportSecurity:NSAllowsArbitraryLoads' "$plist")" = false
           for key in NSAudioCaptureUsageDescription NSBluetoothAlwaysUsageDescription NSBluetoothPeripheralUsageDescription NSCameraUsageDescription NSMicrophoneUsageDescription; do
             ! /usr/libexec/PlistBuddy -c "Print :$key" "$plist" >/dev/null 2>&1
           done
+          codesign --verify --deep --strict --verbose=2 "$bundle"
+          signature_info="$(codesign -dvvv "$bundle" 2>&1 || true)"
+          if grep -q '^Authority=Developer ID Application:' <<<"$signature_info"; then
+            echo "PR package unexpectedly contains a Developer ID Application authority." >&2
+            exit 1
+          fi
+          team_id="$(sed -n 's/^TeamIdentifier=//p' <<<"$signature_info" | head -1)"
+          if [[ -n "$team_id" && "$team_id" != "not set" ]]; then
+            echo "PR package unexpectedly contains a signing team identifier." >&2
+            exit 1
+          fi
+          if ! { grep -q '^Signature=adhoc$' <<<"$signature_info" && grep -q '^TeamIdentifier=not set$' <<<"$signature_info"; }; then
+            echo "PR package must have a complete ad-hoc bundle signature with no team identity." >&2
+            exit 1
+          fi
+          macho_count=0
+          while IFS= read -r -d '' code; do
+            if file -b "$code" | grep -q '^Mach-O'; then
+              macho_count=$((macho_count + 1))
+              nested_info="$(codesign -dvvv "$code" 2>&1 || true)"
+              grep -q '^Signature=adhoc$' <<<"$nested_info"
+              grep -q '^TeamIdentifier=not set$' <<<"$nested_info"
+              ! grep -q '^Authority=' <<<"$nested_info"
+            fi
+          done < <(find "$bundle" -type f -print0)
+          test "$macho_count" -gt 0
+          if spctl --assess --type execute "$bundle" >/dev/null 2>&1; then
+            echo "Expected Gatekeeper to reject the non-distribution PR package." >&2
+            exit 1
+          fi
       - name: Validate public demo fixture
         run: npm run capture:public-demo

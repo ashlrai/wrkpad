@@ -23,6 +23,8 @@ pub enum EngineError {
     TitleTooLong,
     #[error("cwd exceeds 4096 characters")]
     CwdTooLong,
+    #[error("event timestamp predates the current session state")]
+    OutOfOrderEvent,
     #[error("all six sticky slots are protected; acknowledge or forget an inactive session")]
     SlotsFull,
     #[error("agent slot must be between AG00 and AG05")]
@@ -64,6 +66,14 @@ impl StateEngine {
                 evicted_session_id: None,
                 snapshot: self.snapshot(),
             });
+        }
+
+        if self
+            .sessions
+            .get(&event.session_id)
+            .is_some_and(|session| event.at < session.updated_at)
+        {
+            return Err(EngineError::OutOfOrderEvent);
         }
 
         let previous_engine = self.clone();
@@ -307,6 +317,76 @@ mod tests {
         assert!(!first.duplicate);
         assert!(second.duplicate);
         assert_eq!(first.snapshot.revision, second.snapshot.revision);
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_older_lifecycle_events_without_regressing_attention() -> anyhow::Result<()> {
+        let mut engine = StateEngine::default();
+        let base = Utc::now();
+
+        let mut initial_working =
+            HaspEvent::new(Provider::Claude, "claude-ordered", EventKind::Working);
+        initial_working.at = base + Duration::seconds(1);
+        let initial_working_replay = initial_working.clone();
+        engine.apply(initial_working)?;
+
+        let mut needs_input =
+            HaspEvent::new(Provider::Claude, "claude-ordered", EventKind::NeedsInput);
+        needs_input.at = base + Duration::seconds(2);
+        needs_input.title = Some("current title".to_owned());
+        let accepted = engine.apply(needs_input)?;
+        let accepted_session = accepted.snapshot.slots[0]
+            .session
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("session was not assigned"))?;
+        assert_eq!(accepted_session.state, AgentState::NeedsInput);
+
+        let duplicate = engine.apply(initial_working_replay)?;
+        assert!(duplicate.duplicate);
+        assert_eq!(duplicate.snapshot.revision, accepted.snapshot.revision);
+        assert_eq!(
+            duplicate.snapshot.slots[0]
+                .session
+                .as_ref()
+                .map(|session| session.state),
+            Some(AgentState::NeedsInput)
+        );
+
+        let mut older_working =
+            HaspEvent::new(Provider::Claude, "claude-ordered", EventKind::Working);
+        older_working.at = base + Duration::milliseconds(1_500);
+        older_working.title = Some("stale title".to_owned());
+        let rejected_event_id = older_working.event_id;
+        assert!(matches!(
+            engine.apply(older_working),
+            Err(super::EngineError::OutOfOrderEvent)
+        ));
+
+        let after_rejection = engine.snapshot();
+        let current = after_rejection.slots[0]
+            .session
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("session disappeared"))?;
+        assert_eq!(after_rejection.revision, accepted.snapshot.revision);
+        assert_eq!(current.state, AgentState::NeedsInput);
+        assert_eq!(current.updated_at, base + Duration::seconds(2));
+        assert_eq!(current.title.as_deref(), Some("current title"));
+        assert_eq!(current.last_event_id, accepted_session.last_event_id);
+        assert!(!engine.seen_events.contains(&rejected_event_id));
+        assert!(!engine.event_history.contains(&rejected_event_id));
+
+        let mut newer_working =
+            HaspEvent::new(Provider::Claude, "claude-ordered", EventKind::Working);
+        newer_working.at = base + Duration::seconds(3);
+        let resumed = engine.apply(newer_working)?;
+        assert_eq!(
+            resumed.snapshot.slots[0]
+                .session
+                .as_ref()
+                .map(|session| session.state),
+            Some(AgentState::Working)
+        );
         Ok(())
     }
 

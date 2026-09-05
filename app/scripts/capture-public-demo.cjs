@@ -74,7 +74,7 @@ async function capture() {
       banner.innerHTML = '<strong style="color:#8fa3ff">SYNTHETIC DOCUMENTATION VIEW</strong><span>No live sessions, personal paths, device writes, RGB, or Fleet authority.</span>';
       document.body.prepend(banner);
       const visibleText = document.body.innerText;
-      const requiredText = ['BLACK-CAP LEGEND', 'Ready to review', 'Available', 'Screen is authoritative now', 'USB absent', 'OBSERVER UNAVAILABLE'];
+      const requiredText = ['BLACK-CAP LEGEND', 'Ready to review', 'Available', 'Screen is authoritative now', 'USB identity not observed', 'Agent session feed unavailable'];
       return {
         contentHeight: Math.ceil(document.documentElement.scrollHeight),
         slotCount: document.querySelectorAll('.attention-slot').length,
@@ -99,11 +99,20 @@ async function capture() {
   if (finalContentHeight > captureHeight) {
     throw new Error(`Public fixture grew to ${finalContentHeight}px after layout and would be truncated at ${captureHeight}px`)
   }
-  const image = await window.webContents.capturePage()
-  const imageSize = image.getSize()
-  if (imageSize.width !== width || imageSize.height !== captureHeight) {
-    throw new Error(`Public fixture captured at ${imageSize.width}x${imageSize.height}; expected ${width}x${captureHeight}`)
+  const capturedImage = await window.webContents.capturePage()
+  const capturedSize = capturedImage.getSize()
+  const widthScale = capturedSize.width / width
+  const heightScale = capturedSize.height / captureHeight
+  if (!Number.isInteger(widthScale) || widthScale < 1 || widthScale > 4 || heightScale !== widthScale) {
+    throw new Error(`Public fixture captured at ${capturedSize.width}x${capturedSize.height}; expected a bounded integer scale of ${width}x${captureHeight}`)
   }
+  // Chromium can capture backing-store pixels on Retina hosts even when the
+  // logical device scale switch is pinned. Normalize to the reviewed logical
+  // dimensions so local and CI fixtures have the same public contract.
+  const image = widthScale === 1
+    ? capturedImage
+    : capturedImage.resize({ width, height: captureHeight, quality: 'best' })
+  const imageSize = image.getSize()
   await mkdir(path.dirname(outputPath), { recursive: true })
   const existingImage = nativeImage.createFromPath(outputPath)
   const comparison = existingImage.isEmpty() ? null : compareImages(image, existingImage)

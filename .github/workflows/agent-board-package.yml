@@ -1,4 +1,4 @@
-name: Agent Board unsigned preview
+name: Agent Board non-distribution package audit
 
 on:
   workflow_dispatch:
@@ -12,39 +12,84 @@ defaults:
 
 jobs:
   package:
-    name: Build unsigned macOS preview
+    name: Verify ad-hoc-sealed macOS preview
     runs-on: macos-15
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
-          node-version: 22
+          node-version-file: .node-version
           cache: npm
           cache-dependency-path: app/package-lock.json
       - run: npm ci
       - run: npm test
       - run: npm run package:mac
-      - name: Preserve executable bits
-        run: tar -czf ashlr-agent-board-macos-unsigned.tgz -C release .
-      - name: Write source and checksum manifest
+      - name: Verify bundle metadata and non-distribution seal
         shell: bash
         run: |
-          archive="ashlr-agent-board-macos-unsigned.tgz"
-          checksum="$(shasum -a 256 "$archive" | awk '{print $1}')"
+          set -euo pipefail
+          bundle="$(find release -type d -name 'Ashlr Agent Board.app' -print -quit)"
+          test -n "$bundle"
+          node scripts/verify-packaged-requires.cjs "$bundle/Contents/Resources/app.asar"
+          plist="$bundle/Contents/Info.plist"
+          executable="$bundle/Contents/MacOS/Ashlr Agent Board"
+          expected_version="$(node -p "require('./package.json').version")"
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist")" = "ai.ashlr.agent-board"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")" = "$expected_version"
+          architectures="$(lipo -archs "$executable")"
+          [[ "$architectures" =~ ^(arm64|x86_64)(\ (arm64|x86_64))*$ ]]
+          codesign --verify --deep --strict --verbose=2 "$bundle"
+          signature_info="$(codesign -dvvv "$bundle" 2>&1 || true)"
+          if grep -q '^Authority=Developer ID Application:' <<<"$signature_info"; then
+            echo "Audit package unexpectedly contains a Developer ID Application authority." >&2
+            exit 1
+          fi
+          team_id="$(sed -n 's/^TeamIdentifier=//p' <<<"$signature_info" | head -1)"
+          if [[ -n "$team_id" && "$team_id" != "not set" ]]; then
+            echo "Audit package unexpectedly contains a signing team identifier." >&2
+            exit 1
+          fi
+          if ! { grep -q '^Signature=adhoc$' <<<"$signature_info" && grep -q '^TeamIdentifier=not set$' <<<"$signature_info"; }; then
+            echo "Audit package must have a complete ad-hoc bundle signature with no team identity." >&2
+            exit 1
+          fi
+          macho_count=0
+          while IFS= read -r -d '' code; do
+            if file -b "$code" | grep -q '^Mach-O'; then
+              macho_count=$((macho_count + 1))
+              nested_info="$(codesign -dvvv "$code" 2>&1 || true)"
+              grep -q '^Signature=adhoc$' <<<"$nested_info"
+              grep -q '^TeamIdentifier=not set$' <<<"$nested_info"
+              ! grep -q '^Authority=' <<<"$nested_info"
+            fi
+          done < <(find "$bundle" -type f -print0)
+          test "$macho_count" -gt 0
+          if spctl --assess --type execute "$bundle" >/dev/null 2>&1; then
+            echo "Expected Gatekeeper to reject the non-distribution audit package." >&2
+            exit 1
+          fi
+          checksum="$(shasum -a 256 "$bundle/Contents/Resources/app.asar" | awk '{print $1}')"
+          [[ "$checksum" =~ ^[0-9a-f]{64}$ ]]
           {
-            printf 'artifact=%s\n' "$archive"
-            printf 'sha256=%s\n' "$checksum"
+            printf 'bundle_id=ai.ashlr.agent-board\n'
+            printf 'version=%s\n' "$expected_version"
+            printf 'architectures=%s\n' "$architectures"
+            printf 'app_asar_sha256=%s\n' "$checksum"
             printf 'source_sha=%s\n' "$GITHUB_SHA"
-            printf 'signed=false\n'
+            printf 'adhoc_sealed=true\n'
+            printf 'strict_verified=true\n'
+            printf 'nested_macho_count=%s\n' "$macho_count"
+            printf 'developer_id_signed=false\n'
             printf 'notarized=false\n'
-          } > ashlr-agent-board-macos-unsigned.manifest.txt
-      - name: Upload explicitly unsigned preview
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: ashlr-agent-board-macos-unsigned
-          path: |
-            app/ashlr-agent-board-macos-unsigned.tgz
-            app/ashlr-agent-board-macos-unsigned.manifest.txt
-          if-no-files-found: error
-          retention-days: 14
+            printf 'published=false\n'
+          } | tee "$RUNNER_TEMP/ashlr-agent-board-package-audit.manifest.txt"
+      - name: Record non-distribution boundary
+        run: |
+          {
+            echo '### Non-distribution package audit'
+            echo ''
+            echo 'The package was built and inspected on this ephemeral runner.'
+            echo 'No application archive or installable binary was uploaded or published.'
+          } >> "$GITHUB_STEP_SUMMARY"

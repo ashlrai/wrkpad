@@ -16,11 +16,29 @@ const expected = {
   off: '#000000',
 }
 
-test('black-opaque layout defaults every visible switch away from frosted caps', () => {
+test('desk layout uses black opaque caps plus the transparent ACT12 hero key', () => {
   const layout = JSON.parse(readFileSync(layoutPath, 'utf8'))
   assert.equal(layout.appearance.profile, 'black-opaque')
   assert.equal(layout.controls.some((control) => control.cap === 'frosted_hero'), false)
-  assert.deepEqual(layout.appearance.optional_cap_variants, ['frosted_hero'])
+  assert.equal(layout.controls.find((control) => control.id === 'ACT12').cap, 'transparent')
+  assert.equal(layout.controls.filter((control) => control.kind === 'switch' && control.id !== 'ACT12').every((control) => control.cap === 'black_opaque'), true)
+  assert.deepEqual(layout.appearance.optional_cap_variants, ['all_black', 'frosted_hero'])
+})
+
+test('layout uses the exact native private keycode families for agent and action switches', () => {
+  const layout = JSON.parse(readFileSync(layoutPath, 'utf8'))
+  const switches = layout.controls.filter((item) => item.kind === 'switch')
+  assert.equal(switches.length, 13)
+  assert.deepEqual(
+    switches.map((control) => control.id),
+    ['AG00', 'AG01', 'AG02', 'AG03', 'AG04', 'AG05', 'ACT06', 'ACT07', 'ACT08', 'ACT09', 'ACT10', 'ACT11', 'ACT12'],
+  )
+  for (const control of layout.controls.filter((item) => /^AG0[0-5]$/.test(item.id))) {
+    assert.equal(control.private_keycode, `KV_OAI_${control.id}`)
+  }
+  for (const control of layout.controls.filter((item) => /^ACT(?:0[6-9]|1[0-2])$/.test(item.id))) {
+    assert.equal(control.private_keycode, `KV_OAI_${control.id}`)
+  }
 })
 
 test('layout, renderer, and Rust use one black-opaque semantic palette', () => {

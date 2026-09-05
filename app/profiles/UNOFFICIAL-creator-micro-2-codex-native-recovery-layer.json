@@ -1,0 +1,78 @@
+{
+  "keyboard": "creator_micro_v2",
+  "language": "us",
+  "layer": {
+    "id": 0,
+    "name": "Codex Native Recovery (UNOFFICIAL)",
+    "color": "#FF0000",
+    "layout": {
+      "base": [
+        [
+          { "keycode": "KV_OAI_AG00" },
+          { "keycode": "KV_OAI_AG01" }
+        ],
+        [
+          { "keycode": "KV_OAI_AG02" },
+          { "keycode": "KV_OAI_AG03" },
+          { "keycode": "KV_OAI_AG04" },
+          { "keycode": "KV_OAI_AG05" }
+        ],
+        [
+          { "keycode": "KV_OAI_ACT06" },
+          { "keycode": "KV_OAI_ACT07" },
+          { "keycode": "KV_OAI_ACT08" },
+          { "keycode": "KV_OAI_ACT09" }
+        ],
+        [
+          { "keycode": "KV_OAI_ACT10" },
+          { "keycode": "KV_OAI_ACT11" },
+          { "keycode": "KV_OAI_ACT12" }
+        ]
+      ],
+      "encoders": [
+        [
+          { "keycode": "KV_OAI_ENC_CC" },
+          { "keycode": "KV_OAI_ENC_CW" },
+          { "keycode": "KV_OAI_ENC_CLK" }
+        ]
+      ],
+      "joystick": {
+        "type": "VENDOR",
+        "sectors": []
+      }
+    },
+    "os": 0,
+    "lights": {
+      "backlight": {
+        "effect": "solid",
+        "brightness": 1,
+        "speed": 0.5,
+        "magic": 1,
+        "color": "#FFFFFF"
+      },
+      "underglow": {
+        "effect": "rainbow",
+        "brightness": 1,
+        "speed": 0.55,
+        "magic": 1,
+        "color": "#FFFFFF"
+      }
+    }
+  },
+  "actions": [],
+  "multiactions": [],
+  "actionGroups": [
+    {
+      "id": 0,
+      "name": "Codex Native Recovery (UNOFFICIAL)",
+      "actionIds": []
+    }
+  ],
+  "multiactionGroups": [
+    {
+      "id": 0,
+      "name": "Codex Native Recovery (UNOFFICIAL)",
+      "actionIds": []
+    }
+  ]
+}

@@ -12,8 +12,10 @@ Ashlr Agent Board gives opaque black keycaps a complete on-screen legend, keeps 
 The Creator Micro 2 has six Agent keys but black keycaps cannot communicate state by themselves. Agent Board mirrors their exact `2 + 4` geometry:
 
 ```text
-DIAL | AG00 | AG01 | STICK
-      AG02 | AG03 | AG04 | AG05
+DIAL  | AG00  | AG01  | STICK
+AG02  | AG03  | AG04  | AG05
+ACT06 | ACT07 | ACT08 | ACT09
+TOUCH | ACT10 | ACT11 | ACT12 (transparent)
 ```
 
 Every slot combines provider, task title, icon, text state, and color. The experience therefore works without replacement keycaps and remains understandable without color alone.
@@ -27,25 +29,71 @@ Every slot combines provider, task title, icon, text state, and color. The exper
 | Idle | A known session is inactive | Purple |
 | Available | No session occupies the slot | Black |
 
+## Commission the Ashlr Layer without guessing
+
+Setup includes a deterministic local commissioner for the cross-provider
+**Ashlr Layer** route. It presents one proof runway—exact device, trusted Input
+installation, one receiver, preserved source export, validated candidate, and
+an active operator-attested shortcut run—and names one safe next action at a time.
+
+The commissioner can observe sanitized evidence and save a private, expiring,
+content-bound plan. Every current plan is `external_agent_visible_ui` and
+`writesAuthorized: false`. The embedded app does not create the source export.
+An enrolled external computer-use agent can drive the visible vendor UI under
+the canonical contract. After the user or that agent selects the ordinary Input export for
+offline repair, the app hashes it, records its bounded path and digest in the
+private recovery receipt, and revalidates the same bytes for the source-backup
+gate. This does not assert that the export represents the current board state
+or a complete rollback.
+The embedded app itself does not import or activate a profile, change a macOS
+permission, reset settings, update firmware, or issue a HID/device-filesystem
+write.
+
+This distinction is deliberate: candidate validation proves the offline file,
+cache agreement proves only inspected local cache state, and a fresh Flight
+Check proves only that the operator-attested global-shortcut sequence reached
+the active receiver. macOS does not cryptographically identify its keyboard
+source, and the saved receipt cannot commission a later session. Codex
+Native uses a separate passive restart-safe handoff and operator attestation;
+the Ashlr commissioner does not claim native Codex key or RGB acceptance.
+
 ## What it does today
 
 - Shows six stable, provider-neutral agent slots sourced from `wrkpad status --json`.
 - Foregrounds ChatGPT for Codex slots and cmux for Claude Code slots without sending input.
 - Summarizes `ashlr fleet status --json` into an exception-first operator brief.
-- Maps 20 desktop shortcuts to the board's dial, joystick, Agent keys, and action switches.
+- Maps 20 desktop shortcuts to the board's dial, joystick, Agent keys, and action switches only while the Ashlr Layer route is declared. Codex Native and unknown routes unregister every shortcut.
 - Provides Attention, Pair, Fleet, Proof, and Recovery software lenses while keeping Agent keys fixed.
+- Provides a movable, hardware-optional Compact Deck with privacy-first titles,
+  window-scoped numpad bindings, and the exact physical four-row geometry.
+- Keeps ACT06–ACT09 stable as Amplify, Verify, Polish, and Advance across the
+  four daily lenses; ACT10 stages Voice, ACT11 copies guarded Continue, and
+  transparent ACT12 resolves Attention. Recovery deliberately replaces only
+  ACT06–ACT09 with guarded fleet controls.
 - Separates immediate, confirm, and press-and-hold actions in the Electron main process.
-- Runs an interlocked Flight Check for all physical routes and exports a hashed local receipt.
+- Runs an interlocked Ashlr Layer Flight Check and exports a hashed local receipt.
+- Converts Ashlr Layer setup evidence into a six-gate commissioning runway and
+  a private read-only plan without granting device-write authority.
+- Presents separate Codex Native and Ashlr Layer setup flight plans, with a
+  private restart-safe native handoff that rejects stale VID:PID/Desktop-metadata
+  context and records only explicit operator observations. In Codex Native mode,
+  a successful **Prepare handoff** verifies that Agent Board has no registered
+  shortcuts, so it may stay open as a passive evidence watcher while ChatGPT
+  Desktop restarts. Restart-safe means the
+  handoff also survives quitting Agent Board; it does not prove a new Codex process.
 - Keeps session IDs, provider working directories, prompts, transcripts, tool arguments, and raw Fleet payloads out of mission snapshots. Workspace Pulse separately shows the working directory the user selected.
 
 See [controls and state](docs/controls.md) for the complete map and [architecture and trust](docs/architecture.md) for the security model.
 
 ## Requirements
 
-- macOS and a Work Louder Creator Micro 2
-- [Work Louder Input](https://worklouder.cc/input/) for board profiles and shortcut mapping
+- macOS. The Compact Deck and on-screen mission control work without hardware.
+- A Work Louder Creator Micro 2 is required only for physical shortcuts, Flight
+  Check, and Codex Native qualification.
 - Node.js 22 or newer and npm for development
-- Optional local integrations: Codex CLI and ChatGPT Desktop; Claude Code, Claude Desktop, and cmux; `wrkpad`; and Ashlr Hub.
+- **Codex Native:** ChatGPT Desktop is required for the native board route.
+- **Ashlr Layer, profile repair, or firmware qualification:** [Work Louder Input](https://worklouder.cc/input/) is required for board profiles and shortcut mapping.
+- Optional local integrations: Codex CLI; Claude Code, Claude Desktop, and cmux; `wrkpad`; and Ashlr Hub.
 
 Runtime CLI discovery checks `~/.local/bin`, `~/.npm-global/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, and `/usr/bin` in that order. It intentionally does not trust the inherited `PATH`. Missing optional tools appear as unavailable rather than being installed automatically.
 
@@ -56,24 +104,47 @@ git clone https://github.com/ashlrai/wrkpad.git
 cd wrkpad/app
 npm install
 npm run doctor
+npm run agent:preflight
 npm test
 npm run dev
 ```
 
 `npm run doctor` performs read-only local probes and reports anything that still needs human verification.
+`npm run agent:preflight` adds stable-binary, hook, service, source, and
+route-specific evidence using the shared repository contract. Append
+`-- --route codex_native` only for the separate native qualification route.
 
-Before pressing physical controls, follow [setup and Flight Check](docs/setup.md). Work Louder Input must emit the exact shortcuts expected by the app, and macOS Input Monitoring must be granted by the user.
+Before pressing physical controls, follow [setup and Flight Check](docs/setup.md).
+For the recommended native-Codex plus cross-provider configuration, generate a
+new [Dual Plane profile](docs/dual-plane-profile.md): ChatGPT owns layer 1 and
+the provider-neutral Codex + Claude workflow owns layer 2, without keeping
+Work Louder Input open during daily use.
+For **Ashlr Layer**, Work Louder Input must emit the exact shortcuts expected by
+the app and macOS Input Monitoring must be granted by the user. Input's header
+is the edit target, not proof of the current keyboard profile; use **Set as
+current profile**, then require the read-only receipt and physical Flight Check.
+For **Codex Native**, prepare the restart-safe handoff, keep Agent Board open in
+passive mode or quit it, leave Work Louder Input quit, restart ChatGPT Desktop,
+then use the bounded watcher or **Refresh now** to update inferred initialization
+evidence and record each physical observation manually. Neither path proves the
+other.
+
+To populate the six slots with live Codex and Claude Code state, also complete
+the guarded [`wrkpad` service and hook setup](../docs/hook-setup.md). A configured
+hook, a trusted hook, a received lifecycle event, and a physical board signal
+are separate gates.
 
 ## Develop and package
 
 ```bash
 npm run dev          # Vite renderer plus Electron
 npm run dev:web      # renderer only; actions are simulated
+npm run agent:preflight # read-only shared Ashlr Layer readiness
 npm test             # Vitest plus Electron main-process tests
 npm run lint         # oxlint
 npm run build        # TypeScript and production renderer
 npm run capture:public-demo # privacy-safe screenshot from the real renderer
-npm run package:mac  # unsigned, unpacked macOS app
+npm run package:mac  # ad-hoc sealed, unpacked macOS preview
 ```
 
 The public-demo capture uses a fixed-data, action-disabled synthetic bridge
@@ -83,15 +154,22 @@ CI executes the real fixture and validates its required states, privacy labels,
 dimensions, and truncation boundary. Chromium raster output can vary even on
 one runner, so screenshot refreshes remain under human visual review.
 
-`npm run package:mac` writes an architecture-specific app under `release/`. It does not sign, notarize, publish, install, or prove physical acceptance.
+`npm run package:mac` writes an architecture-specific app under `release/` and
+applies a complete local ad-hoc bundle signature so strict macOS verification
+can detect packaging corruption. An ad-hoc signature is not a Developer ID
+signature: CI requires default Gatekeeper assessment to reject the preview,
+while a local machine's policy or prior explicit allowance can differ. The
+command does not notarize, publish, install, or prove physical acceptance.
 
 ## Documentation
 
 - [Setup and Flight Check](docs/setup.md)
+- [Local commissioner architecture](../docs/commissioner-architecture.md)
 - [Controls and state model](docs/controls.md)
 - [Architecture and trust boundaries](docs/architecture.md)
 - [Provider compatibility contracts](docs/provider-contracts.md)
 - [Troubleshooting](docs/troubleshooting.md)
+- [Unofficial Codex Native layer recovery](docs/codex-native-layer-recovery.md)
 - [Release and readiness](docs/release-readiness.md)
 - [Roadmap](docs/roadmap.md)
 - [Contributing](CONTRIBUTING.md)

@@ -3,6 +3,8 @@ const assert = require('node:assert/strict')
 const { readFileSync } = require('node:fs')
 const path = require('node:path')
 const {
+  MAX_AGENT_SNAPSHOT_AGE_MS,
+  MAX_AGENT_SNAPSHOT_FUTURE_SKEW_MS,
   appForProvider,
   detectClaudeHookHazards,
   isValidAgentPayload,
@@ -41,6 +43,32 @@ test('explains an unsupported wrkpad schema without treating it as online', () =
     message: 'Expected wrkpad schema dev.wrkpad.hasp.state/v1.',
   })
   assert.equal(isValidAgentPayload(payload), false)
+})
+
+test('requires one complete ordered six-slot HASP snapshot', () => {
+  const payload = fixture('wrkpad-state-v1.valid.json')
+  const cases = [
+    [{ ...payload, slots: payload.slots.slice(0, 5) }, 'invalid_slot_count'],
+    [{ ...payload, slots: [...payload.slots.slice(0, 5), { slot: 5 }] }, 'duplicate_slot'],
+    [{ ...payload, slots: payload.slots.map((slot, index) => index === 5 ? { slot: 7 } : slot) }, 'invalid_slot_number'],
+    [{ ...payload, slots: [payload.slots[1], payload.slots[0], ...payload.slots.slice(2)] }, 'invalid_slot_order'],
+  ]
+  for (const [candidate, code] of cases) {
+    assert.equal(validateAgentPayload(candidate).code, code)
+    assert.equal(isValidAgentPayload(candidate), false)
+  }
+})
+
+test('rejects malformed, stale, and future HASP snapshot metadata', () => {
+  const now = new Date('2026-08-31T12:01:00.000Z')
+  const payload = fixture('wrkpad-state-v1.valid.json')
+  assert.equal(validateAgentPayload({ ...payload, revision: -1 }).code, 'invalid_revision')
+  assert.equal(validateAgentPayload({ ...payload, generated_at: 'not-a-date' }).code, 'invalid_generated_at')
+  assert.equal(validateAgentPayload({ ...payload, unassigned_active_sessions: -1 }).code, 'invalid_unassigned_sessions')
+  assert.equal(validateAgentPayload({ ...payload, generated_at: new Date(now.getTime() - MAX_AGENT_SNAPSHOT_AGE_MS - 1).toISOString() }, { now }).code, 'stale_snapshot')
+  assert.equal(validateAgentPayload({ ...payload, generated_at: new Date(now.getTime() + MAX_AGENT_SNAPSHOT_FUTURE_SKEW_MS + 1).toISOString() }, { now }).code, 'future_snapshot')
+  assert.equal(validateAgentPayload({ ...payload, generated_at: now.toISOString() }, { now }).code, 'ok')
+  assert.equal(validateAgentPayload(payload, { now: new Date('invalid') }).code, 'invalid_validation_time')
 })
 
 test('accepts the Ashlr adapter fixture and omits unrelated raw fields', () => {
