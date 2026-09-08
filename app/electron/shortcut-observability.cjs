@@ -32,6 +32,7 @@ function createShortcutObservability({ signalIds, now = () => new Date() } = {})
   }
   const allowed = new Set(signalIds)
   let totalObserved = 0
+  let totalSuppressedDuplicates = 0
   let last = null
   let lastToken = null
   let generation = 0
@@ -43,6 +44,7 @@ function createShortcutObservability({ signalIds, now = () => new Date() } = {})
     generation = Math.min(MAX_TOTAL_OBSERVED, generation + 1)
     scope = nextScope
     totalObserved = 0
+    totalSuppressedDuplicates = 0
     last = null
     lastToken = null
     return true
@@ -65,16 +67,24 @@ function createShortcutObservability({ signalIds, now = () => new Date() } = {})
     return true
   }
 
+  function suppressDuplicate(observation) {
+    if (!observation || observation.token !== lastToken || last?.signalId !== observation.signalId || last?.receivedAt !== observation.receivedAt) return false
+    totalSuppressedDuplicates = Math.min(MAX_TOTAL_OBSERVED, totalSuppressedDuplicates + 1)
+    last = { ...last, outcome: 'suppressed_duplicate' }
+    return true
+  }
+
   function snapshot() {
     return {
       generation,
       scope,
       totalObserved,
+      totalSuppressedDuplicates,
       last: last ? { ...last } : null,
     }
   }
 
-  return Object.freeze({ allow, beginGeneration, observe, snapshot })
+  return Object.freeze({ allow, beginGeneration, observe, snapshot, suppressDuplicate })
 }
 
 function projectFlightSnapshot(snapshot, hotkeys) {
@@ -84,11 +94,13 @@ function projectFlightSnapshot(snapshot, hotkeys) {
     : null
   const rawEvents = Array.isArray(snapshot?.rawEvents) ? snapshot.rawEvents : []
   const allowlistedHotkeys = hotkeys && typeof hotkeys === 'object' ? hotkeys : {}
+  const suppressedDuplicateEvents = Array.isArray(snapshot?.suppressedDuplicateEvents) ? snapshot.suppressedDuplicateEvents : []
   return {
     active,
     startedAt,
     invalidated: snapshot?.invalidated === true,
     droppedEventCount: Number.isSafeInteger(snapshot?.droppedEventCount) && snapshot.droppedEventCount >= 0 ? snapshot.droppedEventCount : 0,
+    droppedSuppressedDuplicateCount: Number.isSafeInteger(snapshot?.droppedSuppressedDuplicateCount) && snapshot.droppedSuppressedDuplicateCount >= 0 ? snapshot.droppedSuppressedDuplicateCount : 0,
     rawEvents: rawEvents.slice(-MAX_PUBLIC_FLIGHT_EVENTS).flatMap((event) => {
       const accelerator = allowlistedHotkeys[event?.signalId]
       if (typeof accelerator !== 'string'
@@ -109,6 +121,35 @@ function projectFlightSnapshot(snapshot, hotkeys) {
         accelerator,
         receivedAt: new Date(event.receivedAt).toISOString(),
         monotonicNs: event.monotonicNs,
+      }]
+    }),
+    suppressedDuplicateEvents: suppressedDuplicateEvents.slice(-MAX_PUBLIC_FLIGHT_EVENTS).flatMap((event) => {
+      const accelerator = allowlistedHotkeys[event?.signalId]
+      if (typeof accelerator !== 'string'
+        || event?.accelerator !== accelerator
+        || typeof event?.receivedAt !== 'string'
+        || !Number.isFinite(Date.parse(event.receivedAt))
+        || typeof event?.monotonicNs !== 'string'
+        || !/^\d{1,32}$/.test(event.monotonicNs)
+        || typeof event?.deltaNs !== 'string'
+        || !/^\d{1,16}$/.test(event.deltaNs)
+        || typeof event?.route !== 'string'
+        || !/^[a-z][a-z0-9_]{0,31}$/.test(event.route)
+        || !Number.isSafeInteger(event?.receiverGeneration)
+        || event.receiverGeneration < 0
+        || !Number.isSafeInteger(event?.priorAcceptedSequence)
+        || event.priorAcceptedSequence < 0
+        || event?.reason !== 'adjacent_duplicate_within_window') return []
+      return [{
+        signalId: event.signalId,
+        accelerator,
+        receivedAt: new Date(event.receivedAt).toISOString(),
+        monotonicNs: event.monotonicNs,
+        route: event.route,
+        receiverGeneration: event.receiverGeneration,
+        priorAcceptedSequence: event.priorAcceptedSequence,
+        deltaNs: event.deltaNs,
+        reason: event.reason,
       }]
     }),
   }

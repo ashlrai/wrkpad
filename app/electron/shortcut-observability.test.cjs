@@ -13,12 +13,17 @@ test('records only bounded allowlisted callback metadata before an allow decisio
     generation: 0,
     scope: 'unowned',
     totalObserved: 1,
+    totalSuppressedDuplicates: 0,
     last: { signalId: 'agent1', receivedAt: '2026-09-04T05:00:00.000Z', outcome: 'rejected' },
   })
   assert.equal(telemetry.allow(observation), true)
   assert.deepEqual(telemetry.snapshot().last, {
     signalId: 'agent1', receivedAt: '2026-09-04T05:00:00.000Z', outcome: 'allowed',
   })
+  const duplicate = telemetry.observe('agent1')
+  assert.equal(telemetry.suppressDuplicate(duplicate), true)
+  assert.equal(telemetry.snapshot().totalSuppressedDuplicates, 1)
+  assert.equal(telemetry.snapshot().last.outcome, 'suppressed_duplicate')
   assert.equal(telemetry.snapshot().keyText, undefined)
 })
 
@@ -46,7 +51,7 @@ test('fails closed for invalid construction and invalid clocks', () => {
   assert.throws(() => createShortcutObservability({ signalIds: ['agent1'], now: null }), /bounded shortcut signal allowlist/)
   const telemetry = createShortcutObservability({ signalIds: ['agent1'], now: () => 'invalid' })
   assert.equal(telemetry.observe('agent1'), null)
-  assert.deepEqual(telemetry.snapshot(), { generation: 0, scope: 'unowned', totalObserved: 0, last: null })
+  assert.deepEqual(telemetry.snapshot(), { generation: 0, scope: 'unowned', totalObserved: 0, totalSuppressedDuplicates: 0, last: null })
   assert.equal(Number.isSafeInteger(MAX_TOTAL_OBSERVED), true)
 })
 
@@ -54,7 +59,7 @@ test('ownership generations clear stale callback evidence and reject prior decis
   const telemetry = createShortcutObservability({ signalIds: ['agent1'] })
   const stale = telemetry.observe('agent1')
   assert.equal(telemetry.beginGeneration('ashlr_layer'), true)
-  assert.deepEqual(telemetry.snapshot(), { generation: 1, scope: 'ashlr_layer', totalObserved: 0, last: null })
+  assert.deepEqual(telemetry.snapshot(), { generation: 1, scope: 'ashlr_layer', totalObserved: 0, totalSuppressedDuplicates: 0, last: null })
   assert.equal(telemetry.allow(stale), false)
   assert.equal(telemetry.beginGeneration('ashlr_layer'), false)
   assert.equal(telemetry.beginGeneration('ashlr_layer', true), true)
@@ -78,12 +83,14 @@ test('projects a bounded allowlisted authoritative Flight snapshot', () => {
     startedAt: '2026-09-04T04:59:59.000Z',
     invalidated: true,
     droppedEventCount: 7,
+    droppedSuppressedDuplicateCount: 0,
     rawEvents: Array.from({ length: MAX_PUBLIC_FLIGHT_EVENTS + 3 }, (_, index) => event(index + 1)),
   }, { agent1: 'Control+Alt+Command+1' })
   assert.equal(projected.active, true)
   assert.equal(projected.startedAt, '2026-09-04T04:59:59.000Z')
   assert.equal(projected.invalidated, true)
   assert.equal(projected.droppedEventCount, 7)
+  assert.equal(projected.droppedSuppressedDuplicateCount, 0)
   assert.equal(projected.rawEvents.length, MAX_PUBLIC_FLIGHT_EVENTS)
   assert.equal(projected.rawEvents[0].sequence, 4)
   assert.equal(projected.rawEvents.at(-1).sequence, MAX_PUBLIC_FLIGHT_EVENTS + 3)
@@ -111,9 +118,27 @@ test('drops malformed or non-allowlisted Flight events without leaking extra fie
     startedAt: null,
     invalidated: false,
     droppedEventCount: 0,
+    droppedSuppressedDuplicateCount: 0,
     rawEvents: [{
       schemaVersion: 1, sequence: 1, signalId: 'agent1', source: 'global-shortcut',
       accelerator: 'Control+Alt+Command+1', receivedAt: '2026-09-04T05:00:00.000Z', monotonicNs: '1',
     }],
+    suppressedDuplicateEvents: [],
   })
+})
+
+test('projects only validated bounded duplicate-suppression evidence', () => {
+  const base = {
+    signalId: 'agent1', accelerator: 'Control+Alt+Command+1',
+    receivedAt: '2026-09-04T05:00:00.000Z', monotonicNs: '100', deltaNs: '2000000',
+    route: 'ashlr_layer', receiverGeneration: 3, priorAcceptedSequence: 4,
+    reason: 'adjacent_duplicate_within_window', privateText: 'never project me',
+  }
+  const projected = projectFlightSnapshot({
+    active: true,
+    suppressedDuplicateEvents: [base, { ...base, signalId: 'unknown' }, { ...base, deltaNs: '-1' }],
+  }, { agent1: 'Control+Alt+Command+1' })
+  assert.equal(projected.suppressedDuplicateEvents.length, 1)
+  assert.equal(projected.suppressedDuplicateEvents[0].privateText, undefined)
+  assert.equal(projected.suppressedDuplicateEvents[0].deltaNs, '2000000')
 })

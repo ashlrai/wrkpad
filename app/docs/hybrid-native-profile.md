@@ -182,8 +182,10 @@ With actions suppressed, use only the physical board in this order:
 2. joystick up, right, down, left, returning it to center each time; and
 3. dial counterclockwise, clockwise, press.
 
-Acceptance requires `14/14`, zero misroutes or duplicates, no registered
-Agent-key shortcut, stable prerequisites, and a current private receipt. The
+Acceptance requires `14/14`, zero misroutes, no registered Agent-key shortcut,
+stable prerequisites, and a current private receipt. One narrowly filtered
+probable duplicate press edge may be retained and disclosed by the 35 ms Flight
+policy; it never advances the 14-gesture sequence. The
 receipt must contain no prompt, transcript, task title, provider session ID,
 terminal content, raw Input log, or local user path. Keyboard events can emit
 the same accelerators, so a passing receipt also requires operator discipline;

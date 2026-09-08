@@ -6,6 +6,13 @@ All notable changes will be documented here. The project follows semantic versio
 
 ## Unreleased
 
+- Make Creator Micro 2 physical acceptance resilient to one adjacent duplicate
+  press callback with a Flight-only 35 ms edge filter. Suppressions remain
+  main-owned, bounded, visible, and SHA-bound in the sealed receipt; dial
+  rotation, joystick motion, wrong keys, and ambiguous callbacks remain fail-closed.
+  Successful start and restart activation also clears callbacks observed while
+  asynchronous gate verification was pending.
+
 ### Added
 
 - A deterministic Ashlr Layer commissioner that projects six independent proof

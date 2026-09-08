@@ -154,3 +154,10 @@ notarization, updates, exact task/pane focus, and physical RGB are not
 implemented. Treat both components as unreleased until the distribution gate
 has an immutable record. Checked-in landing-page source does not establish a
 GitHub Pages deployment.
+
+A local candidate may disclose narrowly suppressed probable duplicate press
+edges during Flight Check. Release acceptance still requires zero misroutes,
+zero dropped evidence, the exact expected accepted-callback count, every
+additional suppressed callback retained, and a fresh sealed receipt whose
+receiver SHA matches the exact candidate. Suppression telemetry is mitigation
+evidence, not proof of device electrical behavior.

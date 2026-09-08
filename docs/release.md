@@ -93,3 +93,11 @@ clears the 20-control physical shortcut gate only for its exact desk, profile,
 and Agent Board build. It recorded 24 expected callbacks and zero misroutes,
 but the save sheet did not persist a machine-sealed receipt. Native Codex/RGB,
 Hybrid Native, provider, distribution, and workflow acceptance remain open.
+
+The [September 8 sealed Ashlr Layer acceptance](creator-micro-2-ashlr-layer-flight-check-2026-09-08.md)
+supersedes that unsealed result for its receipt-bound installed build. It records
+20/20 ordered controls, exactly 24 accepted callbacks, zero suppressed duplicate
+edges, zero misroutes, zero dropped suppression records, and a private mode-`0600`
+v2 receipt whose SHA-256 independently recomputed. It does not accept a later
+receiver build, native Codex/RGB behavior, Hybrid Native, exact provider focus,
+fleet dispatch, or public distribution.

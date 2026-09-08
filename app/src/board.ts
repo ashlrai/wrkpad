@@ -45,10 +45,11 @@ export interface ShortcutCallbackTelemetry {
   generation: number
   scope: string
   totalObserved: number
+  totalSuppressedDuplicates?: number
   last: {
     signalId: ControlId
     receivedAt: string
-    outcome: 'allowed' | 'rejected'
+    outcome: 'allowed' | 'rejected' | 'suppressed_duplicate'
   } | null
 }
 
@@ -57,7 +58,21 @@ export interface FlightSnapshot {
   startedAt: string | null
   invalidated: boolean
   droppedEventCount: number
+  droppedSuppressedDuplicateCount?: number
   rawEvents: PhysicalSignalEnvelope[]
+  suppressedDuplicateEvents?: SuppressedDuplicateEvent[]
+}
+
+export interface SuppressedDuplicateEvent {
+  signalId: ControlId
+  accelerator: string
+  receivedAt: string
+  monotonicNs: string
+  route: string
+  receiverGeneration: number
+  priorAcceptedSequence: number
+  deltaNs: string
+  reason: 'adjacent_duplicate_within_window'
 }
 
 export interface ShortcutRegistration {

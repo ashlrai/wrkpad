@@ -7,12 +7,13 @@ function flightAcknowledgement(session, acknowledged) {
   }
 }
 
-function createFlightOperationCoordinator(session) {
+function createFlightOperationCoordinator(session, { afterActivation = () => {} } = {}) {
   if (!session || typeof session.start !== 'function' || typeof session.restart !== 'function'
     || typeof session.stop !== 'function' || typeof session.reset !== 'function'
     || typeof session.snapshot !== 'function') {
     throw new TypeError('A flight session is required')
   }
+  if (typeof afterActivation !== 'function') throw new TypeError('A synchronous activation callback is required')
 
   let generation = 0n
   let activeGeneration = null
@@ -56,6 +57,15 @@ function createFlightOperationCoordinator(session) {
     const state = mode === 'restart' ? session.restart() : session.start()
     const activated = activate(operationGeneration, state)
     if (!activated && isCurrent(operationGeneration)) session.stop()
+    if (activated) {
+      try {
+        afterActivation()
+      } catch {
+        activeGeneration = null
+        session.stop()
+        return flightAcknowledgement(session, false)
+      }
+    }
     return flightAcknowledgement(session, activated)
   }
 

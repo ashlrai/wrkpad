@@ -35,6 +35,15 @@ test('callback telemetry precedes the guard and Flight evidence is main-owned', 
   assert.match(preloadSource, /getFlightSnapshot: \(\) => ipcRenderer\.invoke\('board:getFlightSnapshot'\)/)
 })
 
+test('Flight Check alone suppresses one disclosed adjacent edge duplicate before delivery', () => {
+  assert.match(source, /observation && flightSession\.isActive\(\)[\s\S]*shortcutEdgeFilter\.inspect\([\s\S]*duplicate\.suppress[\s\S]*shortcutObservability\.suppressDuplicate\(observation\)[\s\S]*flightSession\.recordSuppressedDuplicate\([\s\S]*return[\s\S]*shortcutObservability\.allow\(observation\)/)
+  assert.match(source, /recordSuppressedDuplicate\(\{[\s\S]*deltaNs:[\s\S]*reason: 'adjacent_duplicate_within_window'/)
+  assert.match(source, /duplicateSuppression: \{[\s\S]*policy: 'adjacent-edge-once\/v1'[\s\S]*suppressedCount:[\s\S]*events:/)
+  assert.match(source, /createFlightOperationCoordinator\(flightSession, \{ afterActivation: \(\) => shortcutEdgeFilter\.reset\(\) \}\)/)
+  assert.match(source, /ipcMain\.handle\('board:setFlightCheck'[\s\S]*shortcutEdgeFilter\.reset\(\)/)
+  assert.match(source, /ipcMain\.handle\('board:restartFlightCheck'[\s\S]*shortcutEdgeFilter\.reset\(\)/)
+})
+
 test('startup and route switches apply the declared route before owning shortcuts', () => {
   assert.match(source, /app\.whenReady\(\)\.then\(\(\) => \{[\s\S]*?createWindow\(\)[\s\S]*?synchronizeShortcutOwnership\(readSettings\(\)\.boardRoute\)[\s\S]*?\n\s*\}\)/)
   assert.match(source, /currentRoute = readSettings\(\)\.boardRoute[\s\S]*currentRoute !== boardRoute \|\| !routeOwnsShortcuts\(boardRoute\)[\s\S]*shortcutState = synchronizeShortcutOwnership\('unknown'\)[\s\S]*shortcutState\.released !== true[\s\S]*saveBoardRoute\(boardRoute\)[\s\S]*if \(routeOwnsShortcuts\(boardRoute\)\) synchronizeShortcutOwnership\(boardRoute\)/)

@@ -2,6 +2,7 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const { createFlightSession } = require('./flight-session.cjs')
 const { createFlightOperationCoordinator, saveBoundFlightReceipt } = require('./flight-operations.cjs')
+const { createShortcutEdgeDuplicateFilter } = require('./shortcut-edge-filter.cjs')
 
 function deferred() {
   let resolve
@@ -83,6 +84,38 @@ test('a later stop supersedes a pending restart admission', async () => {
   gate.resolve({ ready: true })
 
   assert.deepEqual(await pendingRestart, { acknowledged: false, active: false, startedAt: null })
+  assert.equal(session.isActive(), false)
+})
+
+test('successful activation clears callbacks observed during asynchronous restart gates', async () => {
+  let nowNs = 0n
+  const filter = createShortcutEdgeDuplicateFilter({ clock: () => nowNs })
+  const session = createFlightSession(() => '2026-09-01T17:00:00.000Z')
+  const coordinator = createFlightOperationCoordinator(session, { afterActivation: () => filter.reset() })
+  assert.equal((await coordinator.start(async () => ({ ready: true }))).acknowledged, true)
+
+  const gate = deferred()
+  const restarting = coordinator.restart(() => gate.promise)
+  assert.equal(filter.shouldSuppress({
+    signalId: 'agent1', accelerator: 'Control+Alt+Command+1', route: 'ashlr_layer', generation: 1,
+  }), false)
+  gate.resolve({ ready: true })
+  assert.equal((await restarting).acknowledged, true)
+
+  nowNs += 1n
+  assert.equal(filter.shouldSuppress({
+    signalId: 'agent1', accelerator: 'Control+Alt+Command+1', route: 'ashlr_layer', generation: 1,
+  }), false)
+})
+
+test('activation callback failure fails closed and leaves no active session', async () => {
+  const session = createFlightSession(() => '2026-09-01T17:00:00.000Z')
+  const coordinator = createFlightOperationCoordinator(session, { afterActivation: () => { throw new Error('reset failed') } })
+  assert.deepEqual(await coordinator.start(async () => ({ ready: true })), {
+    acknowledged: false,
+    active: false,
+    startedAt: null,
+  })
   assert.equal(session.isActive(), false)
 })
 

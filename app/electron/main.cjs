@@ -40,6 +40,7 @@ const { passiveRouteActionResult, routeAllowsConfiguredActions } = require('./ac
 const { routeAllowsShortcutDelivery, routeOwnsShortcuts, shortcutSignalsForRoute } = require('./board-route-policy.cjs')
 const { createShortcutCallbackGuard, createShortcutOwnershipController } = require('./shortcut-ownership.cjs')
 const { createShortcutObservability, projectFlightSnapshot } = require('./shortcut-observability.cjs')
+const { EDGE_DUPLICATE_WINDOW_NS, EDGE_SIGNAL_IDS, createShortcutEdgeDuplicateFilter } = require('./shortcut-edge-filter.cjs')
 const { resolveTool } = require('./tool-resolver.cjs')
 
 const PROFILE_IDS = new Set(['codex', 'claude', 'fleet', 'ship', 'emergency'])
@@ -53,7 +54,8 @@ let mainWindow; let rendererUrl; let compactWindow; let compactRendererUrl; let 
 let missionCache = null; let missionCacheAt = 0; let missionInFlight = null
 const approvals = new Map()
 const flightSession = createFlightSession()
-const flightOperations = createFlightOperationCoordinator(flightSession)
+const shortcutEdgeFilter = createShortcutEdgeDuplicateFilter()
+const flightOperations = createFlightOperationCoordinator(flightSession, { afterActivation: () => shortcutEdgeFilter.reset() })
 let activeFlightAdmission = null
 let flightAdmissionMutation = 0
 const flightAdmissionSuppressions = new Set()
@@ -80,6 +82,7 @@ function freshFlightForReceipt(flight) {
 }
 
 function resetFlightState() {
+  shortcutEdgeFilter.reset()
   flightAdmissionMutation += 1
   activeFlightAdmission = null
   flightOperations.reset()
@@ -323,7 +326,9 @@ function trustedCompactIpc(handler) {
 
 function registerShortcuts(boardRoute) {
   shortcutCallbackGuard.invalidate()
+  shortcutEdgeFilter.reset()
   shortcutObservability.beginGeneration(boardRoute, true)
+  const receiverGeneration = shortcutObservability.snapshot().generation
   const registrations = []
   for (const control of shortcutSignalsForRoute(boardRoute)) {
     const accelerator = HOTKEYS[control]
@@ -338,6 +343,7 @@ function registerShortcuts(boardRoute) {
       } catch {}
       if (!deliveryAllowed) {
         shortcutCallbackGuard.invalidate()
+        shortcutEdgeFilter.reset()
         try { synchronizeShortcutOwnership('unknown') } catch {
           shortcutRegistrations = []
           try { globalShortcut.unregisterAll() } catch {}
@@ -349,6 +355,24 @@ function registerShortcuts(boardRoute) {
         // the released generation; delivery remains rejected.
         shortcutObservability.observe(control)
         return
+      }
+      if (observation && flightSession.isActive()) {
+        const duplicate = shortcutEdgeFilter.inspect({ signalId: control, accelerator, route: currentRoute, generation: receiverGeneration })
+        if (duplicate.suppress && duplicate.observedAtNs !== null && duplicate.deltaNs !== null) {
+          shortcutObservability.suppressDuplicate(observation)
+          flightSession.recordSuppressedDuplicate({
+            signalId: control,
+            accelerator,
+            receivedAt: observation.receivedAt,
+            monotonicNs: duplicate.observedAtNs.toString(),
+            route: currentRoute,
+            receiverGeneration,
+            priorAcceptedSequence: signalSequence,
+            deltaNs: duplicate.deltaNs.toString(),
+            reason: 'adjacent_duplicate_within_window',
+          })
+          return
+        }
       }
       shortcutObservability.allow(observation)
       const envelope = {
@@ -443,6 +467,7 @@ const shortcutOwnership = createShortcutOwnershipController({
 function synchronizeShortcutOwnership(boardRoute) {
   if (!routeOwnsShortcuts(boardRoute)) {
     shortcutCallbackGuard.invalidate()
+    shortcutEdgeFilter.reset()
     shortcutObservability.beginGeneration(boardRoute)
   }
   try {
@@ -451,7 +476,10 @@ function synchronizeShortcutOwnership(boardRoute) {
     shortcutRegistrations = state.registrations
     const active = state.active === true
     if (active) shortcutCallbackGuard.enable()
-    else shortcutCallbackGuard.invalidate()
+    else {
+      shortcutCallbackGuard.invalidate()
+      shortcutEdgeFilter.reset()
+    }
     const scope = active
       ? boardRoute
       : routeOwnsShortcuts(boardRoute)
@@ -462,6 +490,7 @@ function synchronizeShortcutOwnership(boardRoute) {
   } catch (error) {
     shortcutRegistrations = []
     shortcutCallbackGuard.invalidate()
+    shortcutEdgeFilter.reset()
     shortcutObservability.beginGeneration(routeOwnsShortcuts(boardRoute) ? `${boardRoute}_released` : 'unknown')
     throw error
   }
@@ -819,6 +848,7 @@ ipcMain.handle('compact:hide', trustedCompactIpc(() => {
 }))
 ipcMain.handle('board:setProfile', trustedIpc((_event, profile) => { if (PROFILE_IDS.has(profile)) currentProfile = profile; return currentProfile }))
 ipcMain.handle('board:setFlightCheck', trustedIpc(async (_event, active, variant, attestation) => {
+  shortcutEdgeFilter.reset()
   const mutation = ++flightAdmissionMutation
   const dualPlaneAshlrLayerSelected = active === true && hasFreshExactDualPlaneAshlrAttestation(attestation)
   let admission = null
@@ -856,6 +886,7 @@ ipcMain.handle('board:setFlightCheck', trustedIpc(async (_event, active, variant
   return state
 }))
 ipcMain.handle('board:restartFlightCheck', trustedIpc(async (_event, variant) => {
+  shortcutEdgeFilter.reset()
   const mutation = ++flightAdmissionMutation
   const prior = activeFlightAdmission
   if (prior?.dualPlaneAshlrLayerSelected) {
@@ -1012,7 +1043,22 @@ ipcMain.handle('board:saveFlightReceipt', trustedIpc(async (_event, receipt) => 
             ? { source: 'operator', attestedAt: activeFlightAdmission.attestedAt }
             : null,
         },
-        evaluation,
+        evaluation: {
+          ...evaluation,
+          expectedCallbackCount: admission.evidence.boardRoute === 'ashlr_layer' ? evaluation.expectedGestures + 4 : evaluation.expectedGestures,
+          acceptedCallbackCount: flight.rawEvents.length,
+        },
+        duplicateSuppression: {
+          policy: 'adjacent-edge-once/v1',
+          windowMs: Number(EDGE_DUPLICATE_WINDOW_NS / 1_000_000n),
+          inclusive: true,
+          nonSliding: true,
+          maxPerAcceptedEdge: 1,
+          eligibleSignals: [...EDGE_SIGNAL_IDS],
+          suppressedCount: flight.suppressedDuplicateEvents.length,
+          droppedCount: flight.droppedSuppressedDuplicateCount,
+          events: flight.suppressedDuplicateEvents,
+        },
         rawEvents: flight.rawEvents,
         disclaimer: 'Operator-guided global-shortcut receipt; not a cryptographic device-identity attestation.',
       }

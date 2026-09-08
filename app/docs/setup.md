@@ -362,6 +362,8 @@ The Setup screen's `20/20 desktop endpoints registered` result proves only that 
 
 While Flight Check is active, the main process owns the bounded event record and the renderer reconciles it once per second. A renderer subscription gap therefore cannot erase a received Flight signal. Any misroute or event-buffer overflow latches the run invalid until a deliberate restart, even after older display events age out. Callback telemetry and a Flight receipt are still different evidence: the former proves that macOS invoked a registered accelerator, while the latter additionally requires the current safety gates and exact ordered gesture sequence.
 
+Some Creator Micro 2 press edges can produce one adjacent duplicate macOS callback. During Flight Check only, Agent keys, action keys, and dial press use an inclusive 35 ms monotonic, non-sliding filter. It suppresses at most one immediately adjacent callback with the same signal, accelerator, route, and receiver generation. Dial detents and joystick motion are never filtered. Every suppression is retained in the main-owned snapshot and hashed receipt; it does not advance progress or become a misroute. Ambiguous, later, changed, or additional callbacks fail open into the ordinary evaluator. Electron global shortcuts expose neither key-up nor physical-device identity, so the receipt describes these as probable duplicate edges rather than proving contact bounce.
+
 Agent Board also reads a bounded, fixed-path copy of Input's Creator Micro 2
 cache and reports only the sanitized active profile, its layer when uniquely
 observable, and encoder health. A diagnostic count describes expected bindings
@@ -520,6 +522,8 @@ of Hybrid Native or `14/14` as proof of its native Agent keys.
    communication-mode touch sensor—not a Flight Check gesture.
 4. Confirm USB is present, Setup says **One receiver · shortcut ownership
    available**, 20 desktop shortcuts are registered, and misroutes remain zero.
+   The evidence panel separately lists accepted Flight callbacks and any probable
+   duplicate edges suppressed and retained.
 5. Save the sealed receipt only after all 20 daily signals pass. The app writes
    it privately under its local application-support directory and displays only
    the filename; no save panel or local username is exposed.

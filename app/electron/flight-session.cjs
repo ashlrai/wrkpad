@@ -3,33 +3,41 @@ const { createFlightInterlock } = require('./flight-interlock.cjs')
 function createFlightSession(now = () => new Date().toISOString()) {
   const interlock = createFlightInterlock()
   let rawEvents = []
+  let suppressedDuplicateEvents = []
   let startedAt = null
   let invalidated = false
   let droppedEventCount = 0
+  let droppedSuppressedDuplicateCount = 0
 
   const clear = () => {
     interlock.set(false)
     rawEvents = []
+    suppressedDuplicateEvents = []
     startedAt = null
     invalidated = false
     droppedEventCount = 0
+    droppedSuppressedDuplicateCount = 0
   }
 
   return {
     start() {
       rawEvents = []
+      suppressedDuplicateEvents = []
       startedAt = now()
       invalidated = false
       droppedEventCount = 0
+      droppedSuppressedDuplicateCount = 0
       interlock.set(true)
       return this.snapshot()
     },
     restart() {
       if (!interlock.isActive()) return this.snapshot()
       rawEvents = []
+      suppressedDuplicateEvents = []
       startedAt = now()
       invalidated = false
       droppedEventCount = 0
+      droppedSuppressedDuplicateCount = 0
       return this.snapshot()
     },
     stop() {
@@ -47,13 +55,27 @@ function createFlightSession(now = () => new Date().toISOString()) {
       rawEvents = [...rawEvents.slice(-499), event]
       return true
     },
+    recordSuppressedDuplicate(event) {
+      if (!interlock.isActive()) return false
+      if (suppressedDuplicateEvents.length >= 100) {
+        invalidated = true
+        droppedSuppressedDuplicateCount = Math.min(Number.MAX_SAFE_INTEGER, droppedSuppressedDuplicateCount + 1)
+      }
+      suppressedDuplicateEvents = [...suppressedDuplicateEvents.slice(-99), event]
+      return true
+    },
     invalidate() {
       if (!interlock.isActive()) return false
       invalidated = true
       return true
     },
     snapshot() {
-      return { active: interlock.isActive(), startedAt, invalidated, droppedEventCount, rawEvents: [...rawEvents] }
+      return {
+        active: interlock.isActive(), startedAt, invalidated, droppedEventCount,
+        droppedSuppressedDuplicateCount,
+        rawEvents: [...rawEvents],
+        suppressedDuplicateEvents: suppressedDuplicateEvents.map((event) => ({ ...event })),
+      }
     },
   }
 }

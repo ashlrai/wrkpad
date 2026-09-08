@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import {
   actions, activeProfileContentDrift, controls, correctedInputProfileObserved, correctedInputProfileObservedForVariant, dualPlaneInputProfileConfigured, effortLevels, hardware, hybridNativeInputProfileConfigured, profileOrder, profiles,
-  type ActionDefinition, type AgentSlotSummary, type BoardRoute, type ControlId, type ExecutionResult, type FlightSnapshot, type InputInstallationStatus, type MissionControlSnapshot, type NativeAcceptanceAttestations, type NativeAcceptanceSnapshot, type PhysicalSignalEnvelope, type ProfileId, type ProfileRepairResult, type ReceiverRuntimeStatus, type SystemStatus, type WorkspaceSnapshot,
+  type ActionDefinition, type AgentSlotSummary, type BoardRoute, type ControlId, type ExecutionResult, type FlightSnapshot, type InputInstallationStatus, type MissionControlSnapshot, type NativeAcceptanceAttestations, type NativeAcceptanceSnapshot, type PhysicalSignalEnvelope, type ProfileId, type ProfileRepairResult, type ReceiverRuntimeStatus, type SuppressedDuplicateEvent, type SystemStatus, type WorkspaceSnapshot,
 } from './board'
 import { agentProviderLabel, agentStateClassName, agentStateLabels, agentStateLegendOrder, agentVisibleStateLabel } from './agent-accessibility'
 import AttentionDeck from './components/AttentionDeck'
@@ -27,7 +27,7 @@ const initialStatus: SystemStatus = {
   chatgptDesktop: { status: 'unavailable', version: null, build: null },
   nativeCodexMicro: { status: 'not_observed', observedAt: null, detail: 'No recent native Codex Creator Micro connection evidence was found.' },
   boardRoute: 'unknown',
-  workspace: '/Choose a working directory', shortcutCount: 0, shortcutRegistrations: [], shortcutTelemetry: { generation: 0, scope: 'unowned', totalObserved: 0, last: null }, workspaceSnapshot: null, receiverIdentity: null,
+  workspace: '/Choose a working directory', shortcutCount: 0, shortcutRegistrations: [], shortcutTelemetry: { generation: 0, scope: 'unowned', totalObserved: 0, totalSuppressedDuplicates: 0, last: null }, workspaceSnapshot: null, receiverIdentity: null,
   receiverRuntime: { status: 'unavailable', instanceCount: 0, distinctBuildCount: 0, currentAsarSha256: null, candidateAsarSha256: null, candidateMatchesCurrent: null },
   inputApplication: { status: 'unavailable' },
 }
@@ -207,6 +207,7 @@ function App() {
   const [flightPhase, setFlightPhase] = useState<'inactive' | 'arming' | 'active' | 'disarming' | 'error'>('inactive')
   const [flightSignals, setFlightSignals] = useState<ControlId[]>([])
   const [flightEvents, setFlightEvents] = useState<FlightEvent[]>([])
+  const [flightSuppressedDuplicates, setFlightSuppressedDuplicates] = useState<SuppressedDuplicateEvent[]>([])
   const [flightStartedAt, setFlightStartedAt] = useState<string | null>(null)
   const [flightExport, setFlightExport] = useState<string | null>(null)
   const [flightVariant, setFlightVariant] = useState<FlightVariant>('daily')
@@ -220,7 +221,6 @@ function App() {
   const holdTimer = useRef<number | null>(null)
   const holdAttempt = useRef(0)
   const holdPending = useRef(false)
-  const lastSignal = useRef<Partial<Record<ControlId, number>>>({})
   const flightExpected = useRef<ControlId[]>([])
   const flightRequest = useRef(0)
   const flightSnapshotRequest = useRef(0)
@@ -284,7 +284,7 @@ function App() {
       setFlightEvents((current) => {
         const merged = mergeFlightEvents(current, reconciled, variant, route)
         flightExpected.current = expectedSignalsAfter(variant, merged, route)
-        if (snapshot.invalidated || snapshot.droppedEventCount > 0 || merged.some((event) => !event.matched)) {
+        if (snapshot.invalidated || snapshot.droppedEventCount > 0 || (snapshot.droppedSuppressedDuplicateCount ?? 0) > 0 || merged.some((event) => !event.matched)) {
           const run = flightRun.current
           flightRun.current = { ...run, invalidated: true }
           setFlightInvalidatedRun(run.request)
@@ -293,6 +293,7 @@ function App() {
         return merged
       })
       setFlightSignals((current) => [...new Set([...current, ...snapshot.rawEvents.map((event) => event.signalId)])])
+      setFlightSuppressedDuplicates(snapshot.suppressedDuplicateEvents ?? [])
       return snapshot
     } catch {
       return null
@@ -374,9 +375,6 @@ function App() {
 
   const executeControl = useCallback((rawControl: ControlId) => {
     const control = normalizeControl(rawControl)
-    const signalTime = Date.now()
-    if (signalTime - (lastSignal.current[control] ?? 0) < 140) return
-    lastSignal.current[control] = signalTime
     if (status.boardRoute !== 'ashlr_layer' && status.boardRoute !== 'hybrid_native') {
       internalResult(
         status.boardRoute === 'codex_native' ? 'Codex Native observer only' : 'Ashlr action route not selected',
@@ -424,6 +422,7 @@ function App() {
           generation: current.shortcutTelemetry?.generation ?? 0,
           scope: current.shortcutTelemetry?.scope ?? status.boardRoute,
           totalObserved: Math.min(Number.MAX_SAFE_INTEGER, (current.shortcutTelemetry?.totalObserved ?? 0) + 1),
+          totalSuppressedDuplicates: current.shortcutTelemetry?.totalSuppressedDuplicates ?? 0,
           last: { signalId: rawControl, receivedAt: signal.receivedAt, outcome: 'allowed' },
         },
       }))
@@ -598,6 +597,7 @@ function App() {
     setFlightInvalidatedRun(null)
     setFlightSignals([])
     setFlightEvents([])
+    setFlightSuppressedDuplicates([])
     setFlightExport(null)
     setFlightStartedAt(null)
     setFlightVariant(variant)
@@ -670,6 +670,7 @@ function App() {
       }
       setFlightSignals([])
       setFlightEvents([])
+      setFlightSuppressedDuplicates([])
       setFlightStartedAt(null)
       setFlightExport(null)
       flightExpected.current = []
@@ -710,6 +711,7 @@ function App() {
     setFlightInvalidatedRun(request)
     setFlightSignals([])
     setFlightEvents([])
+    setFlightSuppressedDuplicates([])
     setFlightStartedAt(null)
     setFlightExport(null)
     flightExpected.current = []
@@ -1046,7 +1048,7 @@ function App() {
           />
         </div>
       </> : view === 'flight' ? <FlightCheckView
-        active={flightActive} events={flightEvents} startedAt={flightStartedAt}
+        active={flightActive} events={flightEvents} suppressedDuplicates={flightSuppressedDuplicates} startedAt={flightStartedAt}
         exportPath={flightExport} status={status} variant={flightVariant} phase={flightPhase}
         dualPlaneAshlrLayerAttested={dualPlaneAshlrLayerAttested} onDualPlaneAshlrLayerAttested={(checked) => setDualPlaneAshlrLayerAttestedAt(checked ? new Date().toISOString() : null)}
         liveGateInvalidated={flightInvalidatedRun === flightRequest.current} onStart={startFlightCheck}
@@ -1335,8 +1337,8 @@ function ActionConsole({ activeControl, action, result, approval, isRunning, hol
   </aside>
 }
 
-function FlightCheckView({ active, events, startedAt, exportPath, status, variant, phase, liveGateInvalidated, dualPlaneAshlrLayerAttested, onDualPlaneAshlrLayerAttested, onStart, onStop, onRestart, onExport, onSetup, onOperate }: {
-  active: boolean; events: FlightEvent[]; startedAt: string | null; exportPath: string | null; status: SystemStatus; variant: 'daily' | 'diagnostic'
+function FlightCheckView({ active, events, suppressedDuplicates, startedAt, exportPath, status, variant, phase, liveGateInvalidated, dualPlaneAshlrLayerAttested, onDualPlaneAshlrLayerAttested, onStart, onStop, onRestart, onExport, onSetup, onOperate }: {
+  active: boolean; events: FlightEvent[]; suppressedDuplicates: SuppressedDuplicateEvent[]; startedAt: string | null; exportPath: string | null; status: SystemStatus; variant: 'daily' | 'diagnostic'
   phase: 'inactive' | 'arming' | 'active' | 'disarming' | 'error'
   liveGateInvalidated: boolean
   dualPlaneAshlrLayerAttested: boolean; onDualPlaneAshlrLayerAttested: (value: boolean) => void
@@ -1437,7 +1439,8 @@ function FlightCheckView({ active, events, startedAt, exportPath, status, varian
           <div><dt>Receiver</dt><dd className={receiverExclusive ? 'ready' : 'problem'}>{receiverExclusive ? 'Exclusive' : receiverRuntime.status === 'unavailable' ? 'Unavailable' : 'Contended'}</dd></div>
           <div><dt>Started</dt><dd>{startedAt ? formatClock(new Date(startedAt)) : 'Not started'}</dd></div>
           <div><dt>Ashlr mapped actions</dt><dd className={active ? 'safe' : phase === 'error' ? 'problem' : ''}>{active ? 'Suppressed · native path untouched' : phase === 'arming' ? 'Arming' : phase === 'disarming' ? 'Releasing' : phase === 'error' ? 'Unverified' : status.boardRoute === 'ashlr_layer' ? '20 enabled' : hybridRoute ? '14 enabled · 6 native' : 'Disabled'}</dd></div>
-          <div><dt>Flight receipts</dt><dd className={events.length ? 'ready' : ''}>{events.length}</dd></div>
+          <div><dt>Accepted Flight callbacks</dt><dd className={events.length ? 'ready' : ''}>{events.length}</dd></div>
+          <div><dt>Probable duplicate edges suppressed</dt><dd className={suppressedDuplicates.length ? 'observed' : ''}>{suppressedDuplicates.length}{suppressedDuplicates.at(-1) ? ` · ${hardwareIds[suppressedDuplicates.at(-1)!.signalId]} · ${(Number(suppressedDuplicates.at(-1)!.deltaNs) / 1_000_000).toFixed(1)} ms` : ''}</dd></div>
           <div><dt>Misroutes</dt><dd className={problems.length ? 'problem' : 'ready'}>{problems.length}</dd></div>
         </dl>
         <div className="event-stream">

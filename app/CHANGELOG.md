@@ -6,6 +6,12 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 
 ### Changed
 
+- Flight Check now applies one transparent, main-process 35 ms duplicate-edge
+  suppression to discrete press controls only. It retains bounded suppression
+  evidence in the live UI and SHA-bound v2 receipt while leaving motion and
+  ambiguous callbacks fail-closed. Successful Flight activation now clears any
+  duplicate-filter candidate observed during asynchronous admission.
+
 - Seal local macOS preview packages with a complete ad-hoc signature and make
   package CI fail when strict bundle verification does not pass. This detects
   packaging corruption without claiming Developer ID signing, notarization, or

@@ -400,6 +400,16 @@ Native, provider, distribution, and broader workflow acceptance remain
 separate. See the
 [Ashlr Layer acceptance record](docs/creator-micro-2-ashlr-layer-flight-check-2026-09-05.md).
 
+On September 8, receipt checks observed the repaired and verified Input 0.18.4
+installation not running while the exact installed Agent Board v0.2.0 build
+completed a new Ashlr Layer Flight Check: 20/20 controls, 24 accepted callbacks,
+zero suppressed duplicates, zero misroutes, and zero dropped suppression
+records. The main process saved a private mode-`0600` v2 receipt and an
+independent SHA-256 recomputation matched. This is the first recorded
+machine-sealed Ashlr Layer acceptance for the receipt-bound installed build
+identified in the evidence record. See the
+[September 8 sealed acceptance record](docs/creator-micro-2-ashlr-layer-flight-check-2026-09-08.md).
+
 Automated source checks and local package creation do not prove installed hooks,
 provider receipt, physical gesture completion, RGB support, signed distribution,
 or user acceptance.
