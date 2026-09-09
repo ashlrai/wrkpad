@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import {
   actions, activeProfileContentDrift, controls, correctedInputProfileObserved, correctedInputProfileObservedForVariant, dualPlaneInputProfileConfigured, effortLevels, hardware, hybridNativeInputProfileConfigured, profileOrder, profiles,
-  type ActionDefinition, type AgentSlotSummary, type BoardRoute, type ControlId, type ExecutionResult, type FlightSnapshot, type InputInstallationStatus, type MissionControlSnapshot, type NativeAcceptanceAttestations, type NativeAcceptanceSnapshot, type PhysicalSignalEnvelope, type ProfileId, type ProfileRepairResult, type ReceiverRuntimeStatus, type SuppressedDuplicateEvent, type SystemStatus, type WorkspaceSnapshot,
+  type ActionDefinition, type AgentSlotSummary, type BoardRoute, type ControlId, type ExecutionResult, type FlightBuildAcceptance, type FlightSnapshot, type InputInstallationStatus, type JoystickRightDiagnosticInput, type JoystickRightDiagnosticResult, type MissionControlSnapshot, type NativeAcceptanceAttestations, type NativeAcceptanceSnapshot, type PhysicalSignalEnvelope, type ProfileId, type ProfileRepairResult, type ReceiverRuntimeStatus, type SuppressedDuplicateEvent, type SystemStatus, type WorkspaceSnapshot,
 } from './board'
 import { agentProviderLabel, agentStateClassName, agentStateLabels, agentStateLegendOrder, agentVisibleStateLabel } from './agent-accessibility'
 import AttentionDeck from './components/AttentionDeck'
@@ -28,6 +28,7 @@ const initialStatus: SystemStatus = {
   nativeCodexMicro: { status: 'not_observed', observedAt: null, detail: 'No recent native Codex Creator Micro connection evidence was found.' },
   boardRoute: 'unknown',
   workspace: '/Choose a working directory', shortcutCount: 0, shortcutRegistrations: [], shortcutTelemetry: { generation: 0, scope: 'unowned', totalObserved: 0, totalSuppressedDuplicates: 0, last: null }, workspaceSnapshot: null, receiverIdentity: null,
+  buildAcceptance: { status: 'unavailable', acceptedAt: null, exportedAt: null, appVersion: null, appAsarSha256: null, route: null, profileKind: null, profileName: null, layerName: null, expectedCallbackCount: null, acceptedCallbackCount: null, suppressedDuplicateCount: null, receiptSha256: null },
   receiverRuntime: { status: 'unavailable', instanceCount: 0, distinctBuildCount: 0, currentAsarSha256: null, candidateAsarSha256: null, candidateMatchesCurrent: null },
   inputApplication: { status: 'unavailable' },
 }
@@ -133,6 +134,67 @@ const viewOrder = ['operate', 'flight', 'setup'] as const
 const HYBRID_SHORTCUT_COUNT = 14
 const agentControls = new Set<ControlId>(['agent1', 'agent2', 'agent3', 'agent4', 'agent5', 'agent6'])
 const shortcutCountForRoute = (route: BoardRoute) => route === 'hybrid_native' ? HYBRID_SHORTCUT_COUNT : hardware.bindableSignals
+
+const joystickDiagnosticObserved = (result: JoystickRightDiagnosticResult | null) =>
+  result?.status === 'os_callback_observed' && result.delivery === 'allowed'
+
+const validJoystickDiagnosticResult = (value: unknown): value is JoystickRightDiagnosticResult => {
+  if (!value || typeof value !== 'object') return false
+  const result = value as Partial<JoystickRightDiagnosticResult>
+  return result.schemaVersion === 1
+    && result.target === 'joyRight'
+    && (result.instructedInput === 'mac_keyboard' || result.instructedInput === 'creator_micro_2')
+    && ['os_callback_observed', 'timed_out', 'blocked', 'superseded', 'invalidated'].includes(result.status ?? '')
+    && Number.isSafeInteger(result.generation)
+    && typeof result.startedAt === 'string'
+    && (result.observedAt === null || typeof result.observedAt === 'string')
+    && (result.delivery === 'allowed' || result.delivery === 'none')
+    && (result.status === 'os_callback_observed' ? result.delivery === 'allowed' : result.delivery === 'none')
+}
+
+const joystickDiagnosticMessage = (input: JoystickRightDiagnosticInput, result: JoystickRightDiagnosticResult) => {
+  if (result.status === 'os_callback_observed') {
+    return input === 'mac_keyboard'
+      ? 'JOY_RIGHT reached this receiver generation. This proves current-session shortcut delivery, not which keyboard produced it.'
+      : 'JOY_RIGHT reached this receiver generation after the instructed stick movement. This supports the physical route, but the callback has no cryptographic device attribution.'
+  }
+  if (result.status === 'timed_out') {
+    return input === 'mac_keyboard'
+      ? 'No current-generation callback arrived. Confirm Ashlr Layer, one receiver, and Input Monitoring for this exact installed app, then retry.'
+      : 'The laptop shortcut delivered, but the instructed stick movement did not. In Work Louder Input, confirm Ashlr Agent Board Corrected → Ashlr Daily is active and synchronized, then retry.'
+  }
+  if (result.status === 'blocked') return 'The probe could not arm. Require Ashlr Layer, one exclusive receiver, and a registered JOY_RIGHT endpoint, then run it again.'
+  if (result.status === 'superseded') return 'A newer probe replaced this attempt. Start this step again and perform only the requested input.'
+  return 'The receiver generation or route changed during the probe. Refresh Setup and restart at the laptop shortcut.'
+}
+
+const describeBuildAcceptance = (acceptance: FlightBuildAcceptance) => {
+  if (acceptance.status === 'current_build_accepted') return {
+    title: 'This exact build has a sealed daily receipt',
+    state: `${acceptance.acceptedCallbackCount ?? 24}/${acceptance.expectedCallbackCount ?? 24} historical callbacks accepted`,
+    detail: 'The receipt qualifies this app build under its recorded Ashlr Daily run. It does not prove the board is connected or delivering in the current session.',
+  }
+  if (acceptance.status === 'accepted_other_build') return {
+    title: 'A different build has a sealed daily receipt',
+    state: 'Current build requires a fresh Flight Check',
+    detail: 'Prior qualification remains visible for recovery, but it cannot qualify this app build or any current USB, permission, receiver, or callback state.',
+  }
+  if (acceptance.status === 'absent') return {
+    title: 'No sealed daily receipt found',
+    state: 'Exact-build acceptance absent',
+    detail: 'Complete and save a clean 20-gesture Daily Flight Check after current-session delivery is working.',
+  }
+  if (acceptance.status === 'invalid') return {
+    title: 'Saved receipt evidence was rejected',
+    state: 'Exact-build acceptance invalid',
+    detail: 'The bounded receipt store was malformed, unsafe, or failed integrity checks. No historical acceptance was loaded.',
+  }
+  return {
+    title: 'Exact-build acceptance could not be inspected',
+    state: 'Historical acceptance unavailable',
+    detail: 'Treat this build as unaccepted until the local receipt store can be inspected and a valid matching receipt is found.',
+  }
+}
 
 const flightEventsFromSnapshot = (snapshot: FlightSnapshot, variant: FlightVariant, route: BoardRoute): FlightEvent[] => {
   const events: FlightEvent[] = []
@@ -1482,7 +1544,15 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
   const [commissioning, setCommissioning] = useState<CommissioningCoordinatorResponse | null>(null)
   const [commissioningBusy, setCommissioningBusy] = useState(false)
   const [commissioningError, setCommissioningError] = useState<string | null>(null)
+  const [joystickDiagnosticRecord, setJoystickDiagnosticRecord] = useState<{
+    evidenceKey: string
+    results: Record<JoystickRightDiagnosticInput, JoystickRightDiagnosticResult | null>
+    busy: JoystickRightDiagnosticInput | null
+    error: string | null
+  } | null>(null)
   const recoveryFocus = useRef<HTMLElement | null>(null)
+  const joystickDiagnosticRequest = useRef(0)
+  const latestJoystickDiagnosticEvidence = useRef('')
   const commissioningEvidenceKey = JSON.stringify([
     status.boardRoute, status.boardConnected, status.boardVidPid,
     status.inputInstallation?.status, status.inputInstallation?.version,
@@ -1491,6 +1561,80 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
     status.receiverRuntime?.status, status.receiverRuntime?.instanceCount,
     status.receiverRuntime?.distinctBuildCount, status.receiverRuntime?.currentAsarSha256,
   ])
+  const joystickDiagnosticEvidenceKey = JSON.stringify([
+    status.boardRoute,
+    status.boardConnected,
+    status.shortcutCount,
+    status.shortcutTelemetry?.generation,
+    status.shortcutTelemetry?.scope,
+    status.inputProfile?.cacheStatus,
+    status.inputProfile?.activeProfile,
+    status.inputProfile?.activeLayer,
+    status.inputProfile?.encoderDirection,
+    status.inputProfile?.configuredLayers,
+    status.receiverRuntime?.status,
+    status.receiverRuntime?.currentAsarSha256,
+  ])
+  useEffect(() => {
+    latestJoystickDiagnosticEvidence.current = joystickDiagnosticEvidenceKey
+    joystickDiagnosticRequest.current += 1
+    return () => {
+      joystickDiagnosticRequest.current += 1
+      const cancel = window.agentBoard?.cancelJoystickRightDiagnostic
+      if (cancel) void cancel().catch(() => {})
+    }
+  }, [joystickDiagnosticEvidenceKey])
+
+  const runJoystickDiagnostic = async (instructedInput: JoystickRightDiagnosticInput) => {
+    const diagnose = window.agentBoard?.diagnoseJoystickRight
+    const request = ++joystickDiagnosticRequest.current
+    const evidenceKey = joystickDiagnosticEvidenceKey
+    setJoystickDiagnosticRecord((current) => ({
+      evidenceKey,
+      results: instructedInput === 'mac_keyboard'
+        ? { mac_keyboard: null, creator_micro_2: null }
+        : { mac_keyboard: current?.evidenceKey === evidenceKey ? current.results.mac_keyboard : null, creator_micro_2: null },
+      busy: instructedInput,
+      error: null,
+    }))
+    if (!diagnose) {
+      if (request === joystickDiagnosticRequest.current) {
+        setJoystickDiagnosticRecord((current) => current?.evidenceKey === evidenceKey
+          ? { ...current, busy: null, error: 'This app build does not expose the focused shortcut probe. Refresh after installing the current build, or use the full Flight Check.' }
+          : current)
+      }
+      return
+    }
+    try {
+      const result = await diagnose({ instructedInput })
+      if (request !== joystickDiagnosticRequest.current || evidenceKey !== latestJoystickDiagnosticEvidence.current) return
+      if (!validJoystickDiagnosticResult(result) || result.instructedInput !== instructedInput) {
+        setJoystickDiagnosticRecord((current) => current?.evidenceKey === evidenceKey
+          ? { ...current, error: 'The receiver returned an invalid or mismatched probe result. No delivery was accepted; refresh Setup and retry.' }
+          : current)
+        return
+      }
+      if (result.generation !== (status.shortcutTelemetry?.generation ?? 0)) {
+        setJoystickDiagnosticRecord((current) => current?.evidenceKey === evidenceKey
+          ? { ...current, error: 'The receiver generation changed before this result reached the screen. The stale result was discarded; refresh Setup and start again.' }
+          : current)
+        return
+      }
+      setJoystickDiagnosticRecord((current) => current?.evidenceKey === evidenceKey
+        ? { ...current, results: { ...current.results, [instructedInput]: result } }
+        : current)
+    } catch {
+      if (request === joystickDiagnosticRequest.current) {
+        setJoystickDiagnosticRecord((current) => current?.evidenceKey === evidenceKey
+          ? { ...current, error: 'The focused probe stopped before it produced bounded evidence. No shortcut delivery was accepted; refresh Setup and retry.' }
+          : current)
+      }
+    } finally {
+      if (request === joystickDiagnosticRequest.current) {
+        setJoystickDiagnosticRecord((current) => current?.evidenceKey === evidenceKey ? { ...current, busy: null } : current)
+      }
+    }
+  }
 
   const refreshCommissioning = useCallback(async () => {
     if (!window.agentBoard?.getCommissioning || status.boardRoute !== 'ashlr_layer') return null
@@ -1592,6 +1736,8 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
   const correctedProfileObserved = correctedInputProfileObserved(inputProfile)
   const ashlrProfileConfigured = correctedProfileObserved || dualPlaneProfileObserved
   const nativeShortcutProfileObserved = status.boardRoute === 'codex_native' && correctedProfileObserved
+  const buildAcceptance = status.buildAcceptance ?? initialStatus.buildAcceptance
+  const buildAcceptanceDescription = describeBuildAcceptance(buildAcceptance)
   const inputRecoveryState = status.boardRoute !== 'ashlr_layer'
     ? 'none'
     : concreteProfileContentDrift
@@ -1606,7 +1752,7 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
     { number: '04', title: 'Prove one shortcut receiver', detail: 'Only one exact Agent Board build may own the 20 global shortcuts. The app detects conflicts but never kills another process.', state: receiverExclusive ? 'One receiver · shortcut ownership available' : receiverRuntime?.status === 'unavailable' ? 'Receiver ownership unavailable · shortcuts disabled' : `${receiverRuntime?.instanceCount ?? 0} receivers / ${receiverRuntime?.distinctBuildCount ?? 0} builds · shortcuts disabled`, ready: receiverExclusive },
     { number: '05', title: 'Verify Input Monitoring', detail: 'In System Settings → Privacy & Security → Input Monitoring, allow the app that should receive board events. Only you can grant this.', state: 'Human verification required', ready: false },
     { number: '06', title: "Inspect Input's cached profile", detail: !inputInstallationReady ? 'Profile repair, import, activation, and synchronization stay paused until the installed Input copy passes publisher, signature, and Gatekeeper verification.' : concreteProfileContentDrift ? `The profile and layer labels are correct, but the cached mapping is incomplete${unexpectedBindings ? ': every expected position matches, but unexpected bindings or structure are also present' : dailySignalCount !== null ? `: ${dailySignalCount}/20 expected bindings match` : ''}${unboundControls.length > 0 ? `; ${unboundControls.join(', ')} ${unboundControls.length === 1 ? 'is' : 'are'} unbound` : ''}. Replace it with a strictly verified 20-signal profile; setting this same incomplete profile current cannot repair its contents.` : inputProfile.encoderDirection === 'reversed' ? 'The read-only Input cache shows the known clockwise/counterclockwise inversion. Import and activate the uniquely named corrected profile through Input before restarting Flight Check.' : dualPlaneProfileObserved ? 'The current profile contains an exact native layer first and exact Ashlr Daily layer second. Input does not expose the selected firmware layer here, so only the ordered physical Flight Check can prove the Ashlr route.' : correctedProfileObserved && recentRuntimeEvidence ? 'The exact cached mapping is present. Input also logged an unresolved runtime layer index, but the vendor runtime index is offset from the cached layer ID; it is advisory and does not prove a missing layer. Only a fresh physical Flight Check proves delivery.' : correctedProfileObserved ? 'Input’s header is only the profile being edited. The cache-current profile and the profile physically emitting are separate states; a fresh physical Flight Check may supersede older log evidence.' : 'Choose the corrected one-layer profile or generate the guarded Dual Plane candidate. A correct encoder-only receipt under another profile name is not enough; cache observation does not prove the board write or physical route.', state: !inputInstallationReady ? 'Blocked by Input integrity' : concreteProfileContentDrift ? `Blocked · cached profile incomplete${unexpectedBindings ? ' · unexpected bindings' : dailySignalCount !== null ? ` · ${dailySignalCount}/20 expected` : ''}${unboundControls.length > 0 ? ` · ${unboundControls.join(', ')} unbound` : ''}` : dualPlaneProfileObserved ? 'Cache observed · Dual Plane · selected layer unobservable' : correctedProfileObserved ? 'Cache observed · Ashlr Agent Board Corrected · Ashlr Daily · device sync unproven' : profileState, ready: false, observed: inputInstallationReady && ashlrProfileConfigured && !concreteProfileContentDrift },
-    { number: '07', title: 'Verify the declared physical route', detail: 'Run all 20 gestures. The first gesture uses the top-left rotary dial; the bottom-left circle selects layers and the wired/Bluetooth connection.', state: `${status.shortcutCount}/${hardware.bindableSignals} desktop endpoints registered · physical layer unverified`, ready: false },
+    { number: '07', title: 'Verify the declared physical route', detail: `${buildAcceptanceDescription.detail} A fresh current-session callback and the ordered 20-gesture run remain separate evidence. The first full-run gesture uses the top-left rotary dial; the bottom-left circle selects layers and the wired/Bluetooth connection.`, state: buildAcceptance.status === 'current_build_accepted' ? `Exact build sealed · ${buildAcceptanceDescription.state} · run current-session check below` : `${status.shortcutCount}/${hardware.bindableSignals} desktop endpoints registered · physical layer unverified`, ready: false, observed: buildAcceptance.status === 'current_build_accepted' },
   ]
   const hybridSteps: Array<{ number: string; title: string; detail: string; state: string; ready: boolean; observed?: boolean }> = [
     { number: '01', title: 'Observe the USB identity', detail: 'Use a direct USB-C data connection in white WIRED mode. USB identity remains transport evidence only; it proves neither native Agent keys nor Ashlr workflow gestures.', state: status.boardConnected ? 'Creator Micro 2 identity observed · both planes unproven' : 'USB identity not observed', ready: false, observed: status.boardConnected },
@@ -1907,6 +2053,17 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
       setRecoveryAction({ ok: false, message: 'The saved reminder could not be dismissed. No artifact or Input setting changed.' })
     }
   }
+  const activeJoystickDiagnostic = joystickDiagnosticRecord?.evidenceKey === joystickDiagnosticEvidenceKey
+    ? joystickDiagnosticRecord
+    : null
+  const keyboardDiagnostic = activeJoystickDiagnostic?.results.mac_keyboard ?? null
+  const boardDiagnostic = activeJoystickDiagnostic?.results.creator_micro_2 ?? null
+  const joystickDiagnosticBusy = activeJoystickDiagnostic?.busy ?? null
+  const joystickDiagnosticError = activeJoystickDiagnostic?.error ?? null
+  const keyboardDiagnosticPassed = joystickDiagnosticObserved(keyboardDiagnostic)
+  const boardDiagnosticPassed = joystickDiagnosticObserved(boardDiagnostic)
+  const keyboardDiagnosticMessage = keyboardDiagnostic ? joystickDiagnosticMessage('mac_keyboard', keyboardDiagnostic) : null
+  const boardDiagnosticMessage = boardDiagnostic ? joystickDiagnosticMessage('creator_micro_2', boardDiagnostic) : null
   return <section className="setup-view">
     <div className="setup-intro"><span className="eyebrow">COMMISSIONING / TRUTHFUL READINESS</span><h2>Make every layer observable.</h2><p>USB identity observation, macOS authority, Input configuration, and native Codex integration are separate states. This checklist keeps them separate so “connected” never means more than we proved.</p></div>
     <BoardRouteRail route={status.boardRoute} saving={routeSaving} error={routeError} onChange={changeBoardRoute} />
@@ -1930,6 +2087,33 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
         {steps.map((step) => <article key={step.number} className={step.ready ? 'setup-step ready' : step.observed ? 'setup-step observed' : 'setup-step'}>
           <span className="step-number">{step.number}</span><div><h3>{step.title}</h3><p>{step.detail}</p><strong><i />{step.state}</strong></div>
         </article>)}
+        {status.boardRoute === 'ashlr_layer' && <section className="native-acceptance" aria-labelledby="joystick-diagnostic-title" aria-busy={joystickDiagnosticBusy !== null}>
+          <div className="native-acceptance-heading">
+            <span className="eyebrow">CURRENT-SESSION DELIVERY CHECK</span>
+            <h3 id="joystick-diagnostic-title">Isolate one shortcut before the full Flight Check.</h3>
+            <p>Test the same JOY_RIGHT endpoint in two operator-directed steps. This separates receiver delivery from a likely board profile or emission problem without claiming which physical device generated a callback.</p>
+          </div>
+          <div className="native-evidence-ladder" role="list" aria-label="Joystick-right diagnostic steps">
+            <div role="listitem" className={keyboardDiagnosticPassed ? 'native-evidence-node accepted' : keyboardDiagnostic ? 'native-evidence-node observed' : 'native-evidence-node'}>
+              <span>1</span><strong>Mac keyboard</strong><small>{joystickDiagnosticBusy === 'mac_keyboard' ? 'Press Control + Option + Command + Right now' : keyboardDiagnosticPassed ? 'Current callback delivered' : keyboardDiagnostic ? keyboardDiagnostic.status.replaceAll('_', ' ') : 'Start listening, then press the chord'}</small>
+            </div>
+            <div role="listitem" className={boardDiagnosticPassed ? 'native-evidence-node accepted' : boardDiagnostic ? 'native-evidence-node observed' : 'native-evidence-node'}>
+              <span>2</span><strong>Top-right stick</strong><small>{joystickDiagnosticBusy === 'creator_micro_2' ? 'Move the physical joystick right now' : boardDiagnosticPassed ? 'Current callback delivered' : boardDiagnostic ? boardDiagnostic.status.replaceAll('_', ' ') : keyboardDiagnosticPassed ? 'Ready for physical attempt' : 'Unlocked after step 1'}</small>
+            </div>
+          </div>
+          <div className="native-handoff-status" role="status" aria-live="polite">
+            {boardDiagnosticPassed ? <CircleCheck size={16} /> : keyboardDiagnosticPassed ? <Activity size={16} /> : <Keyboard size={16} />}
+            <span><strong>{boardDiagnosticPassed ? 'Current session delivered both instructed attempts' : keyboardDiagnosticPassed ? 'Receiver path works; test the physical route' : joystickDiagnosticBusy === 'mac_keyboard' ? 'Listening for the laptop shortcut' : 'Start with the laptop shortcut'}</strong>{boardDiagnosticMessage ?? keyboardDiagnosticMessage ?? ' Click the first button, then press Control + Option + Command + Right on the Mac keyboard before the bounded listener ends.'}</span>
+          </div>
+          <div className="native-handoff-actions">
+            <button type="button" onClick={() => void runJoystickDiagnostic('mac_keyboard')} disabled={joystickDiagnosticBusy !== null}>{joystickDiagnosticBusy === 'mac_keyboard' ? 'Listening—press the chord now' : keyboardDiagnostic ? 'Retry laptop shortcut' : 'Listen for laptop shortcut'}</button>
+            <button type="button" onClick={() => void runJoystickDiagnostic('creator_micro_2')} disabled={!keyboardDiagnosticPassed || joystickDiagnosticBusy !== null}>{joystickDiagnosticBusy === 'creator_micro_2' ? 'Listening—move stick right now' : boardDiagnostic ? 'Retry physical joystick' : 'Listen for physical joystick'}</button>
+          </div>
+          {joystickDiagnosticError && <p className="native-action-result failed" role="alert">{joystickDiagnosticError}</p>}
+          {keyboardDiagnosticMessage && !keyboardDiagnosticPassed && <p className="native-action-result failed" role="alert">{keyboardDiagnosticMessage}</p>}
+          {boardDiagnosticMessage && !boardDiagnosticPassed && <p className="native-action-result failed" role="alert">{boardDiagnosticMessage}</p>}
+          <p className="native-proof-boundary"><ShieldCheck size={14} /><span><strong>Live delivery and exact-build acceptance stay separate.</strong> This probe observes one current receiver-generation callback. It neither creates nor reuses a sealed Flight Check receipt, proves USB device identity, or replaces the ordered 20-gesture acceptance.</span></p>
+        </section>}
         {nativeShortcutProfileObserved && <div className="native-profile-warning" role="alert" aria-labelledby="native-profile-warning-title">
           <CircleX size={18} />
           <div><strong id="native-profile-warning-title">Possible native-layer mismatch</strong><p>Do not import into or alter <b>Ashlr Agent Board Corrected · Ashlr Daily</b>. Recovery stays blocked until Setup verifies Input’s publisher, strict signature, and Gatekeeper result. Preserve rollback exports, then follow <b>app/docs/codex-native-layer-recovery.md</b>: create a new candidate profile, manually import and move the native layer to first position, verify the post-import export and first-position content, and only then activate the candidate yourself. Return here for physical acceptance with Input quit and white <b>WIRED</b> mode. A badge number, validator match, or activation message is not acceptance. Never Reset settings or let Agent Board import, reorder, activate, or write the device.</p></div>
@@ -2022,6 +2206,12 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
         <div className="hardware-note"><RotateCcw size={18} /><p><strong>The bottom-left circle is not a bindable key.</strong> A short tap changes layer; a three-second hold opens the selector for three Bluetooth channels and wired mode.</p></div>
         <div className="rgb-legend" aria-label="Black-opaque state language"><span className="eyebrow">BLACK-OPAQUE STATE LANGUAGE</span><div>{agentStateLegendOrder.map((state) => <span key={state}><i className={agentStateClassName(state)} />{agentStateLabels[state]}{' '}</span>)}</div><small>The screen is the complete legend. Black caps use edge and underglow only after lighting transport is qualified; a frosted hero cap is optional.</small></div>
         {status.receiverIdentity && <div className="receiver-identity"><span className="eyebrow">CURRENT RECEIVER BUILD</span><strong>{status.receiverIdentity.packaged ? 'Packaged' : 'Development'} · v{status.receiverIdentity.appVersion}</strong>{status.receiverIdentity.appAsarSha256 && <code title={status.receiverIdentity.appAsarSha256}>app.asar {status.receiverIdentity.appAsarSha256.slice(0, 12)}</code>}<p>{status.boardRoute === 'codex_native' ? 'Agent Board is observing this build in passive native mode; it is not claiming the native HID route.' : receiverExclusive ? 'This is the only observed Agent Board receiver.' : `${receiverRuntime?.instanceCount ?? 0} receivers across ${receiverRuntime?.distinctBuildCount ?? 0} builds are contending. Fully quit every copy manually, then reopen one exact build. No process was quit automatically.`} Build identity does not prove macOS permission, shortcut receipt, signing, or physical acceptance.</p></div>}
+        {status.boardRoute === 'ashlr_layer' && <div className="receiver-identity" aria-label="Exact build acceptance">
+          <span className="eyebrow">SEALED BUILD ACCEPTANCE</span>
+          <strong>{buildAcceptanceDescription.title}</strong>
+          {buildAcceptance.appAsarSha256 && <code title={buildAcceptance.appAsarSha256}>accepted app.asar {buildAcceptance.appAsarSha256.slice(0, 12)}</code>}
+          <p><b>{buildAcceptanceDescription.state}.</b> {buildAcceptanceDescription.detail}</p>
+        </div>}
         {status.boardRoute === 'codex_native'
           ? <div className="native-manual-gate"><ShieldCheck size={16} /><span><strong>Operator acceptance handoff</strong> Prepare the handoff at left. Agent Board unregisters its shortcuts and may remain open in passive Codex Native mode; quit Work Louder Input, Command-Q and reopen ChatGPT Desktop, then record the checks you personally perform. Automatic evidence watching never checks a box or accepts for you.</span></div>
           : <button type="button" className="operate-button" onClick={onFlightCheck}>Run {status.boardRoute === 'hybrid_native' ? '14-gesture Hybrid' : 'Ashlr'} Flight Check <ChevronRight size={16} /></button>}

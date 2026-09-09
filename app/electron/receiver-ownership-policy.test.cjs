@@ -35,6 +35,25 @@ test('callback telemetry precedes the guard and Flight evidence is main-owned', 
   assert.match(preloadSource, /getFlightSnapshot: \(\) => ipcRenderer\.invoke\('board:getFlightSnapshot'\)/)
 })
 
+test('focused joystick diagnosis consumes one allowed callback before mapped delivery', () => {
+  assert.match(source, /createTargetedShortcutProbeCoordinator\(\)/)
+  assert.match(source, /targetedShortcutProbe\.observe\(\{[\s\S]*signalId: control,[\s\S]*generation: currentTelemetry\.generation,[\s\S]*scope: currentTelemetry\.scope,[\s\S]*observedAt: observation\?\.receivedAt,[\s\S]*\}\)[\s\S]*shortcutObservability\.allow\(observation\)[\s\S]*return[\s\S]*flightSession\.record\(envelope\)/)
+  assert.match(source, /ipcMain\.handle\('board:diagnoseJoystickRight',[\s\S]*Object\.keys\(request\)\.length === 1[\s\S]*synchronizeShortcutOwnership\(currentRoute\)[\s\S]*ownership\?\.runtime\?\.status === 'exclusive'[\s\S]*!flightActionsSuppressed\(\)[\s\S]*targetedShortcutProbe\.start/)
+  assert.match(source, /ipcMain\.handle\('board:cancelJoystickRightDiagnostic',[\s\S]*targetedShortcutProbe\.invalidate\(\)/)
+  assert.match(source, /function resetFlightState\(\) \{[\s\S]*targetedShortcutProbe\.invalidate\(\)/)
+  assert.match(source, /ipcMain\.handle\('board:setFlightCheck'[\s\S]*targetedShortcutProbe\.invalidate\(\)[\s\S]*flightOperations\.start/)
+  assert.match(source, /ipcMain\.handle\('board:restartFlightCheck'[\s\S]*targetedShortcutProbe\.invalidate\(\)[\s\S]*flightOperations\.restart/)
+  assert.match(preloadSource, /diagnoseJoystickRight: \(request\) => ipcRenderer\.invoke\('board:diagnoseJoystickRight', request\)/)
+  assert.match(preloadSource, /cancelJoystickRightDiagnostic: \(\) => ipcRenderer\.invoke\('board:cancelJoystickRightDiagnostic'\)/)
+})
+
+test('status projects sealed exact-build acceptance without promoting current physical state', () => {
+  assert.match(source, /inspectFlightBuildAcceptance\(\{[\s\S]*receiptDirectory: path\.join\(app\.getPath\('userData'\), 'flight-receipts'\),[\s\S]*currentAppAsarSha256: receiverAsarSha256/)
+  assert.match(source, /buildAcceptance,\n\s*receiverRuntime:/)
+  assert.match(source, /const physicalAcceptance = projectActiveFlightAcceptance\(/)
+  assert.doesNotMatch(source, /physicalAcceptance\s*=\s*buildAcceptance/)
+})
+
 test('Flight Check alone suppresses one disclosed adjacent edge duplicate before delivery', () => {
   assert.match(source, /observation && flightSession\.isActive\(\)[\s\S]*shortcutEdgeFilter\.inspect\([\s\S]*duplicate\.suppress[\s\S]*shortcutObservability\.suppressDuplicate\(observation\)[\s\S]*flightSession\.recordSuppressedDuplicate\([\s\S]*return[\s\S]*shortcutObservability\.allow\(observation\)/)
   assert.match(source, /recordSuppressedDuplicate\(\{[\s\S]*deltaNs:[\s\S]*reason: 'adjacent_duplicate_within_window'/)
@@ -85,6 +104,7 @@ test('packaged build identity is available independently of shortcut ownership',
   assert.match(source, /createCachedAsarHasher\(\{ ttlMs: 30_000, maxEntries: 32, filesystem: originalFilesystem \}\)/)
   assert.match(source, /function inspectCurrentReceiverRuntime\(\) \{[\s\S]*inspectReceiverRuntime\(\{ currentPid: process\.pid, hashAsar: cachedReceiverAsarHash \}\)/)
   assert.match(source, /function currentPackagedAsarSha256\(\) \{[\s\S]*cachedReceiverAsarHash\(app\.getAppPath\(\)\)/)
-  assert.match(source, /appAsarSha256: currentReceiverRuntime\.currentAsarSha256 \?\? currentPackagedAsarSha256\(\)/)
+  assert.match(source, /const receiverAsarSha256 = currentReceiverRuntime\.currentAsarSha256 \?\? currentPackagedAsarSha256\(\)/)
+  assert.match(source, /appAsarSha256: receiverAsarSha256/)
   assert.doesNotMatch(source, /process\.noAsar|withRawAsarFilesystem/)
 })

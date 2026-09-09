@@ -143,19 +143,69 @@ receipt is never presented as native Codex or combined 14+6 acceptance.
 6. Look for another app that already owns the same global shortcut.
 7. Restart Agent Board after permission or ownership changes.
 
-All 20 desktop shortcuts must register and all 20 physical signals must be tested. ACT10 and ACT11 are independent bottom-row switches.
+All 20 desktop shortcuts must register and all 20 physical signals must be
+tested. ACT10 and ACT11 are independent bottom-row switches. Use the focused
+current-session check below before repeating the complete Flight Check.
 
-If all endpoints register but no physical signal is received, watch **OS
-callbacks observed** and press the same accelerator on the Mac keyboard. This
-counter remains available when Flight Check is blocked or inactive. An allowed
-laptop callback followed by a silent board control points back to the board's
-active profile or emitted report. A rejected callback points to route or
-ownership revalidation. No callback from either input requires receiver-level
-diagnosis; `20/20 registered` alone is not delivery evidence. The counter stores
-only an allowlisted control ID, timestamp, aggregate count, and delivery result.
-It is reset and labeled for each shortcut-ownership route/generation, so an old
-Ashlr callback cannot be presented as evidence for a later Hybrid or passive
-native route.
+## Prove daily Ashlr Layer delivery
+
+Use this as the canonical daily startup and connected-but-silent procedure for
+the **Ashlr Layer** route. It first isolates one harmless shortcut in the current
+receiver generation, then keeps that result separate from the complete physical
+acceptance receipt.
+
+Prerequisites: connect the board in white **WIRED** mode, declare **Ashlr
+Layer**, open exactly one intended Agent Board build, keep Flight Check stopped,
+and require Setup to show one exclusive receiver plus `20/20` registered
+endpoints. Registration and USB identity are prerequisites only; neither proves
+that a control can deliver.
+
+1. Open **Setup → Current-session delivery check**.
+2. Select **Listen for laptop shortcut**.
+3. Within the 10-second listening window, press
+   **Control + Option + Command + Right Arrow** once on the Mac keyboard.
+4. Continue only when Setup reports that the current JOY_RIGHT callback reached
+   this receiver generation.
+5. Select **Listen for physical joystick**.
+6. Within the next 10-second window, move the top-right planar stick once to the
+   right.
+7. Read the result using the table below. Do not infer a stronger state from a
+   green USB, registration, or historical-receipt label.
+8. When both instructed attempts deliver, run the ordered 20-gesture **Daily
+   Flight Check** using only the board, then save the sealed receipt.
+
+| Result | Supported interpretation | Next action |
+| --- | --- | --- |
+| Laptop and stick both deliver | JOY_RIGHT reached the same current receiver generation after both operator-directed attempts | Run and save the full 20-gesture Flight Check |
+| Laptop delivers; stick times out | The receiver and current macOS shortcut path work; the likely fault is the active Input profile/layer, device synchronization, or board emission | Follow [Input-only reconciliation](#input-only-reconciliation), then repeat this check |
+| Laptop times out | No current-generation JOY_RIGHT callback reached Agent Board | Verify **Ashlr Layer**, one receiver, JOY_RIGHT registration, and Input Monitoring for the exact installed Agent Board build |
+| Probe is blocked | Its route, receiver, endpoint, action interlock, or operation-safety prerequisite is not currently eligible | Stop Flight Check or any in-progress action, refresh Setup, and resolve the named prerequisite |
+| Probe is invalidated or superseded | The route or receiver generation changed, or a newer probe replaced the attempt | Refresh Setup and restart at the laptop step |
+
+Input Monitoring is attached to the receiving app identity, not to the USB
+device. After granting or changing it in **System Settings → Privacy & Security
+→ Input Monitoring**, fully quit and reopen the exact Agent Board build before
+retrying the laptop step. A visible enabled toggle remains a human observation;
+Agent Board cannot read the protected permission database.
+
+The two inputs are operator-directed, not cryptographically attributed. A
+callback after the physical instruction supports the board route only in
+combination with the operator's observation; macOS does not tell Agent Board
+which keyboard emitted the accelerator. The focused probe covers only
+JOY_RIGHT and never replaces the ordered 20-control Flight Check.
+
+After a clean Daily Flight Check is saved, Setup reads the private sealed v2
+receipt and compares its receiver `app.asar` SHA-256 with the running build. A
+matching receipt is displayed as **This exact build has a sealed daily
+receipt**. A receipt for another build remains visible as recovery history, but
+the current build still requires a fresh Flight Check. Either label is
+historical build qualification only: it does not prove current USB presence,
+Input Monitoring, receiver exclusivity, active Input state, or current-session
+delivery.
+
+The saved receipt and current-session check also do not make a local package a
+public release. A local ad-hoc-sealed preview remains distinct from a Developer
+ID-signed, notarized, immutable distribution artifact.
 
 ## Input-only reconciliation
 

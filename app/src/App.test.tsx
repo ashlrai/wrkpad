@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
-import type { NativeAcceptanceSnapshot, PhysicalSignalEnvelope } from './board'
+import type { JoystickRightDiagnosticResult, NativeAcceptanceSnapshot, PhysicalSignalEnvelope, SystemStatus } from './board'
 import { dailyFlightSteps } from './flight-check'
 
 const correctedInputProfile = {
@@ -687,6 +687,101 @@ describe('operator interface', () => {
     expect(screen.getByRole('heading', { name: 'Prove one shortcut receiver' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: "Inspect Input's cached profile" })).toBeTruthy()
     expect(screen.queryByRole('heading', { name: /Carry the physical check/i })).toBeNull()
+  })
+
+  it('isolates current-session joystick delivery with a laptop step before the physical step', async () => {
+    const diagnosticResult = (instructedInput: JoystickRightDiagnosticResult['instructedInput']): JoystickRightDiagnosticResult => ({
+      schemaVersion: 1,
+      target: 'joyRight',
+      instructedInput,
+      status: 'os_callback_observed',
+      generation: 8,
+      startedAt: '2026-09-08T22:00:00.000Z',
+      observedAt: '2026-09-08T22:00:01.000Z',
+      delivery: 'allowed',
+    })
+    const diagnoseJoystickRight = vi.fn(({ instructedInput }: { instructedInput: JoystickRightDiagnosticResult['instructedInput'] }) => Promise.resolve(diagnosticResult(instructedInput)))
+    window.agentBoard = {
+      getStatus: vi.fn().mockResolvedValue({
+        boardConnected: true, boardVidPid: '303A:8298', inputInstalled: true, inputMonitoring: 'unverified',
+        ...trustedHardwareDiagnostics,
+        inputProfile: correctedInputProfile,
+        codex: true, claude: true, ashlr: true, boardRoute: 'ashlr_layer', workspace: '/tmp', shortcutCount: 20,
+        shortcutRegistrations: [], shortcutTelemetry: { generation: 8, scope: 'ashlr_layer', totalObserved: 4, last: null }, workspaceSnapshot: null,
+        buildAcceptance: {
+          status: 'current_build_accepted', acceptedAt: '2026-09-08T22:00:00.000Z', exportedAt: '2026-09-08T22:00:01.000Z', appVersion: '0.2.0',
+          appAsarSha256: 'a'.repeat(64), route: 'ashlr_layer', profileKind: 'daily', profileName: 'Ashlr Agent Board Corrected', layerName: 'Ashlr Daily',
+          expectedCallbackCount: 24, acceptedCallbackCount: 24, suppressedDuplicateCount: 0, receiptSha256: 'b'.repeat(64),
+        },
+      }),
+      diagnoseJoystickRight,
+      getMissionControl: vi.fn().mockResolvedValue(initialUnavailableMission()),
+      setBoardRoute: vi.fn(), focusAgentSlot: vi.fn(), setProfile: vi.fn(), setFlightCheck: vi.fn(),
+      requestAction: vi.fn(), confirmAction: vi.fn(), beginHold: vi.fn(), cancelHold: vi.fn(),
+      chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(), onControl: vi.fn(() => () => {}),
+    } as unknown as NonNullable<typeof window.agentBoard>
+
+    render(<App />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
+    const physical = await screen.findByRole('button', { name: 'Listen for physical joystick' })
+    expect(screen.getByLabelText('Exact build acceptance').textContent).toContain('This exact build has a sealed daily receipt')
+    expect(screen.getByText(/Exact build sealed · 24\/24 historical callbacks accepted · run current-session check below/i)).toBeTruthy()
+    expect((physical as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Listen for laptop shortcut' }))
+    await waitFor(() => expect(screen.getByText(/Receiver path works; test the physical route/i)).toBeTruthy())
+    expect(diagnoseJoystickRight).toHaveBeenNthCalledWith(1, { instructedInput: 'mac_keyboard' })
+    expect((physical as HTMLButtonElement).disabled).toBe(false)
+
+    fireEvent.click(physical)
+    await waitFor(() => expect(screen.getByText(/Current session delivered both instructed attempts/i)).toBeTruthy())
+    expect(diagnoseJoystickRight).toHaveBeenNthCalledWith(2, { instructedInput: 'creator_micro_2' })
+    expect(screen.getByText(/callback has no cryptographic device attribution/i)).toBeTruthy()
+    expect(screen.getByText(/neither creates nor reuses a sealed Flight Check receipt/i)).toBeTruthy()
+  })
+
+  it('cancels and discards a focused diagnostic result when its route evidence changes', async () => {
+    const pending = deferred<JoystickRightDiagnosticResult>()
+    const statusAt = (generation: number): SystemStatus => ({
+      boardConnected: true, boardVidPid: '303A:8298', inputInstalled: true, inputMonitoring: 'unverified',
+      ...trustedHardwareDiagnostics,
+      inputProfile: correctedInputProfile,
+      inputRuntime: { status: 'not_observed', profileIndex: null, layerIndex: null, observedAt: null, fresh: false },
+      codex: true, claude: true, ashlr: true, boardRoute: 'ashlr_layer', workspace: '/tmp', shortcutCount: 20,
+      shortcutRegistrations: [], shortcutTelemetry: { generation, scope: 'ashlr_layer', totalObserved: 0, last: null }, workspaceSnapshot: null,
+      buildAcceptance: { status: 'absent', acceptedAt: null, exportedAt: null, appVersion: null, appAsarSha256: null, route: null, profileKind: null, profileName: null, layerName: null, expectedCallbackCount: null, acceptedCallbackCount: null, suppressedDuplicateCount: null, receiptSha256: null },
+      chatgptDesktop: { status: 'unavailable', version: null, build: null },
+      nativeCodexMicro: { status: 'not_observed', observedAt: null, detail: 'none' },
+      receiverIdentity: null,
+    })
+    const getStatus = vi.fn().mockResolvedValue(statusAt(8))
+    const cancelJoystickRightDiagnostic = vi.fn().mockResolvedValue(true)
+    window.agentBoard = {
+      getStatus,
+      diagnoseJoystickRight: vi.fn(() => pending.promise),
+      cancelJoystickRightDiagnostic,
+      getMissionControl: vi.fn().mockResolvedValue(initialUnavailableMission()),
+      setBoardRoute: vi.fn().mockResolvedValue('codex_native'), focusAgentSlot: vi.fn(), setProfile: vi.fn(), setFlightCheck: vi.fn(),
+      requestAction: vi.fn(), confirmAction: vi.fn(), beginHold: vi.fn(), cancelHold: vi.fn(),
+      chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(), onControl: vi.fn(() => () => {}),
+    } as unknown as NonNullable<typeof window.agentBoard>
+
+    render(<App />)
+    await act(async () => { await Promise.resolve(); await Promise.resolve() })
+    fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
+    cancelJoystickRightDiagnostic.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: 'Listen for laptop shortcut' }))
+    expect(screen.getByText(/Listening for the laptop shortcut/i)).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('radio', { name: /Codex Native/i }))
+    await waitFor(() => expect(cancelJoystickRightDiagnostic).toHaveBeenCalled())
+    pending.resolve({
+      schemaVersion: 1, target: 'joyRight', instructedInput: 'mac_keyboard', status: 'os_callback_observed',
+      generation: 8, startedAt: '2026-09-08T22:00:00.000Z', observedAt: '2026-09-08T22:00:01.000Z', delivery: 'allowed',
+    })
+    await act(async () => { await Promise.resolve(); await Promise.resolve() })
+
+    expect(screen.queryByText(/Receiver path works; test the physical route/i)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Listen for laptop shortcut' })).toBeNull()
   })
 
   it('gives digital twin agent keys the live provider, title, and state', async () => {

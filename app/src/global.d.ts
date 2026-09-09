@@ -1,4 +1,4 @@
-import type { BoardRoute, ExecutionResult, FlightSnapshot, MissionControlSnapshot, NativeAcceptanceActionResult, NativeAcceptanceAttestations, NativeAcceptanceSnapshot, PhysicalSignalEnvelope, ProfileId, ProfileRepairResult, SystemStatus } from './board'
+import type { BoardRoute, ExecutionResult, FlightSnapshot, JoystickRightDiagnosticRequest, JoystickRightDiagnosticResult, MissionControlSnapshot, NativeAcceptanceActionResult, NativeAcceptanceAttestations, NativeAcceptanceSnapshot, PhysicalSignalEnvelope, ProfileId, ProfileRepairResult, SystemStatus } from './board'
 import type { NativeControlCheckReceipt, NativeControlCheckReport } from './components/NativeControlCheck'
 import type { CommissioningCoordinatorResponse, CommissioningOperationRequest } from './commissioning'
 
@@ -28,6 +28,8 @@ declare global {
     agentBoard?: {
       getStatus(): Promise<SystemStatus>
       getFlightSnapshot?(): Promise<FlightSnapshot>
+      diagnoseJoystickRight?(request: JoystickRightDiagnosticRequest): Promise<JoystickRightDiagnosticResult>
+      cancelJoystickRightDiagnostic?(): Promise<boolean>
       getMissionControl(): Promise<MissionControlSnapshot>
       getRecoveryGuide?(): Promise<AgentBoardRecoveryGuide>
       getCommissioning?(): Promise<CommissioningCoordinatorResponse>

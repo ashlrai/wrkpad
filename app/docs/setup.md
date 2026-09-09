@@ -140,6 +140,13 @@ separate handoff below, and Hybrid Native keeps its own 14+6 acceptance
 contract. Never use an Ashlr Layer commissioner result as proof of native
 Codex keys, native RGB, exact Codex task focus, or exact Claude/cmux pane focus.
 
+For ordinary startup or a connected-but-silent board, follow the single
+[daily Ashlr Layer delivery procedure](troubleshooting.md#prove-daily-ashlr-layer-delivery).
+It tests JOY_RIGHT from the Mac keyboard and then the physical top-right stick
+in one current receiver generation before asking for the full 20-gesture run.
+The focused check, sealed exact-build receipt, and current hardware state remain
+separate evidence.
+
 ### Codex Native restart-safe handoff
 
 The Codex Native route has its own Setup flight plan. It does not require Work

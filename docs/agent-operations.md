@@ -122,9 +122,13 @@ proof of source identity, review, provenance, signing, or release.
    and the receipt does not prove import, current-profile selection, device
    synchronization, permission, or physical acceptance. On the next launch,
    resume the numbered checklist in Setup.
-8. Arm Daily Flight Check. Wait for the screen to say actions are suppressed,
-   then have the user complete all 20 gestures on the physical board. This
-   receipt is separate from the configuration readback and cannot be synthesized.
+8. For daily startup or a connected-but-silent board, follow the canonical
+   [daily Ashlr Layer delivery procedure](../app/docs/troubleshooting.md#prove-daily-ashlr-layer-delivery).
+   Its Mac-keyboard JOY_RIGHT step, physical-stick step, and sealed exact-build
+   receipt are separate evidence. Then arm Daily Flight Check, wait for the
+   screen to say actions are suppressed, and have the user complete all 20 gestures
+   on the physical board. The receipt is separate from configuration
+   readback and cannot be synthesized.
 9. Operate from Agent Board. Slot selection may foreground Codex Desktop or
    cmux; it does not prove exact Codex task or cmux pane focus and sends no
    prompt or terminal input.

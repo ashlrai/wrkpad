@@ -137,6 +137,11 @@ follow [Setup and Flight Check](app/docs/setup.md).
 - On Ashlr Layer, Agent Board maps 20 shortcuts across five software lenses,
   guards consequential actions, and exports a hashed operator-guided Flight
   Check receipt. Codex Native and an unselected route keep mapped actions off.
+- Setup distinguishes a sealed receipt for the exact running `app.asar` from
+  current-session delivery, and isolates JOY_RIGHT through a Mac-keyboard step
+  followed by the physical top-right stick. Use the canonical
+  [daily Ashlr Layer procedure](app/docs/troubleshooting.md#prove-daily-ashlr-layer-delivery)
+  before repeating the full 20-control Flight Check.
 - The experimental `hybrid_native` policy registers only the fourteen
   non-Agent shortcuts and evaluates a distinct 14-signal Flight Check. Its
   offline profile still contains all twenty shared action definitions because

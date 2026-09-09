@@ -72,6 +72,11 @@ the Ashlr commissioner does not claim native Codex key or RGB acceptance.
   ACT06–ACT09 with guarded fleet controls.
 - Separates immediate, confirm, and press-and-hold actions in the Electron main process.
 - Runs an interlocked Ashlr Layer Flight Check and exports a hashed local receipt.
+- Projects a sealed Daily Flight receipt only against its exact receiver
+  `app.asar` and provides a two-step current-session JOY_RIGHT check before a
+  full retry. Follow the canonical
+  [daily delivery procedure](docs/troubleshooting.md#prove-daily-ashlr-layer-delivery);
+  neither operator-directed input nor USB identity is cryptographic source proof.
 - Converts Ashlr Layer setup evidence into a six-gate commissioning runway and
   a private read-only plan without granting device-write authority.
 - Presents separate Codex Native and Ashlr Layer setup flight plans, with a

@@ -32,6 +32,7 @@ const { evaluateFlightSignals } = require('./flight-receipt.cjs')
 const { createFlightSession } = require('./flight-session.cjs')
 const { createFlightOperationCoordinator, saveBoundFlightReceipt } = require('./flight-operations.cjs')
 const { evaluateFlightGates } = require('./flight-gates.cjs')
+const { inspectFlightBuildAcceptance } = require('./flight-build-acceptance.cjs')
 const { inspectWorkspace } = require('./workspace-inspector.cjs')
 const { appForProvider, collectMissionControl } = require('./mission-control.cjs')
 const { configuredRendererUrl, trustedRendererUrl } = require('./renderer-trust.cjs')
@@ -41,6 +42,7 @@ const { routeAllowsShortcutDelivery, routeOwnsShortcuts, shortcutSignalsForRoute
 const { createShortcutCallbackGuard, createShortcutOwnershipController } = require('./shortcut-ownership.cjs')
 const { createShortcutObservability, projectFlightSnapshot } = require('./shortcut-observability.cjs')
 const { EDGE_DUPLICATE_WINDOW_NS, EDGE_SIGNAL_IDS, createShortcutEdgeDuplicateFilter } = require('./shortcut-edge-filter.cjs')
+const { TARGET_SIGNAL_ID: DIAGNOSTIC_SIGNAL_ID, createTargetedShortcutProbeCoordinator } = require('./targeted-shortcut-diagnostic.cjs')
 const { resolveTool } = require('./tool-resolver.cjs')
 
 const PROFILE_IDS = new Set(['codex', 'claude', 'fleet', 'ship', 'emergency'])
@@ -64,6 +66,7 @@ const cachedReceiverAsarHash = createCachedAsarHasher({ ttlMs: 30_000, maxEntrie
 const inspectInputInstallationAsync = createInputInstallationInspector()
 const shortcutCallbackGuard = createShortcutCallbackGuard()
 const shortcutObservability = createShortcutObservability({ signalIds: Object.keys(HOTKEYS) })
+const targetedShortcutProbe = createTargetedShortcutProbeCoordinator()
 const cmuxFocusAdapter = createCmuxFocusAdapter({ foreground: () => openFixedApp('cmux') })
 const FLIGHT_COMPLETION_MAX_AGE_NS = 15n * 60n * 1_000_000_000n
 const FLIGHT_RUN_MAX_AGE_MS = 30 * 60 * 1_000
@@ -82,6 +85,7 @@ function freshFlightForReceipt(flight) {
 }
 
 function resetFlightState() {
+  targetedShortcutProbe.invalidate()
   shortcutEdgeFilter.reset()
   flightAdmissionMutation += 1
   activeFlightAdmission = null
@@ -325,6 +329,7 @@ function trustedCompactIpc(handler) {
 }
 
 function registerShortcuts(boardRoute) {
+  targetedShortcutProbe.invalidate()
   shortcutCallbackGuard.invalidate()
   shortcutEdgeFilter.reset()
   shortcutObservability.beginGeneration(boardRoute, true)
@@ -342,6 +347,7 @@ function registerShortcuts(boardRoute) {
         deliveryAllowed = routeAllowsShortcutDelivery(boardRoute, currentRoute, inputApplication)
       } catch {}
       if (!deliveryAllowed) {
+        targetedShortcutProbe.invalidate()
         shortcutCallbackGuard.invalidate()
         shortcutEdgeFilter.reset()
         try { synchronizeShortcutOwnership('unknown') } catch {
@@ -354,6 +360,16 @@ function registerShortcuts(boardRoute) {
         // fail-closed transition. Re-record only its allowlisted metadata in
         // the released generation; delivery remains rejected.
         shortcutObservability.observe(control)
+        return
+      }
+      const currentTelemetry = shortcutObservability.snapshot()
+      if (targetedShortcutProbe.observe({
+        signalId: control,
+        generation: currentTelemetry.generation,
+        scope: currentTelemetry.scope,
+        observedAt: observation?.receivedAt,
+      })) {
+        shortcutObservability.allow(observation)
         return
       }
       if (observation && flightSession.isActive()) {
@@ -466,6 +482,7 @@ const shortcutOwnership = createShortcutOwnershipController({
 
 function synchronizeShortcutOwnership(boardRoute) {
   if (!routeOwnsShortcuts(boardRoute)) {
+    targetedShortcutProbe.invalidate()
     shortcutCallbackGuard.invalidate()
     shortcutEdgeFilter.reset()
     shortcutObservability.beginGeneration(boardRoute)
@@ -488,6 +505,7 @@ function synchronizeShortcutOwnership(boardRoute) {
     shortcutObservability.beginGeneration(scope)
     return state
   } catch (error) {
+    targetedShortcutProbe.invalidate()
     shortcutRegistrations = []
     shortcutCallbackGuard.invalidate()
     shortcutEdgeFilter.reset()
@@ -647,6 +665,18 @@ async function collectSystemStatus({ reconcileShortcuts = true } = {}) {
     inspectWorkspace(settings.workspace),
     inspectChatGptInstallationAsync(),
   ])
+  const receiverAsarSha256 = currentReceiverRuntime.currentAsarSha256 ?? currentPackagedAsarSha256()
+  const buildAcceptance = receiverAsarSha256
+    ? inspectFlightBuildAcceptance({
+        receiptDirectory: path.join(app.getPath('userData'), 'flight-receipts'),
+        currentAppAsarSha256: receiverAsarSha256,
+      })
+    : {
+        status: 'unavailable', acceptedAt: null, exportedAt: null, appVersion: null,
+        appAsarSha256: null, route: null, profileKind: null, profileName: null,
+        layerName: null, expectedCallbackCount: null, acceptedCallbackCount: null,
+        suppressedDuplicateCount: null, receiptSha256: null,
+      }
   return {
     boardConnected: Boolean(board),
     boardVidPid: board?.vidPid ?? null,
@@ -669,8 +699,9 @@ async function collectSystemStatus({ reconcileShortcuts = true } = {}) {
     receiverIdentity: {
       appVersion: app.getVersion(),
       packaged: app.isPackaged,
-      appAsarSha256: currentReceiverRuntime.currentAsarSha256 ?? currentPackagedAsarSha256(),
+      appAsarSha256: receiverAsarSha256,
     },
+    buildAcceptance,
     receiverRuntime: currentReceiverRuntime,
     inputApplication: currentReceiverRuntime.inputApplication,
   }
@@ -776,6 +807,7 @@ ipcMain.handle('board:saveNativeControlCheck', trustedIpc(async (_event, report)
 ipcMain.handle('board:setBoardRoute', trustedIpc((_event, boardRoute) => {
   if (flightActionsSuppressed()) throw new Error('End Flight Check before changing shortcut ownership')
   if (!validBoardRoute(boardRoute)) throw new TypeError('Unsupported board route declaration')
+  targetedShortcutProbe.invalidate()
   return nativeAcceptanceOperations.mutateContext(() => {
     const currentRoute = readSettings().boardRoute
     if (currentRoute !== boardRoute || !routeOwnsShortcuts(boardRoute)) {
@@ -848,6 +880,7 @@ ipcMain.handle('compact:hide', trustedCompactIpc(() => {
 }))
 ipcMain.handle('board:setProfile', trustedIpc((_event, profile) => { if (PROFILE_IDS.has(profile)) currentProfile = profile; return currentProfile }))
 ipcMain.handle('board:setFlightCheck', trustedIpc(async (_event, active, variant, attestation) => {
+  targetedShortcutProbe.invalidate()
   shortcutEdgeFilter.reset()
   const mutation = ++flightAdmissionMutation
   const dualPlaneAshlrLayerSelected = active === true && hasFreshExactDualPlaneAshlrAttestation(attestation)
@@ -886,6 +919,7 @@ ipcMain.handle('board:setFlightCheck', trustedIpc(async (_event, active, variant
   return state
 }))
 ipcMain.handle('board:restartFlightCheck', trustedIpc(async (_event, variant) => {
+  targetedShortcutProbe.invalidate()
   shortcutEdgeFilter.reset()
   const mutation = ++flightAdmissionMutation
   const prior = activeFlightAdmission
@@ -1000,6 +1034,33 @@ ipcMain.handle('board:openInputMonitoringSettings', trustedIpc(async () => {
     return { ok: false, message: 'Input Monitoring settings could not be opened. Open System Settings → Privacy & Security → Input Monitoring manually.' }
   }
 }))
+ipcMain.handle('board:diagnoseJoystickRight', trustedIpc((_event, request) => {
+  const instructedInput = request?.instructedInput
+  const exactRequest = request && typeof request === 'object' && !Array.isArray(request)
+    && Object.keys(request).length === 1
+    && ['mac_keyboard', 'creator_micro_2'].includes(instructedInput)
+  const currentRoute = readSettings().boardRoute
+  let ownership = null
+  try { ownership = synchronizeShortcutOwnership(currentRoute) } catch {}
+  const telemetry = shortcutObservability.snapshot()
+  const registration = shortcutRegistrations.find((item) => item.signalId === DIAGNOSTIC_SIGNAL_ID)
+  let acceleratorLive = false
+  try { acceleratorLive = registration?.registered === true && globalShortcut.isRegistered(registration.accelerator) } catch {}
+  const eligible = exactRequest
+    && currentRoute === 'ashlr_layer'
+    && telemetry.scope === 'ashlr_layer'
+    && ownership?.active === true
+    && ownership?.runtime?.status === 'exclusive'
+    && acceleratorLive
+    && !flightActionsSuppressed()
+    && mappedActionOperations.size === 0
+  return targetedShortcutProbe.start({
+    instructedInput,
+    ownership: telemetry,
+    eligible,
+  })
+}))
+ipcMain.handle('board:cancelJoystickRightDiagnostic', trustedIpc(() => targetedShortcutProbe.invalidate()))
 ipcMain.handle('board:saveFlightReceipt', trustedIpc(async (_event, receipt) => {
   if (!receipt || typeof receipt !== 'object' || Array.isArray(receipt)) return null
   if (Buffer.byteLength(JSON.stringify(receipt), 'utf8') > 200_000) return null
@@ -1178,6 +1239,7 @@ if (!hasSingleInstanceLock) {
   }).catch(() => app.quit())
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
   app.on('will-quit', () => {
+    targetedShortcutProbe.invalidate()
     persistCompactBoundsNow()
     stopCompactSnapshotFeed()
     if (compactBoundsTimer) clearTimeout(compactBoundsTimer)

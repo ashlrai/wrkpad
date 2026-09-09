@@ -31,6 +31,8 @@ contextBridge.exposeInMainWorld('agentBoard', {
   copyRecoveryChecklist: () => ipcRenderer.invoke('board:copyRecoveryChecklist'),
   dismissRecoveryHandoff: () => ipcRenderer.invoke('board:dismissRecoveryHandoff'),
   openInputMonitoringSettings: () => ipcRenderer.invoke('board:openInputMonitoringSettings'),
+  diagnoseJoystickRight: (request) => ipcRenderer.invoke('board:diagnoseJoystickRight', request),
+  cancelJoystickRightDiagnostic: () => ipcRenderer.invoke('board:cancelJoystickRightDiagnostic'),
   saveFlightReceipt: (receipt) => ipcRenderer.invoke('board:saveFlightReceipt', receipt),
   onControl: (callback) => {
     const listener = (_event, signal) => callback(signal)

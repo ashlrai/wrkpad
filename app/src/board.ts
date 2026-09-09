@@ -53,6 +53,58 @@ export interface ShortcutCallbackTelemetry {
   } | null
 }
 
+export type JoystickRightDiagnosticInput = 'mac_keyboard' | 'creator_micro_2'
+export type JoystickRightDiagnosticStatus =
+  | 'os_callback_observed'
+  | 'timed_out'
+  | 'blocked'
+  | 'superseded'
+  | 'invalidated'
+
+/**
+ * A bounded receiver-delivery observation for one operator-directed input.
+ * `instructedInput` records the instruction shown to the operator; it is not
+ * cryptographic attribution of the callback to a particular physical source.
+ */
+export interface JoystickRightDiagnosticResult {
+  schemaVersion: 1
+  target: 'joyRight'
+  instructedInput: JoystickRightDiagnosticInput
+  status: JoystickRightDiagnosticStatus
+  generation: number
+  startedAt: string
+  observedAt: string | null
+  delivery: 'allowed' | 'none'
+}
+
+export interface JoystickRightDiagnosticRequest {
+  instructedInput: JoystickRightDiagnosticInput
+}
+
+export type FlightBuildAcceptanceStatus =
+  | 'current_build_accepted'
+  | 'accepted_other_build'
+  | 'absent'
+  | 'invalid'
+  | 'unavailable'
+
+/** A sanitized projection of a sealed historical Flight Check receipt. */
+export interface FlightBuildAcceptance {
+  status: FlightBuildAcceptanceStatus
+  acceptedAt: string | null
+  exportedAt: string | null
+  appVersion: string | null
+  appAsarSha256: string | null
+  route: 'ashlr_layer' | null
+  profileKind: 'daily' | null
+  profileName: string | null
+  layerName: string | null
+  expectedCallbackCount: number | null
+  acceptedCallbackCount: number | null
+  suppressedDuplicateCount: number | null
+  receiptSha256: string | null
+}
+
 export interface FlightSnapshot {
   active: boolean
   startedAt: string | null
@@ -122,6 +174,7 @@ export interface SystemStatus {
   shortcutCount: number
   shortcutRegistrations: ShortcutRegistration[]
   shortcutTelemetry: ShortcutCallbackTelemetry
+  buildAcceptance: FlightBuildAcceptance
   workspaceSnapshot: WorkspaceSnapshot | null
   receiverIdentity: ReceiverIdentity | null
   receiverRuntime: ReceiverRuntimeStatus
