@@ -1,5 +1,6 @@
 const COMPACT_SNAPSHOT_SCHEMA = 'ai.ashlr.agent-board.compact-snapshot/v1'
 const AGENT_SOURCES = new Set(['observer_online', 'invalid', 'unavailable'])
+const CODEX_CATALOG_SOURCES = new Set(['recent_tasks', 'invalid', 'unavailable'])
 const PROVIDERS = new Set(['codex', 'claude', 'manual', 'unknown'])
 const FOCUSABLE_PROVIDERS = new Set(['codex', 'claude'])
 const STATES = new Set(['off', 'idle', 'unread', 'working', 'needs_input', 'error'])
@@ -57,11 +58,13 @@ function projectCompactSnapshot(mission, options = {}) {
   const showTitles = options.showTitles === true
   const now = options.now instanceof Date && Number.isFinite(options.now.getTime()) ? options.now : new Date()
   const source = AGENT_SOURCES.has(mission?.agentSource) ? mission.agentSource : 'unavailable'
+  const codexCatalogSource = CODEX_CATALOG_SOURCES.has(mission?.codexCatalogSource) ? mission.codexCatalogSource : 'unavailable'
   const agents = Array.from({ length: 6 }, (_, index) => projectSlot(mission?.agents, index + 1, showTitles))
   return {
     schema: COMPACT_SNAPSHOT_SCHEMA,
     observedAt: validTimestamp(mission?.observedAt) ? new Date(mission.observedAt).toISOString() : now.toISOString(),
     agentSource: source,
+    codexCatalogSource,
     agents,
     attentionSlot: selectAttentionSlot(agents),
   }

@@ -150,10 +150,11 @@ experimental Hybrid Native generator, strict verifier, fourteen-shortcut route,
 and Flight Check evaluator are implemented in source, but no imported profile,
 device synchronization, combined 14+6 physical acceptance, or public artifact
 is recorded. Source and local packaging can be verified, but signing,
-notarization, updates, exact task/pane focus, and physical RGB are not
-implemented. Treat both components as unreleased until the distribution gate
-has an immutable record. Checked-in landing-page source does not establish a
-GitHub Pages deployment.
+notarization, updates, verified visible Codex-task focus, exact cmux-pane focus,
+and physical RGB are not implemented. The current recent-Codex deep link proves
+only that LaunchServices accepted a validated request. Treat both components as
+unreleased until the distribution gate has an immutable record. Checked-in
+landing-page source does not establish a GitHub Pages deployment.
 
 A local candidate may disclose narrowly suppressed probable duplicate press
 edges during Flight Check. Release acceptance still requires zero misroutes,

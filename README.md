@@ -126,8 +126,10 @@ follow [Setup and Flight Check](app/docs/setup.md).
 - `wrkpad tui`, `status`, `forget`, `occupancy`, and `demo` provide a complete
   useful path without RGB support.
 - Agent Board shows provider, task title, icon, text state, and color in the exact
-  black-cap geometry; selecting a slot foregrounds Codex Desktop or cmux without
-  sending a prompt or terminal input.
+  black-cap geometry. A hook-observed Codex slot foregrounds Codex Desktop, while
+  an inactive position filled by the bounded recent-task catalog dispatches a
+  validated Codex deep link without claiming visible focus. Claude Code slots
+  foreground cmux. No path sends a prompt or terminal input.
 - The movable Compact Deck gives people without the hardware the same six-slot
   attention runway, window-scoped numpad controls, privacy switch, and four
   provider-neutral delivery skills. It never installs a global keyboard hook.
@@ -184,7 +186,12 @@ follow [Setup and Flight Check](app/docs/setup.md).
 - No killing of ChatGPT Desktop, Work Louder Input, Logitech, Karabiner, or
   provider processes. A content-bound commissioning plan may gracefully quit
   and relaunch Input only for its named exclusive write/readback window.
-- No exact Codex task or cmux pane focus.
+- No verified visible Codex-task focus or exact cmux-pane focus. Recent Codex
+  catalog slots can dispatch an unverified task deep link; hook-only Codex slots
+  and all current Claude slots remain application-level foreground operations.
+- Ashlr Layer dial movement changes only Agent Board's displayed reasoning depth;
+  it does not change a provider model setting. Voice is an inert staged intent,
+  and delivery/Continue keys copy text for review rather than paste or submit it.
 - Hybrid Native's six physical Agent keys remain Codex-only; the mixed screen
   queue does not give those keys exact Claude Code or cmux pane selection.
 - No prompt submission from an Agent slot.

@@ -7,6 +7,12 @@ use serde_json::Value;
 
 use crate::model::{EventKind, HaspEvent, Provider};
 
+// Hook payloads cross the authenticated loopback boundary before the server can
+// turn an invalid cwd into its reducer-only empty sentinel. Keep "missing" and
+// "present but invalid" distinct without serializing that internal sentinel or
+// forwarding malformed/private path text.
+const INVALID_CWD_REVOCATION_MARKER: &str = ".";
+
 pub fn normalize(
     provider: Provider,
     declared_event: Option<&str>,
@@ -73,18 +79,21 @@ pub fn normalize(
         _ => bail!("unsupported hook event"),
     };
 
-    let cwd = object
-        .get("cwd")
-        .and_then(Value::as_str)
-        .filter(|value| value.len() <= 4096)
-        .map(|value| {
-            value
-                .chars()
-                .filter(|character| !character.is_control())
-                .collect::<String>()
-        })
-        .filter(|value| !value.is_empty());
-    let title = cwd.as_deref().and_then(workspace_label);
+    let cwd = match object.get("cwd") {
+        None => None,
+        Some(Value::String(value))
+            if value.chars().count() <= 2048
+                && !value.is_empty()
+                && !value.chars().any(char::is_control) =>
+        {
+            Some(value.clone())
+        }
+        Some(_) => Some(INVALID_CWD_REVOCATION_MARKER.to_owned()),
+    };
+    let title = cwd
+        .as_deref()
+        .filter(|value| *value != INVALID_CWD_REVOCATION_MARKER)
+        .and_then(workspace_label);
     let turn_id = first_string(object, &["turn_id", "turn-id", "prompt_id"]);
 
     // The hook client never retries. A fresh identifier per delivered lifecycle
@@ -264,10 +273,15 @@ mod tests {
         });
         let event = normalize(Provider::Claude, None, &payload)?
             .ok_or_else(|| anyhow::anyhow!("event ignored"))?;
-        assert_eq!(event.title.as_deref(), Some("project[31m"));
+        assert_eq!(event.title, None);
+        assert_eq!(
+            event.cwd.as_deref(),
+            Some(super::INVALID_CWD_REVOCATION_MARKER)
+        );
         let encoded = serde_json::to_string(&event)?;
         assert!(!encoded.contains("private customer"));
         assert!(!encoded.contains("\\u001b"));
+        assert!(!encoded.contains(r#""cwd":"""#));
         Ok(())
     }
 

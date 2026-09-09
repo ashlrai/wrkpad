@@ -6,7 +6,10 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::HASP_SCHEMA;
-use crate::model::{AgentState, ApplyOutcome, BoardSnapshot, HaspEvent, SessionRecord, SlotView};
+use crate::model::{
+    AgentState, ApplyOutcome, BoardSnapshot, CWD_REVOKED_SENTINEL, EventKind, HaspEvent,
+    SessionRecord, SlotView,
+};
 
 const SLOT_COUNT: usize = 6;
 const EVENT_HISTORY_LIMIT: usize = 4096;
@@ -88,6 +91,17 @@ impl StateEngine {
             .map_or(event.at, |session| session.first_seen_at);
         let previous = self.sessions.get(&event.session_id).cloned();
 
+        let cwd = if matches!(event.kind, EventKind::SessionEnd)
+            || event.cwd.as_deref() == Some(CWD_REVOKED_SENTINEL)
+        {
+            None
+        } else {
+            event
+                .cwd
+                .clone()
+                .or_else(|| previous.as_ref().and_then(|session| session.cwd.clone()))
+        };
+
         self.sessions.insert(
             event.session_id.clone(),
             SessionRecord {
@@ -98,10 +112,7 @@ impl StateEngine {
                     .title
                     .clone()
                     .or_else(|| previous.as_ref().and_then(|session| session.title.clone())),
-                cwd: event
-                    .cwd
-                    .clone()
-                    .or_else(|| previous.as_ref().and_then(|session| session.cwd.clone())),
+                cwd,
                 first_seen_at,
                 updated_at: event.at,
                 last_event_id: event.event_id,
@@ -284,6 +295,75 @@ mod tests {
             second.snapshot.slots[0].session.as_ref().map(|s| s.state),
             Some(AgentState::Working)
         );
+        Ok(())
+    }
+
+    #[test]
+    fn absent_cwd_inherits_but_explicit_revocation_does_not() -> anyhow::Result<()> {
+        let mut engine = StateEngine::default();
+        let mut start = HaspEvent::new(Provider::Claude, "claude-cwd", EventKind::Working);
+        start.cwd = Some("/work/repo".to_owned());
+        engine.apply(start)?;
+
+        let inherited = engine.apply(HaspEvent::new(
+            Provider::Claude,
+            "claude-cwd",
+            EventKind::NeedsInput,
+        ))?;
+        assert_eq!(
+            inherited.snapshot.slots[0]
+                .session
+                .as_ref()
+                .and_then(|session| session.cwd.as_deref()),
+            Some("/work/repo")
+        );
+
+        let mut revoked = HaspEvent::new(Provider::Claude, "claude-cwd", EventKind::Working);
+        revoked.cwd = Some(super::CWD_REVOKED_SENTINEL.to_owned());
+        let revoked = engine.apply(revoked)?;
+        assert_eq!(
+            revoked.snapshot.slots[0]
+                .session
+                .as_ref()
+                .and_then(|session| session.cwd.as_deref()),
+            None
+        );
+        assert!(!serde_json::to_string(&revoked.snapshot)?.contains(r#""cwd":"""#));
+
+        let still_absent = engine.apply(HaspEvent::new(
+            Provider::Claude,
+            "claude-cwd",
+            EventKind::NeedsInput,
+        ))?;
+        assert_eq!(
+            still_absent.snapshot.slots[0]
+                .session
+                .as_ref()
+                .and_then(|session| session.cwd.as_deref()),
+            None
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn session_end_clears_cwd_even_when_attention_state_is_retained() -> anyhow::Result<()> {
+        let mut engine = StateEngine::default();
+        let mut error = HaspEvent::new(Provider::Codex, "codex-cwd", EventKind::Error);
+        error.cwd = Some("/work/repo".to_owned());
+        engine.apply(error)?;
+
+        let ended = engine.apply(HaspEvent::new(
+            Provider::Codex,
+            "codex-cwd",
+            EventKind::SessionEnd,
+        ))?;
+        let session = ended.snapshot.slots[0]
+            .session
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("retained attention record disappeared"))?;
+        assert_eq!(session.state, AgentState::Error);
+        assert_eq!(session.cwd, None);
+        assert!(!serde_json::to_string(&ended.snapshot)?.contains("/work/repo"));
         Ok(())
     }
 

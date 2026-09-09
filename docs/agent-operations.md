@@ -131,9 +131,24 @@ proof of source identity, review, provenance, signing, or release.
    readback. The app cannot distinguish board shortcuts from matching keyboard
    input, so physical causality remains the operator's or qualified fixture's
    attestation.
-9. Operate from Agent Board. Slot selection may foreground Codex Desktop or
-   cmux; it does not prove exact Codex task or cmux pane focus and sends no
-   prompt or terminal input.
+9. Operate from Agent Board. Active hook sessions keep their sticky HASP slots;
+   inactive positions can show recent tasks returned by the installed Codex
+   app-server. Selecting a recent Codex task dispatches its validated deep link,
+   but LaunchServices provides no visible-focus receipt. Claude slots foreground
+   cmux until a private locator and separately enabled password capability are
+   enrolled. No path comes back from the renderer, and no prompt or terminal
+   input is sent.
+   Workspace-dependent actions bind to the exact runway snapshot last displayed
+   by that window, canonicalize the directory, require a project-depth target
+   beneath the local home, and bind its device/inode and private target identity
+   into any confirmation. Confirmation refreshes the source and fails closed if
+   the slot, target, age, or directory changed; it never falls back to the global
+   workspace. The renderer sees only the selected slot, provider, and a bounded
+   control-safe repository basename so the operator can distinguish it from
+   Workspace Pulse; raw paths and provider locators remain main-process private.
+   Terminal actions additionally bind the canonical executable device/inode,
+   re-resolve it at confirmation, and repeat both executable and working-directory
+   inode guards inside the launched shell before `exec`.
 10. Keep the daily action row stable across Attention, Pair, Fleet, and Proof:
     Amplify, Verify, Polish, Advance, Voice, guarded Continue, and Attention.
     The first four copy `$ashlr-delivery` invocations; Continue copies a bounded

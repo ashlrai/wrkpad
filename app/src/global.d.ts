@@ -48,10 +48,11 @@ declare global {
       setProfile(profile: ProfileId): Promise<void>
       setFlightCheck(active: boolean, variant: 'daily' | 'diagnostic', attestation?: { dualPlaneAshlrLayerSelected: boolean; attestedAt: string }): Promise<{ acknowledged: boolean; active: boolean; startedAt: string | null }>
       restartFlightCheck(variant: 'daily' | 'diagnostic'): Promise<{ acknowledged: boolean; active: boolean; startedAt: string | null }>
-      requestAction(actionId: string): Promise<ExecutionResult>
-      confirmAction(actionId: string, token: string): Promise<ExecutionResult>
+      requestAction(actionId: string, selectedSlot: number): Promise<ExecutionResult>
+      confirmAction(actionId: string, token: string, selectedSlot: number): Promise<ExecutionResult>
       beginHold(actionId: string, token: string): Promise<boolean>
       cancelHold(actionId: string, token: string): Promise<boolean>
+      cancelApproval?(actionId: string, token: string): Promise<boolean>
       chooseWorkspace(): Promise<string | null>
       createCorrectedInputProfile(): Promise<ProfileRepairResult>
       revealRecoveryArtifact?(): Promise<AgentBoardRecoveryActionResult>

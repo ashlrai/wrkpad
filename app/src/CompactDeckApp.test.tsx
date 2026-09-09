@@ -8,6 +8,7 @@ const snapshot: CompactSnapshot = {
   schema: 'ai.ashlr.agent-board.compact-snapshot/v1',
   observedAt: '2026-09-02T22:00:00.000Z',
   agentSource: 'observer_online',
+  codexCatalogSource: 'recent_tasks',
   attentionSlot: 2,
   agents: [
     { slot: 1, provider: 'codex', state: 'working', title: 'Control deck' },
@@ -69,7 +70,7 @@ describe('Compact Deck', () => {
     render(<CompactDeckApp />)
     await screen.findByText('Session feed live; hardware control unproven.')
     expect(screen.getByText('Virtual Deck — Creator Micro 2 layout')).toBeTruthy()
-    expect(screen.getByRole('status').textContent).toContain('session feed live')
+    expect(screen.getByRole('status').textContent).toContain('hooks + recent Codex')
     const deck = screen.getByLabelText('Creator Micro 2 control layout')
     const rows = Array.from(deck.children)
     expect(rows).toHaveLength(4)

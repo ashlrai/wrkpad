@@ -15,11 +15,12 @@ use tokio::net::TcpListener;
 use tokio::sync::RwLock;
 
 use crate::engine::{EngineError, StateEngine};
-use crate::model::{ApplyOutcome, HaspEvent};
+use crate::model::{ApplyOutcome, CWD_REVOKED_SENTINEL, HaspEvent};
 use crate::storage::JsonStore;
 
 type HmacSha256 = Hmac<Sha256>;
 const SESSION_BINDING_DOMAIN: &[u8] = b"wrkpad.hasp.session.v1\0";
+const MAX_WORKSPACE_PATH_CHARS: usize = 2048;
 
 #[derive(Clone)]
 struct AppState {
@@ -210,8 +211,45 @@ fn privatize_identity(token: &str, event: &mut HaspEvent) -> Result<(), String> 
     mac.update(event.session_id.as_bytes());
     let binding = hex::encode(mac.finalize().into_bytes());
     event.session_id = format!("hmac-sha256:{binding}");
-    event.cwd = None;
+    event.cwd = event.cwd.take().map(|cwd| {
+        sanitize_workspace_path(&cwd).unwrap_or_else(|| CWD_REVOKED_SENTINEL.to_owned())
+    });
     Ok(())
+}
+
+fn sanitize_workspace_path(value: &str) -> Option<String> {
+    if value.is_empty()
+        || value.trim() != value
+        || value.chars().count() > MAX_WORKSPACE_PATH_CHARS
+        || value.chars().any(char::is_control)
+    {
+        return None;
+    }
+    let portable = value.replace('\\', "/");
+    let unix_absolute = portable.starts_with('/');
+    let drive_absolute = portable.as_bytes().get(1) == Some(&b':')
+        && portable.as_bytes().get(2) == Some(&b'/')
+        && portable
+            .as_bytes()
+            .first()
+            .is_some_and(u8::is_ascii_alphabetic);
+    if !unix_absolute && !drive_absolute {
+        return None;
+    }
+    let body = if drive_absolute {
+        &portable[3..]
+    } else {
+        &portable[1..]
+    };
+    if body.is_empty()
+        || body.ends_with('/')
+        || body
+            .split('/')
+            .any(|segment| segment.is_empty() || segment == "." || segment == "..")
+    {
+        return None;
+    }
+    Some(value.to_owned())
 }
 
 const fn provider_binding_tag(provider: crate::model::Provider) -> &'static [u8] {
@@ -281,10 +319,11 @@ mod tests {
     use tempfile::tempdir;
 
     use chrono::{Duration, Utc};
-    use serde_json::json;
+    use serde_json::{Value, json};
 
     use super::{
         allowed_hosts, apply_persisted, constant_time_eq, engine_error, privatize_identity,
+        sanitize_workspace_path,
     };
     use crate::engine::{EngineError, StateEngine};
     use crate::hooks::normalize;
@@ -317,8 +356,11 @@ mod tests {
         ] {
             privatize_identity("private-token", event).map_err(anyhow::Error::msg)?;
             assert!(event.session_id.starts_with("hmac-sha256:"));
-            assert_eq!(event.cwd, None);
         }
+
+        assert_eq!(without_cwd.cwd, None);
+        assert_eq!(with_cwd.cwd.as_deref(), Some("/work/first"));
+        assert_eq!(with_changed_cwd.cwd.as_deref(), Some("/work/second"));
 
         assert_eq!(without_cwd.session_id, with_cwd.session_id);
         assert_eq!(without_cwd.session_id, with_changed_cwd.session_id);
@@ -327,6 +369,129 @@ mod tests {
             "hmac-sha256:4336c8bdfd94e9bf492989a8e1fe73333797727e383b265c675a9cc638e624de"
         );
         assert_ne!(without_cwd.session_id, other_provider.session_id);
+        Ok(())
+    }
+
+    #[test]
+    fn workspace_identity_is_bounded_absolute_and_control_free() {
+        assert_eq!(
+            sanitize_workspace_path("/work/repo").as_deref(),
+            Some("/work/repo")
+        );
+        assert_eq!(
+            sanitize_workspace_path("C:\\work\\repo").as_deref(),
+            Some("C:\\work\\repo")
+        );
+        for candidate in [
+            "",
+            "/",
+            "relative/repo",
+            "/work/../secret",
+            "/work//repo",
+            "/work/repo/",
+            "/work/\nrepo",
+        ] {
+            assert_eq!(sanitize_workspace_path(candidate), None, "{candidate:?}");
+        }
+        assert_eq!(
+            sanitize_workspace_path(&format!("/{}", "x".repeat(2049))),
+            None
+        );
+    }
+
+    #[test]
+    fn rejected_present_cwd_revokes_prior_workspace_without_persisting_a_sentinel()
+    -> anyhow::Result<()> {
+        let mut initial = HaspEvent::new(Provider::Claude, "session", EventKind::Working);
+        initial.cwd = Some("/work/repo".to_owned());
+        let mut rejected = HaspEvent::new(Provider::Claude, "session", EventKind::NeedsInput);
+        rejected.cwd = Some("/".to_owned());
+        let mut absent = HaspEvent::new(Provider::Claude, "session", EventKind::Working);
+
+        for event in [&mut initial, &mut rejected, &mut absent] {
+            privatize_identity("private-token", event).map_err(anyhow::Error::msg)?;
+        }
+        assert_eq!(initial.cwd.as_deref(), Some("/work/repo"));
+        assert_eq!(rejected.cwd.as_deref(), Some(super::CWD_REVOKED_SENTINEL));
+        assert_eq!(absent.cwd, None);
+
+        let mut engine = StateEngine::default();
+        engine.apply(initial)?;
+        let revoked = engine.apply(rejected)?;
+        assert_eq!(
+            revoked.snapshot.slots[0]
+                .session
+                .as_ref()
+                .and_then(|session| session.cwd.as_deref()),
+            None
+        );
+        assert!(!serde_json::to_string(&revoked.snapshot)?.contains(r#""cwd":"""#));
+
+        let after_absent = engine.apply(absent)?;
+        assert_eq!(
+            after_absent.snapshot.slots[0]
+                .session
+                .as_ref()
+                .and_then(|session| session.cwd.as_deref()),
+            None
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn normalized_invalid_cwd_revokes_prior_workspace_without_serializing_the_sentinel()
+    -> anyhow::Result<()> {
+        let invalid_values = [
+            Value::String(format!("/work/{}", "x".repeat(2049))),
+            Value::String("/work/repo\u{001b}[31m".to_owned()),
+            json!({"unexpected": "shape"}),
+        ];
+
+        for invalid_cwd in invalid_values {
+            let mut initial = normalize(
+                Provider::Claude,
+                None,
+                &json!({
+                    "session_id": "claude-invalid-cwd",
+                    "hook_event_name": "UserPromptSubmit",
+                    "cwd": "/work/repo"
+                }),
+            )?
+            .ok_or_else(|| anyhow::anyhow!("initial event was ignored"))?;
+            let mut rejected = normalize(
+                Provider::Claude,
+                None,
+                &json!({
+                    "session_id": "claude-invalid-cwd",
+                    "hook_event_name": "PermissionRequest",
+                    "cwd": invalid_cwd
+                }),
+            )?
+            .ok_or_else(|| anyhow::anyhow!("invalid-cwd event was ignored"))?;
+
+            let serialized_hook_event = serde_json::to_string(&rejected)?;
+            assert!(!serialized_hook_event.contains(r#""cwd":"""#));
+            assert!(!serialized_hook_event.contains("\\u001b"));
+            assert!(!serialized_hook_event.contains(&"x".repeat(2049)));
+
+            privatize_identity("private-token", &mut initial).map_err(anyhow::Error::msg)?;
+            privatize_identity("private-token", &mut rejected).map_err(anyhow::Error::msg)?;
+            assert_eq!(rejected.cwd.as_deref(), Some(super::CWD_REVOKED_SENTINEL));
+
+            let mut engine = StateEngine::default();
+            engine.apply(initial)?;
+            let revoked = engine.apply(rejected)?;
+            let serialized_snapshot = serde_json::to_string(&revoked.snapshot)?;
+            assert_eq!(
+                revoked.snapshot.slots[0]
+                    .session
+                    .as_ref()
+                    .and_then(|session| session.cwd.as_deref()),
+                None
+            );
+            assert!(!serialized_snapshot.contains("/work/repo"));
+            assert!(!serialized_snapshot.contains(r#""cwd":"""#));
+        }
         Ok(())
     }
 
@@ -347,6 +512,7 @@ mod tests {
         privatize_identity("private-token", &mut start).map_err(anyhow::Error::msg)?;
         privatize_identity("private-token", &mut needs_input).map_err(anyhow::Error::msg)?;
         assert_eq!(start.session_id, needs_input.session_id);
+        assert_eq!(start.cwd.as_deref(), Some("/work/repo"));
 
         let mut engine = StateEngine::default();
         let first = engine.apply(start)?;
@@ -359,6 +525,13 @@ mod tests {
                 .as_ref()
                 .map(|session| session.state),
             Some(AgentState::NeedsInput)
+        );
+        assert_eq!(
+            second.snapshot.slots[0]
+                .session
+                .as_ref()
+                .and_then(|session| session.cwd.as_deref()),
+            Some("/work/repo")
         );
         assert_eq!(
             second

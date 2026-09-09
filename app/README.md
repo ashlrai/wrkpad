@@ -5,7 +5,7 @@
 Ashlr Agent Board gives opaque black keycaps a complete on-screen legend, keeps six Codex and Claude Code sessions on one stable physical map, and puts guarded engineering actions behind explicit safety levels. It observes local tools; it does not replace their permission systems.
 
 > [!IMPORTANT]
-> Physical status lighting is not implemented. The on-screen runway is authoritative. Selecting a slot opens Codex Desktop or cmux at the application level; exact task or pane focus is not available.
+> Physical status lighting is not implemented. The on-screen runway is authoritative. Hook-observed Codex and Claude slots foreground Codex Desktop or cmux at the application level. A recent-catalog Codex slot instead dispatches a validated task deep link, but the app cannot verify what is visibly focused. Exact cmux-pane focus is not enabled.
 
 ## Why this exists
 
@@ -59,8 +59,12 @@ the Ashlr commissioner does not claim native Codex key or RGB acceptance.
 
 ## What it does today
 
-- Shows six stable, provider-neutral agent slots sourced from `wrkpad status --json`.
-- Foregrounds ChatGPT for Codex slots and cmux for Claude Code slots without sending input.
+- Shows six stable, provider-neutral agent slots. Hook-observed slots come from
+  `wrkpad status --json`; empty or inactive positions may be filled from the
+  bounded recent Codex task catalog.
+- Foregrounds ChatGPT for hook-observed Codex slots and cmux for Claude Code
+  slots. Recent-catalog Codex slots dispatch a validated, unverified task deep
+  link. None of these paths sends provider or terminal input.
 - Summarizes `ashlr fleet status --json` into an exception-first operator brief.
 - Maps 20 desktop shortcuts to the board's dial, joystick, Agent keys, and action switches only while the Ashlr Layer route is declared. Codex Native and unknown routes unregister every shortcut.
 - Provides Attention, Pair, Fleet, Proof, and Recovery software lenses while keeping Agent keys fixed.
@@ -86,7 +90,8 @@ the Ashlr commissioner does not claim native Codex key or RGB acceptance.
   shortcuts, so it may stay open as a passive evidence watcher while ChatGPT
   Desktop restarts. Restart-safe means the
   handoff also survives quitting Agent Board; it does not prove a new Codex process.
-- Keeps session IDs, provider working directories, prompts, transcripts, tool arguments, and raw Fleet payloads out of mission snapshots. Workspace Pulse separately shows the working directory the user selected.
+- Keeps session IDs, provider working-directory paths and names, prompts, transcripts, tool arguments, and raw Fleet payloads out of renderer mission snapshots. The main process may retain a validated private slot target; the screen sees only `Workspace bound`, and workspace actions fail closed instead of falling back to a global directory.
+- Fills inactive runway positions with the installed Codex app-server's bounded recent-task catalog and dispatches validated Codex task deep links. Dispatch is reported as a request, never as verified visible focus.
 
 See [controls and state](docs/controls.md) for the complete map and [architecture and trust](docs/architecture.md) for the security model.
 
@@ -184,7 +189,12 @@ command does not notarize, publish, install, or prove physical acceptance.
 
 - macOS only
 - No physical RGB or firmware writes
-- No exact Codex task or cmux pane focus
+- No verified visible Codex-task focus or exact cmux-pane focus. A recent Codex
+  catalog slot can dispatch an unverified task deep link; a hook-only Codex slot
+  and every current Claude slot remain application-level foreground operations.
+- The Ashlr Layer dial changes only the displayed reasoning-depth label. Voice
+  stages an inert intent, and Amplify, Verify, Polish, Advance, and Continue copy
+  bounded text for review without pasting or submitting it.
 - No prompt submission from an Agent slot
 - No one-press push, merge, deploy, publish, delete, spend, credential, or permission approval
 - No signed/notarized release workflow yet

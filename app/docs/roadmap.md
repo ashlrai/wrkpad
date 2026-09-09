@@ -16,7 +16,8 @@ The roadmap is evidence-gated and ordered by reliable daily value.
 ## Next: stronger local integrations
 
 - Add a versioned provider-adapter interface with capability negotiation.
-- Use verified Codex app-server capabilities for richer identity where supported.
+- Extend the bounded recent-task Codex app-server adapter only through verified,
+  versioned capabilities; current deep-link dispatch has no visible-focus receipt.
 - Correlate Claude Code sessions with cmux panes only when cmux exposes a stable, permissioned locator.
 - Add user-controlled slot pinning and overflow without exposing raw session IDs.
 - Add a guarded, reversible Input import/activation assistant. The current

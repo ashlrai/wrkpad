@@ -689,7 +689,7 @@ describe('operator interface', () => {
     expect(screen.queryByRole('heading', { name: /Carry the physical check/i })).toBeNull()
   })
 
-  it('isolates current-session joystick delivery with a laptop step before the physical step', async () => {
+  it('accepts an immediate current-session probe before the physical step', async () => {
     const diagnosticResult = (instructedInput: JoystickRightDiagnosticResult['instructedInput']): JoystickRightDiagnosticResult => ({
       schemaVersion: 1,
       target: 'joyRight',
@@ -1213,6 +1213,43 @@ describe('operator interface', () => {
     expect(screen.getByText(/defer it until the active profile is backed up/i)).toBeTruthy()
   })
 
+  it('names private selected-repo authority and revokes a canceled approval', async () => {
+    const cancelApproval = vi.fn().mockResolvedValue(true)
+    window.agentBoard = {
+      getStatus: vi.fn().mockResolvedValue({
+        boardConnected: true, inputInstalled: true, inputMonitoring: 'unverified',
+        ...trustedHardwareDiagnostics,
+        inputProfile: correctedInputProfile,
+        codex: true, claude: true, ashlr: true, boardRoute: 'ashlr_layer', workspace: '/Users/operator/Global/pulse', shortcutCount: 20,
+        shortcutRegistrations: [], workspaceSnapshot: { available: true, isGit: false, projectName: 'Global pulse', branch: null, detached: false, dirtyFiles: 0, stagedFiles: 0, unstagedFiles: 0, untrackedFiles: 0, conflictedFiles: 0, ahead: null, behind: null, headShort: null, headSubject: null, packageManager: null, testCommand: null, statusKnown: true },
+      }),
+      getMissionControl: vi.fn().mockResolvedValue(initialUnavailableMission()),
+      focusAgentSlot: vi.fn(), setProfile: vi.fn(), setFlightCheck: vi.fn(),
+      requestAction: vi.fn().mockResolvedValue({
+        ok: true, title: 'Confirmation required', message: 'Review first.', needsConfirmation: true,
+        token: 'scoped-token', actionScope: { slot: 2, provider: 'codex', workspaceLabel: 'selected-repo', workspaceBound: true },
+        timestamp: new Date().toISOString(),
+      }),
+      confirmAction: vi.fn(), beginHold: vi.fn(), cancelHold: vi.fn(), cancelApproval,
+      chooseWorkspace: vi.fn(), saveFlightReceipt: vi.fn(), onControl: vi.fn(() => () => {}),
+    } as unknown as NonNullable<typeof window.agentBoard>
+
+    render(<App />)
+    await act(async () => { await Promise.resolve() })
+    fireEvent.click(screen.getByRole('tab', { name: /Recovery.*GUARDED STOPS/i }))
+    fireEvent.click(screen.getByRole('button', { name: /ACT06: Pause autonomous fleet/i }))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Arm action' }))
+      await Promise.resolve()
+    })
+    expect(screen.getByText(/Agent 2.*Codex.*repo “selected-repo”/i)).toBeTruthy()
+    expect(screen.getByText(/Selected Agent 2 repo:/i).textContent).toContain('selected-repo')
+    expect(screen.getByText(/global Workspace Pulse below is not used/i)).toBeTruthy()
+    expect(screen.getByText('Global pulse')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(cancelApproval).toHaveBeenCalledWith('pause_fleet', 'scoped-token'))
+  })
+
   it('requires one continuous keyboard hold and ignores key repeat', async () => {
     vi.useFakeTimers()
     const beginHold = vi.fn().mockResolvedValue(true)
@@ -1281,7 +1318,7 @@ describe('operator interface', () => {
     })
     expect(beginHold).toHaveBeenCalledTimes(3)
     expect(confirmAction).toHaveBeenCalledTimes(1)
-    expect(confirmAction).toHaveBeenCalledWith('pause_fleet', 'hold-token')
+    expect(confirmAction).toHaveBeenCalledWith('pause_fleet', 'hold-token', 1)
   })
 
   it('cannot authorize after release while the main hold acknowledgement is pending', async () => {

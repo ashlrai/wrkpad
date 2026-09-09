@@ -13,6 +13,7 @@ const MAX_OUTPUT_BYTES = 64 * 1024
 const DEFAULT_TIMEOUT_MS = 1500
 const DEFAULT_TERMINATION_GRACE_MS = 100
 const REQUIRED_CAPABILITIES = Object.freeze(['system.identify', 'workspace.select', 'surface.focus'])
+const IDENTITY_PROVENANCE_FIELDS = Object.freeze(['bundle_identifier', 'app_bundle_path', 'app_executable_path', 'app_cli_path'])
 const ACCESS_MODES = new Set(['cmuxOnly', 'automation', 'password', 'allowAll', 'off'])
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const SESSION_BINDING = /^hmac-sha256:[0-9a-f]{64}$/
@@ -115,18 +116,33 @@ function parseCapabilities(output) {
   }
 }
 
-function identifyMatches(output, locator, expectedSocketPath) {
+function identifyMatches(output, locator, expectedSocketPath, version, cliPath) {
   const value = parseJsonObject(output)
   const caller = value?.caller
-  if (!validSocketPath(expectedSocketPath) || value?.socket_path !== expectedSocketPath) return false
-  if (value.bundle_identifier !== CMUX_APP_BUNDLE_ID
-    || value.app_bundle_path !== CMUX_APP_BUNDLE_PATH
-    || value.app_executable_path !== CMUX_APP_EXECUTABLE_PATH
-    || value.app_cli_path !== CMUX_CLI_PATH) return false
+  if (cliPath !== CMUX_CLI_PATH || !validSocketPath(expectedSocketPath) || value?.socket_path !== expectedSocketPath) return false
   if (!caller || typeof caller !== 'object' || Array.isArray(caller)) return false
   if (!UUID.test(caller.workspace_id ?? '') || !UUID.test(caller.surface_id ?? '')) return false
-  return caller.workspace_id.toLowerCase() === locator.workspaceId
-    && caller.surface_id.toLowerCase() === locator.surfaceId
+  if (caller.workspace_id.toLowerCase() !== locator.workspaceId
+    || caller.surface_id.toLowerCase() !== locator.surfaceId) return false
+
+  const provenanceFieldCount = IDENTITY_PROVENANCE_FIELDS.filter((field) => Object.hasOwn(value, field)).length
+  if (provenanceFieldCount > 0) {
+    return provenanceFieldCount === IDENTITY_PROVENANCE_FIELDS.length
+      && value.bundle_identifier === CMUX_APP_BUNDLE_ID
+      && value.app_bundle_path === CMUX_APP_BUNDLE_PATH
+      && value.app_executable_path === CMUX_APP_EXECUTABLE_PATH
+      && value.app_cli_path === CMUX_CLI_PATH
+  }
+
+  // cmux 0.62.2 predates the application provenance fields above. Its
+  // transport still proves a fixed CLI invocation, the expected protocol and
+  // capabilities, a same-user private socket, and the caller UUIDs. Keep this
+  // compatibility branch pinned to that exact release so a later schema must
+  // either provide the stronger fields or be reviewed explicitly.
+  return version?.major === 0
+    && version.minor === 62
+    && version.patch === 2
+    && Object.hasOwn(value, 'focused')
 }
 
 function inspectSocketIdentity(socketPath, options = {}) {
@@ -138,8 +154,10 @@ function inspectSocketIdentity(socketPath, options = {}) {
     const stat = statImpl(socketPath)
     if (!stat || typeof stat.isSocket !== 'function' || !stat.isSocket()) return null
     const uid = BigInt(stat.uid)
+    const mode = BigInt(stat.mode) & 0o777n
     if (uid !== BigInt(expectedUid)) return null
-    return Object.freeze({ device: String(stat.dev), inode: String(stat.ino), uid: String(uid) })
+    if (mode !== 0o600n) return null
+    return Object.freeze({ device: String(stat.dev), inode: String(stat.ino), uid: String(uid), mode: '0600' })
   } catch {
     return null
   }
@@ -149,7 +167,8 @@ function sameSocketIdentity(left, right) {
   return Boolean(left && right
     && left.device === right.device
     && left.inode === right.inode
-    && left.uid === right.uid)
+    && left.uid === right.uid
+    && left.mode === right.mode)
 }
 
 function commandArgs(command, locator, socketPath) {
@@ -297,7 +316,7 @@ function createCmuxFocusAdapter(options = {}) {
 
     const identifyResult = await runner.invoke('identify', locator, capabilities.socketPath)
     if (!identifyResult.ok) return fallback(identifyResult.code)
-    if (!identifyMatches(identifyResult.output, locator, capabilities.socketPath)) return fallback('locator_mismatch')
+    if (!identifyMatches(identifyResult.output, locator, capabilities.socketPath, version, runner.cliPath)) return fallback('locator_mismatch')
     if (!sameSocketIdentity(socketIdentity, inspectSocket(capabilities.socketPath))) return fallback('socket_identity_changed')
 
     const opened = await foreground()

@@ -54,8 +54,11 @@ Batch ingestion, long polling, and acknowledgement are planned additions and are
 The server accepts the raw provider identity only over authenticated loopback and
 combines only the versioned `wrkpad.hasp.session.v1` domain, canonical provider
 tag, and provider-local session ID under HMAC-SHA-256. Working directory presence
-or spelling cannot change that private binding. The server clears `cwd` before
-reducer persistence, and hook adapters retain only allow-listed labels.
+or spelling cannot change that private binding. The server retains only a bounded,
+absolute, control-free working directory so main-process actions can bind to the
+selected slot; an explicitly supplied invalid path revokes prior directory
+authority, and SessionEnd clears it. Hook adapters retain only allow-listed
+labels. Raw provider session IDs never enter persisted state.
 
 Provider values: `claude`, `codex`, `manual`, and `unknown`.
 

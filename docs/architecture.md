@@ -57,7 +57,7 @@ Operator recovery follows `CLI forget → authenticated HASP DELETE → reducer 
 
 ## Persistence
 
-The server bounds persisted JSON to 4 MiB, refuses symlinked state files, atomically writes through a private temporary file and rename, synchronizes the file and parent directory on Unix, and rolls live state back when persistence fails. A versioned domain, canonical provider tag, and provider-local session ID become the token-keyed HMAC-SHA-256 binding; changing or omitting a working directory cannot fork one provider session into another slot. Raw session IDs and working directories are not persisted. The token and state directory are user-private on Unix.
+The server bounds persisted JSON to 4 MiB, refuses symlinked state files, atomically writes through a private temporary file and rename, synchronizes the file and parent directory on Unix, and rolls live state back when persistence fails. A versioned domain, canonical provider tag, and provider-local session ID become the token-keyed HMAC-SHA-256 binding; changing or omitting a working directory cannot fork one provider session into another slot. Raw session IDs are never persisted. A bounded, absolute, control-free working directory may be retained in the private authenticated state so a main-process action can resolve the selected slot. An explicitly invalid directory revokes that authority, and SessionEnd clears it. The renderer receives only the selected slot/provider and a bounded control- and bidi-safe repository basename; it never supplies a path as authority. Raw paths remain main-process private. The token and state directory are user-private on Unix.
 
 Crash-injection and cross-platform filesystem acceptance are still required before describing persistence as crash durable across every supported filesystem.
 
@@ -68,8 +68,11 @@ Claude Code events compete for the same six sticky slots under the same state
 priority and overflow rules. Provider identity is part of the token-keyed HMAC
 input before the reducer sees a session binding, so equal provider-local session
 IDs do not collide. The snapshot keeps the provider on each occupied slot; Agent
-Board uses that field to choose only a fixed application target: `codex` opens
-ChatGPT and `claude` opens cmux.
+Board uses that field to choose only a fixed application target. Empty or inactive
+HASP slots may be filled from the installed Codex app-server's bounded, read-only
+recent-task catalog. Those entries dispatch a validated `codex://threads/<id>`
+request and never claim visible focus. Claude entries foreground cmux; exact pane
+focus remains gated on a private locator plus separately enabled cmux password access.
 
 Within one private session binding, event time is monotonic: after exact-duplicate
 handling, an event older than the persisted `updated_at` value fails closed

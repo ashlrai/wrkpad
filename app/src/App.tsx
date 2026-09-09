@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import {
   Activity, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp,
   CircleAlert, CircleCheck, CircleStop, CircleX, Command, Download, FolderOpen, Gauge, GitBranch, Keyboard,
@@ -260,7 +260,7 @@ function App() {
   const [mission, setMission] = useState<MissionControlSnapshot>(initialMission)
   const [selectedAgentSlot, setSelectedAgentSlot] = useState(1)
   const [result, setResult] = useState<ExecutionResult | null>(null)
-  const [approval, setApproval] = useState<{ action: ActionDefinition; token: string } | null>(null)
+  const [approval, setApproval] = useState<{ action: ActionDefinition; token: string; actionScope?: ExecutionResult['actionScope'] } | null>(null)
   const [isRunning, setIsRunning] = useState(false)
   const [holdProgress, setHoldProgress] = useState(0)
   const [view, setView] = useState<'operate' | 'flight' | 'setup'>('operate')
@@ -417,10 +417,10 @@ function App() {
           ? await bridge.focusAgentSlot(focusedSlot)
           : { ok: false, title: 'Focus unavailable', message: 'This app build does not expose live provider focus.', timestamp: new Date().toISOString() }
         : token
-          ? await bridge.confirmAction(action.id, token)
-          : await bridge.requestAction(action.id)
+          ? await bridge.confirmAction(action.id, token, selectedAgentSlot)
+          : await bridge.requestAction(action.id, selectedAgentSlot)
       if (response.needsConfirmation && response.token) {
-        setApproval({ action, token: response.token })
+        setApproval({ action, token: response.token, actionScope: response.actionScope })
         setResult(null)
       } else {
         setResult(response)
@@ -433,7 +433,15 @@ function App() {
     }
   // executeInternal intentionally tracks the current profile and effort.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bridge, profileId, refreshMission, refreshStatus])
+  }, [bridge, profileId, refreshMission, refreshStatus, selectedAgentSlot])
+
+  useEffect(() => {
+    setApproval(null)
+  }, [selectedAgentSlot])
+
+  useEffect(() => () => {
+    if (approval) void bridge?.cancelApproval?.(approval.action.id, approval.token)
+  }, [approval, bridge])
 
   const executeControl = useCallback((rawControl: ControlId) => {
     const control = normalizeControl(rawControl)
@@ -967,8 +975,11 @@ function App() {
           <StatusPill label={status.codex ? 'Codex CLI found' : 'Codex CLI absent'} tone={status.codex ? 'ready' : 'off'} icon={<Sparkles size={14} />} />
           <StatusPill label={status.claude ? 'Claude CLI found' : 'Claude CLI absent'} tone={status.claude ? 'ready' : 'off'} icon={<Bot size={14} />} />
           <StatusPill
-            label={mission.agentSource === 'observer_online' ? 'Agent session feed live' : mission.agentSource === 'invalid' ? 'Agent session feed invalid' : 'Agent session feed unavailable'}
-            tone={mission.agentSource === 'observer_online' ? 'ready' : mission.agentSource === 'invalid' ? 'warn' : 'off'}
+            label={mission.agentSource === 'observer_online'
+              ? mission.codexCatalogSource === 'recent_tasks' ? 'Hooks + recent Codex' : 'Agent session feed live'
+              : mission.agentSource === 'invalid' ? mission.codexCatalogSource === 'recent_tasks' ? 'Hooks invalid · recent Codex available' : 'Agent session feed invalid'
+                : mission.codexCatalogSource === 'recent_tasks' ? 'Recent Codex tasks ready' : 'Agent session feed unavailable'}
+            tone={mission.agentSource === 'invalid' ? 'warn' : mission.agentSource === 'observer_online' || mission.codexCatalogSource === 'recent_tasks' ? 'ready' : 'off'}
             icon={<Activity size={14} />}
           />
           <StatusPill
@@ -1054,7 +1065,7 @@ function App() {
         {hybridRoute && <HybridRouteTruth status={status} onOpenSetup={() => changeView('setup')} />}
 
         <div className="mission-control-grid">
-          <AttentionDeck agents={mission.agents} selectedSlot={selectedAgentSlot} source={mission.agentSource} boardRoute={status.boardRoute} onSelect={setSelectedAgentSlot} onFocus={(slot) => void focusAgentSlot(slot)} />
+          <AttentionDeck agents={mission.agents} selectedSlot={selectedAgentSlot} source={mission.agentSource} codexCatalogSource={mission.codexCatalogSource} boardRoute={status.boardRoute} onSelect={setSelectedAgentSlot} onFocus={(slot) => void focusAgentSlot(slot)} />
           <FleetBrief fleet={mission.fleet} source={mission.fleetSource} notices={mission.operatorNotices} />
         </div>
 
@@ -1312,7 +1323,7 @@ function TouchSensor({ showIds }: { showIds: boolean }) {
 
 function ActionConsole({ activeControl, action, result, approval, isRunning, holdProgress, workspace, workspaceSnapshot, lastPhysicalSignal, boardRoute, onRun, onConfirm, onBeginHold, onCancelHold, onCancelApproval, onChooseWorkspace }: {
   activeControl: ControlId; action: ActionDefinition; result: ExecutionResult | null
-  approval: { action: ActionDefinition; token: string } | null; isRunning: boolean; holdProgress: number; workspace: string
+  approval: { action: ActionDefinition; token: string; actionScope?: ExecutionResult['actionScope'] } | null; isRunning: boolean; holdProgress: number; workspace: string
   workspaceSnapshot: WorkspaceSnapshot | null
   lastPhysicalSignal: Date | null
   boardRoute: BoardRoute
@@ -1343,7 +1354,7 @@ function ActionConsole({ activeControl, action, result, approval, isRunning, hol
     <div className="consequence-card"><span>EXACT CONSEQUENCE</span><p>{action.consequence}</p></div>
 
     {approval ? <div className="approval-panel">
-      <ShieldCheck size={22} /><div><strong>{approval.action.safety === 'hold' ? 'Hold to authorize' : 'Confirm this action'}</strong><p>{approval.action.consequence}</p></div>
+      <ShieldCheck size={22} /><div><strong>{approval.action.safety === 'hold' ? 'Hold to authorize' : 'Confirm this action'}</strong>{approval.actionScope && <small>Agent {approval.actionScope.slot} · {approval.actionScope.provider === 'claude' ? 'Claude Code' : 'Codex'} · repo “{approval.actionScope.workspaceLabel}”</small>}<p>{approval.action.consequence}</p></div>
       {approval.action.safety === 'hold'
         ? <button
             type="button"
@@ -1382,6 +1393,7 @@ function ActionConsole({ activeControl, action, result, approval, isRunning, hol
     </div>
     <div className="workspace-card">
       <div><FolderOpen size={16} /><span>WORKSPACE PULSE</span></div>
+      {approval?.actionScope && <p className="workspace-scope-notice">Selected Agent {approval.actionScope.slot} repo: <strong>{approval.actionScope.workspaceLabel}</strong>. This is private slot authority; the global Workspace Pulse below is not used.</p>}
       <strong>{snapshot?.projectName || 'Choose a project'}</strong>
       {snapshot?.isGit ? <div className="workspace-facts">
         <span><GitBranch size={11} />{snapshot.branch}{snapshot.detached ? ' (detached)' : ''}</span>
@@ -1575,7 +1587,7 @@ function SetupView({ status, recoveryGuide, onRefreshRecoveryGuide, onRefreshSta
     status.receiverRuntime?.status,
     status.receiverRuntime?.currentAsarSha256,
   ])
-  useEffect(() => {
+  useLayoutEffect(() => {
     latestJoystickDiagnosticEvidence.current = joystickDiagnosticEvidenceKey
     joystickDiagnosticRequest.current += 1
     return () => {

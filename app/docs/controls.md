@@ -48,7 +48,12 @@ source-tested and physically unaccepted.
 | AG04 | Agent 5 | `Control+Option+Command+5` | Open slot 5 provider surface |
 | AG05 | Agent 6 | `Control+Option+Command+6` | Open slot 6 provider surface |
 
-When a slot is active, Codex opens ChatGPT and Claude Code opens cmux. This is application-level focus. No prompt, approval, or terminal input is submitted, and the app does not claim exact task or pane focus.
+When a slot comes from a Codex hook, it foregrounds ChatGPT at the application
+level. An inactive position filled from the recent Codex catalog instead
+dispatches a validated task deep link; successful dispatch does not prove the
+expected task is visibly focused. Claude Code slots currently foreground cmux at
+the application level, because exact pane enrollment is not enabled. No path
+submits a prompt, approval, or terminal input.
 
 That six-slot shortcut behavior applies to Ashlr Layer, not Hybrid Native's six
 physical Agent keys. On Hybrid Native layer 1, those keys remain Codex-only and
@@ -130,15 +135,17 @@ Agent keys and the seven daily workflow actions do not move across Attention, Pa
 | Proof | Amplify | Verify | Polish | Advance | Voice | Continue | Attention |
 | Recovery | Pause Fleet | Stop daemon | Fleet status | Fleet doctor | Voice | Continue | Attention |
 
-The four delivery actions are project-local, provider-neutral clipboard
+The four delivery actions are provider-neutral clipboard
 invocations documented in `.agents/skills/ashlr-delivery/SKILL.md`. They copy
 instructions only; Codex or Claude Code still requires the operator to review,
 paste, and submit them. Continue has the same clipboard-only boundary. Voice
 returns an inert typed intent for a trusted UI; it does not start recording or
 change microphone permission by itself. Attention excludes `off` slots and uses
 `error > needs_input > working > unread > idle`, then lowest slot number. It may
-foreground only the fixed provider app and never submits a prompt or terminal
-input.
+foreground the fixed provider app or dispatch a validated recent-Codex deep link,
+and never submits a prompt or terminal input. Dial changes affect only Agent
+Board's displayed reasoning depth; they do not change Codex or Claude model
+settings.
 
 ## Safety levels
 

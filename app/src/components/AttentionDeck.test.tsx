@@ -27,8 +27,23 @@ describe('black-cap attention runway', () => {
     expect(screen.getByText('Unified physical map')).toBeTruthy()
     expect(screen.getByText(/same mixed Codex \+ Claude Code slots in every workflow lens/i)).toBeTruthy()
     const handoff = screen.getByText('Provider handoff:').closest('.appsense-handoff')
-    expect(handoff?.textContent).toMatch(/foreground ChatGPT or cmux/i)
-    expect(handoff?.textContent).toMatch(/cmux pane focus is upgradeable only after capability negotiation and human-enabled access/i)
+    expect(handoff?.textContent).toMatch(/hook-observed Codex slot foregrounds Codex Desktop/i)
+    expect(handoff?.textContent).toMatch(/dispatches its validated task deep link/i)
+    expect(handoff?.textContent).toMatch(/human-enabled password access/i)
+  })
+
+  it('labels recent Codex catalog tasks without claiming verified focus', () => {
+    const recent = agents.map((agent, index) => index === 0 ? {
+      ...agent,
+      state: 'idle' as const,
+      title: 'Research agent board workflows',
+      targeting: 'codex_deep_link' as const,
+    } : agent)
+    render(<AttentionDeck agents={recent} selectedSlot={1} source="unavailable" codexCatalogSource="recent_tasks" boardRoute="ashlr_layer" onSelect={() => {}} onFocus={() => {}} />)
+    expect(screen.getByText('RECENT CODEX CATALOG')).toBeTruthy()
+    expect(screen.getByText('Workspace bound')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /request this recent task in Codex/i })).toBeTruthy()
+    expect(screen.getByText(/cannot verify what is visibly focused/i)).toBeTruthy()
   })
 
   it('selects an empty key without inventing a focus target', () => {

@@ -23,7 +23,7 @@ const NOW = new Date('2026-09-03T18:00:00.000Z')
 const WORKSPACE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const SURFACE = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
 const SOCKET = '/tmp/cmux-test.sock'
-const SOCKET_IDENTITY = Object.freeze({ device: '1', inode: '2', uid: '501' })
+const SOCKET_IDENTITY = Object.freeze({ device: '1', inode: '2', uid: '501', mode: '0600' })
 const LOCATOR = {
   schema: CMUX_LOCATOR_SCHEMA,
   provider: 'claude',
@@ -42,6 +42,12 @@ const IDENTIFY = JSON.stringify({
   app_cli_path: CMUX_CLI_PATH,
   caller: { workspace_id: WORKSPACE, surface_id: SURFACE },
 })
+const LEGACY_IDENTIFY = JSON.stringify({
+  socket_path: SOCKET,
+  focused: { workspace_id: WORKSPACE, surface_id: SURFACE },
+  caller: { workspace_id: WORKSPACE, surface_id: SURFACE },
+})
+const VERSION = parseVersion('cmux 0.62.2 (77) [6c203b514]')
 
 function authorization(id = '1'.repeat(32), overrides = {}) {
   return {
@@ -61,6 +67,7 @@ function adapterOptions(options = {}) {
 
 function sequenceRunner(sequence, calls = []) {
   return {
+    cliPath: CMUX_CLI_PATH,
     invoke: async (command, locator, socketPath) => {
       calls.push({ command, locator, socketPath })
       const next = sequence.shift()
@@ -79,6 +86,12 @@ function successfulSequence() {
     { command: 'select_workspace', result: { ok: true, output: '' } },
     { command: 'focus_surface', result: { ok: true, output: '' } },
   ]
+}
+
+function successfulLegacySequence() {
+  const sequence = successfulSequence()
+  sequence.find(({ command }) => command === 'identify').result.output = LEGACY_IDENTIFY
+  return sequence
 }
 
 test('pins the bundle CLI and cannot construct terminal read or write commands', () => {
@@ -104,21 +117,27 @@ test('validates the version, capability, and echoed identity contracts', () => {
   assert.equal(parseCapabilities(JSON.stringify({ protocol: 'cmux-socket', socket_path: 'relative.sock', access_mode: 'password', methods: ['system.identify'] })), null)
   assert.equal(parseCapabilities(JSON.stringify({ protocol: 'cmux-socket', socket_path: SOCKET, access_mode: 'unknown', methods: ['system.identify'] })), null)
   assert.equal(parseCapabilities('{bad'), null)
-  assert.equal(identifyMatches(IDENTIFY, LOCATOR, SOCKET), true)
-  assert.equal(identifyMatches(JSON.stringify({ ...JSON.parse(IDENTIFY), bundle_identifier: 'org.example.fake' }), LOCATOR, SOCKET), false)
-  assert.equal(identifyMatches(JSON.stringify({ socket_path: SOCKET, caller: { workspace_id: WORKSPACE, surface_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd' } }), LOCATOR, SOCKET), false)
-  assert.equal(identifyMatches(JSON.stringify({ socket_path: '/tmp/different.sock', caller: { workspace_id: WORKSPACE, surface_id: SURFACE } }), LOCATOR, SOCKET), false)
-  assert.equal(identifyMatches(JSON.stringify({ socket_path: SOCKET, focused: { workspace_id: WORKSPACE, surface_id: SURFACE } }), LOCATOR, SOCKET), false)
+  assert.equal(identifyMatches(IDENTIFY, LOCATOR, SOCKET, VERSION, CMUX_CLI_PATH), true)
+  assert.equal(identifyMatches(LEGACY_IDENTIFY, LOCATOR, SOCKET, VERSION, CMUX_CLI_PATH), true)
+  assert.equal(identifyMatches(LEGACY_IDENTIFY, LOCATOR, SOCKET, parseVersion('cmux 0.62.3 (78) [7c203b514]'), CMUX_CLI_PATH), false)
+  assert.equal(identifyMatches(LEGACY_IDENTIFY, LOCATOR, SOCKET, VERSION, '/tmp/cmux'), false)
+  assert.equal(identifyMatches(JSON.stringify({ ...JSON.parse(IDENTIFY), bundle_identifier: 'org.example.fake' }), LOCATOR, SOCKET, VERSION, CMUX_CLI_PATH), false)
+  assert.equal(identifyMatches(JSON.stringify({ ...JSON.parse(LEGACY_IDENTIFY), app_cli_path: CMUX_CLI_PATH }), LOCATOR, SOCKET, VERSION, CMUX_CLI_PATH), false)
+  assert.equal(identifyMatches(JSON.stringify({ socket_path: SOCKET, focused: null, caller: { workspace_id: WORKSPACE, surface_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd' } }), LOCATOR, SOCKET, VERSION, CMUX_CLI_PATH), false)
+  assert.equal(identifyMatches(JSON.stringify({ socket_path: '/tmp/different.sock', focused: null, caller: { workspace_id: WORKSPACE, surface_id: SURFACE } }), LOCATOR, SOCKET, VERSION, CMUX_CLI_PATH), false)
+  assert.equal(identifyMatches(JSON.stringify({ socket_path: SOCKET, focused: { workspace_id: WORKSPACE, surface_id: SURFACE } }), LOCATOR, SOCKET, VERSION, CMUX_CLI_PATH), false)
 })
 
-test('admits only a same-user Unix socket and compares its device and inode', () => {
-  const socketStat = { dev: 1n, ino: 2n, uid: 501n, isSocket: () => true }
+test('admits only a same-user 0600 Unix socket and compares its pinned identity', () => {
+  const socketStat = { dev: 1n, ino: 2n, uid: 501n, mode: 0o140600n, isSocket: () => true }
   assert.deepEqual(inspectSocketIdentity(SOCKET, { statImpl: () => socketStat, expectedUid: 501n }), SOCKET_IDENTITY)
   assert.equal(inspectSocketIdentity(SOCKET, { statImpl: () => ({ ...socketStat, uid: 502n }), expectedUid: 501n }), null)
+  assert.equal(inspectSocketIdentity(SOCKET, { statImpl: () => ({ ...socketStat, mode: 0o140660n }), expectedUid: 501n }), null)
   assert.equal(inspectSocketIdentity(SOCKET, { statImpl: () => ({ ...socketStat, isSocket: () => false }), expectedUid: 501n }), null)
   assert.equal(inspectSocketIdentity(SOCKET, { statImpl: () => { throw new Error('missing') }, expectedUid: 501n }), null)
   assert.equal(sameSocketIdentity(SOCKET_IDENTITY, { ...SOCKET_IDENTITY }), true)
   assert.equal(sameSocketIdentity(SOCKET_IDENTITY, { ...SOCKET_IDENTITY, inode: '3' }), false)
+  assert.equal(sameSocketIdentity(SOCKET_IDENTITY, { ...SOCKET_IDENTITY, mode: '0660' }), false)
 })
 
 test('rejects malformed, cross-provider, cross-session, future, and stale locators', () => {
@@ -195,6 +214,19 @@ test('focuses only after fresh identity validation and foregrounding', async () 
   })
   assert.deepEqual(await adapter.focus(LOCATOR, authorization()), { ok: true, opened: true, exact: true, reason: 'focus_cli_accepted', version: '0.62.2' })
   assert.equal(foregroundedAt, 4)
+  assert.deepEqual(calls.map(({ command }) => command), ['version', 'help', 'capabilities', 'identify', 'select_workspace', 'focus_surface'])
+  assert.deepEqual(calls.map(({ socketPath }) => socketPath), [undefined, undefined, undefined, SOCKET, SOCKET, SOCKET])
+})
+
+test('negotiates the pinned cmux 0.62.2 identify schema without weakening transport checks', async () => {
+  const calls = []
+  const adapter = createCmuxFocusAdapter({
+    runner: sequenceRunner(successfulLegacySequence(), calls),
+    foreground: async () => true,
+    now: () => NOW,
+    inspectSocket: () => SOCKET_IDENTITY,
+  })
+  assert.deepEqual(await adapter.focus(LOCATOR, authorization()), { ok: true, opened: true, exact: true, reason: 'focus_cli_accepted', version: '0.62.2' })
   assert.deepEqual(calls.map(({ command }) => command), ['version', 'help', 'capabilities', 'identify', 'select_workspace', 'focus_surface'])
   assert.deepEqual(calls.map(({ socketPath }) => socketPath), [undefined, undefined, undefined, SOCKET, SOCKET, SOCKET])
 })

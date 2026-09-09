@@ -3,6 +3,7 @@ const { existsSync } = require('node:fs')
 const path = require('node:path')
 const { runGit } = require('./git-runner.cjs')
 const { resolveTool } = require('./tool-resolver.cjs')
+const { executableIdentity } = require('./selected-workspace-policy.cjs')
 
 const BRIEFS = {
   copy_plan_brief: 'Investigate the current state first. Surface assumptions, risks, and unknowns. Propose a detailed plan with explicit acceptance criteria, safety boundaries, and rollback. Do not implement or perform consequential actions until the architecture is confirmed.',
@@ -26,7 +27,7 @@ const WORKFLOW_ACTION_IDS = Object.freeze([
 ])
 
 const ACTION_SPECS = {
-  open_codex: { safety: 'safe', kind: 'openCodex' },
+  open_codex: { safety: 'safe', kind: 'openCodex', workspaceScope: 'selected_slot' },
   open_claude: { safety: 'safe', kind: 'openApp', app: 'Claude' },
   copy_plan_brief: { safety: 'safe', kind: 'copy', text: BRIEFS.copy_plan_brief },
   copy_test_brief: { safety: 'safe', kind: 'copy', text: BRIEFS.copy_test_brief },
@@ -53,19 +54,19 @@ const ACTION_SPECS = {
   fleet_status: { safety: 'safe', kind: 'inspect', executable: 'ashlr', args: ['fleet', 'status', '--json'] },
   fleet_direction: { safety: 'safe', kind: 'inspect', executable: 'ashlr', args: ['fleet', 'direction', '--json'] },
   fleet_doctor: { safety: 'safe', kind: 'inspect', executable: 'ashlr', args: ['fleet', 'doctor', '--json'] },
-  git_status: { safety: 'safe', kind: 'gitInspect', args: ['status', '--short', '--branch'] },
-  git_diff: { safety: 'safe', kind: 'gitInspect', args: ['diff', '--stat'] },
-  git_log: { safety: 'safe', kind: 'gitInspect', args: ['log', '-8', '--oneline', '--decorate'] },
+  git_status: { safety: 'safe', kind: 'gitInspect', args: ['status', '--short', '--branch'], workspaceScope: 'selected_slot' },
+  git_diff: { safety: 'safe', kind: 'gitInspect', args: ['diff', '--stat'], workspaceScope: 'selected_slot' },
+  git_log: { safety: 'safe', kind: 'gitInspect', args: ['log', '-8', '--oneline', '--decorate'], workspaceScope: 'selected_slot' },
   tool_health: { safety: 'safe', kind: 'toolHealth' },
-  start_codex: { safety: 'confirm', kind: 'terminal', command: (workspace) => `codex -C ${shellQuote(workspace)}` },
-  resume_codex: { safety: 'confirm', kind: 'terminal', command: (workspace) => `codex -C ${shellQuote(workspace)} resume --last` },
-  codex_review: { safety: 'confirm', kind: 'terminal', command: (workspace) => `cd ${shellQuote(workspace)} && codex review --uncommitted` },
-  start_claude: { safety: 'confirm', kind: 'terminal', command: (workspace) => `cd ${shellQuote(workspace)} && claude` },
-  resume_claude: { safety: 'confirm', kind: 'terminal', command: (workspace) => `cd ${shellQuote(workspace)} && claude --continue` },
-  claude_agents: { safety: 'confirm', kind: 'terminal', command: (workspace) => `cd ${shellQuote(workspace)} && claude agents` },
-  ashlr_inbox: { safety: 'confirm', kind: 'terminal', command: () => 'ashlr inbox' },
-  ashlr_tui: { safety: 'confirm', kind: 'terminal', command: () => 'ashlr tui' },
-  run_tests: { safety: 'confirm', kind: 'terminal', command: testCommand },
+  start_codex: { safety: 'confirm', kind: 'terminal', tool: 'codex', args: [], workspaceScope: 'selected_slot' },
+  resume_codex: { safety: 'confirm', kind: 'terminal', tool: 'codex', args: ['resume', '--last'], workspaceScope: 'selected_slot' },
+  codex_review: { safety: 'confirm', kind: 'terminal', tool: 'codex', args: ['review', '--uncommitted'], workspaceScope: 'selected_slot' },
+  start_claude: { safety: 'confirm', kind: 'terminal', tool: 'claude', args: [], workspaceScope: 'selected_slot' },
+  resume_claude: { safety: 'confirm', kind: 'terminal', tool: 'claude', args: ['--continue'], workspaceScope: 'selected_slot' },
+  claude_agents: { safety: 'confirm', kind: 'terminal', tool: 'claude', args: ['agents'], workspaceScope: 'selected_slot' },
+  ashlr_inbox: { safety: 'confirm', kind: 'terminal', tool: 'ashlr', args: ['inbox'] },
+  ashlr_tui: { safety: 'confirm', kind: 'terminal', tool: 'ashlr', args: ['tui'] },
+  run_tests: { safety: 'confirm', kind: 'terminal', dynamicTool: 'tests', workspaceScope: 'selected_slot' },
   pause_fleet: { safety: 'hold', kind: 'inspect', executable: 'ashlr', args: ['fleet', 'pause'] },
   resume_fleet: { safety: 'hold', kind: 'inspect', executable: 'ashlr', args: ['fleet', 'resume'] },
   daemon_stop: { safety: 'hold', kind: 'inspect', executable: 'ashlr', args: ['daemon', 'stop'] },
@@ -74,18 +75,64 @@ const ACTION_SPECS = {
 function shellQuote(value) { return `'${String(value).replaceAll("'", "'\\''")}'` }
 function appleScriptQuote(value) { return String(value).replaceAll('\\', '\\\\').replaceAll('"', '\\"') }
 
-function testCommand(workspace) {
-  const prefix = `cd ${shellQuote(workspace)} && `
+function testDescriptor(workspace) {
   const candidates = []
   if (existsSync(path.join(workspace, 'package.json'))) {
-    if (existsSync(path.join(workspace, 'pnpm-lock.yaml'))) candidates.push(`${prefix}pnpm test`)
-    else if (existsSync(path.join(workspace, 'bun.lock')) || existsSync(path.join(workspace, 'bun.lockb'))) candidates.push(`${prefix}bun test`)
-    else if (existsSync(path.join(workspace, 'yarn.lock'))) candidates.push(`${prefix}yarn test`)
-    else if (existsSync(path.join(workspace, 'package-lock.json'))) candidates.push(`${prefix}npm test`)
+    if (existsSync(path.join(workspace, 'pnpm-lock.yaml'))) candidates.push({ tool: 'pnpm', args: ['test'] })
+    else if (existsSync(path.join(workspace, 'bun.lock')) || existsSync(path.join(workspace, 'bun.lockb'))) candidates.push({ tool: 'bun', args: ['test'] })
+    else if (existsSync(path.join(workspace, 'yarn.lock'))) candidates.push({ tool: 'yarn', args: ['test'] })
+    else if (existsSync(path.join(workspace, 'package-lock.json'))) candidates.push({ tool: 'npm', args: ['test'] })
   }
-  if (existsSync(path.join(workspace, 'Cargo.toml'))) candidates.push(`${prefix}cargo test --all-targets`)
-  if (existsSync(path.join(workspace, 'go.mod'))) candidates.push(`${prefix}go test ./...`)
+  if (existsSync(path.join(workspace, 'Cargo.toml'))) candidates.push({ tool: 'cargo', args: ['test', '--all-targets'] })
+  if (existsSync(path.join(workspace, 'go.mod'))) candidates.push({ tool: 'go', args: ['test', './...'] })
   return candidates.length === 1 ? candidates[0] : null
+}
+
+function executableInvocation(executable, args, executableIdentity) {
+  if (typeof executable !== 'string' || !path.isAbsolute(executable)) return null
+  if (!Array.isArray(args) || args.some((arg) => typeof arg !== 'string')) return null
+  if (!/^\d+:\d+$/.test(executableIdentity ?? '')) return null
+  const executablePath = shellQuote(executable)
+  const invocation = [executablePath, ...args.map(shellQuote)].join(' ')
+  return `executable_expected=${shellQuote(executableIdentity)}; executable_observed=$(/usr/bin/stat -f '%d:%i' -- ${executablePath} 2>/dev/null) && [ "$executable_observed" = "$executable_expected" ] && exec ${invocation}`
+}
+
+function guardedWorkspaceCommand(executable, args, workspace, workspaceIdentity, executableIdentity) {
+  const invocation = executableInvocation(executable, args, executableIdentity)
+  if (!invocation) return null
+  if (typeof workspace !== 'string' || !path.isAbsolute(workspace) || !/^\d+:\d+$/.test(workspaceIdentity ?? '')) return null
+  const expected = shellQuote(workspaceIdentity)
+  const directory = shellQuote(workspace)
+  return `expected=${expected}; observed=$(/usr/bin/stat -f '%d:%i' -- ${directory} 2>/dev/null) && [ "$observed" = "$expected" ] && cd -P -- ${directory} && [ "$(/usr/bin/stat -f '%d:%i' -- . 2>/dev/null)" = "$expected" ] && ${invocation}`
+}
+
+function resolveTerminalPlan(id, workspace, options = {}) {
+  const spec = ACTION_SPECS[id]
+  if (!spec || spec.kind !== 'terminal') return null
+  const descriptor = spec.dynamicTool === 'tests' ? testDescriptor(workspace) : { tool: spec.tool, args: spec.args }
+  if (!descriptor || typeof descriptor.tool !== 'string' || !Array.isArray(descriptor.args)) return null
+  const resolveToolImpl = options.resolveToolImpl ?? resolveTool
+  const executableIdentityImpl = options.executableIdentityImpl ?? executableIdentity
+  const resolved = resolveToolImpl(descriptor.tool, { home: options.home })
+  const executable = resolved ? executableIdentityImpl(resolved) : null
+  if (!executable) return null
+  const command = spec.workspaceScope === 'selected_slot'
+    ? guardedWorkspaceCommand(executable.executable, descriptor.args, workspace, options.workspaceIdentity, executable.identity)
+    : executableInvocation(executable.executable, descriptor.args, executable.identity)
+  if (!command) return null
+  return Object.freeze({
+    actionId: id,
+    workspace: spec.workspaceScope === 'selected_slot' ? workspace : null,
+    tool: descriptor.tool,
+    executable: executable.executable,
+    executableIdentity: executable.identity,
+    command,
+  })
+}
+
+function testCommand(workspace, executable, workspaceIdentity, executableIdentity) {
+  const descriptor = testDescriptor(workspace)
+  return descriptor ? guardedWorkspaceCommand(executable, descriptor.args, workspace, workspaceIdentity, executableIdentity) : null
 }
 
 function runProcess(executable, args, options = {}) {
@@ -154,8 +201,11 @@ async function executeSpec(id, workspace, electron) {
     return outcome(checks.every((check) => check.ok), 'Toolchain checked', 'Version probes completed locally.', output)
   }
   if (spec.kind === 'terminal') {
-    const command = spec.command(workspace)
-    if (!command) return outcome(false, 'Test command unavailable', 'No single supported test command was detected. Choose the intended package or component explicitly.')
+    const plan = electron.terminalPlan
+    if (!plan || plan.actionId !== id || (spec.workspaceScope === 'selected_slot' && plan.workspace !== workspace)) {
+      return outcome(false, 'Command authorization unavailable', 'The command executable or workspace identity was not bound to this authorization.')
+    }
+    const command = plan.command
     const script = `tell application "Terminal"\nactivate\ndo script "${appleScriptQuote(command)}"\nend tell`
     const result = await runProcess('/usr/bin/osascript', ['-e', script])
     return result.ok ? outcome(true, 'Terminal session started', 'The allowlisted command is running in a new Terminal session.') : outcome(false, 'Could not start Terminal session', result.error)
@@ -167,4 +217,8 @@ function outcome(ok, title, message, output) {
   return { ok, title, message, output: output || undefined, timestamp: new Date().toISOString() }
 }
 
-module.exports = { ACTION_SPECS, BRIEFS, WORKFLOW_ACTION_IDS, executeSpec, shellQuote, testCommand }
+function requiresSelectedSlotWorkspace(id) {
+  return ACTION_SPECS[id]?.workspaceScope === 'selected_slot'
+}
+
+module.exports = { ACTION_SPECS, BRIEFS, WORKFLOW_ACTION_IDS, executableInvocation, executeSpec, guardedWorkspaceCommand, requiresSelectedSlotWorkspace, resolveTerminalPlan, shellQuote, testCommand, testDescriptor }

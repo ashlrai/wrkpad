@@ -69,17 +69,16 @@ test('Compact Deck snapshot is privacy-projected before crossing IPC', () => {
   assert.doesNotMatch(snapshotHandler, /workspace|prompt|transcript|sessionId/)
 })
 
-test('Compact Deck action receipts are projected and Attention resolves atomically in main', () => {
+test('Compact Deck action receipts are projected and actions use the displayed compact snapshot', () => {
   const handlers = main.match(/ipcMain\.handle\('compact:focusAgentSlot'[\s\S]*?ipcMain\.handle\('compact:getPreferences'/)?.[0] ?? ''
-  assert.match(handlers, /projectCompactActionResult\(await focusAgentSlotResult\(slot\)\)/)
+  assert.match(handlers, /projectCompactActionResult\(await focusAgentSlotResult\(slot, displayedMissions\.read\('compact'\)\)\)/)
   assert.match(handlers, /ipcMain\.handle\('compact:focusAttention'/)
   assert.match(handlers, /requireCompactWorkflowAction\('stage_attention', ACTION_SPECS\)/)
-  assert.match(handlers, /focusHighestPriorityAgentResult\(\)/)
+  assert.match(handlers, /focusHighestPriorityAgentResult\(displayedMissions\.read\('compact'\)\)/)
   assert.doesNotMatch(handlers, /agent\.title|attentionSlot\)/)
-  const attention = main.match(/async function focusHighestPriorityAgentResult\(\) \{[\s\S]*?\n\}/)?.[0] ?? ''
-  assert.match(attention, /collectMissionControl\(app\.getPath\('home'\)\)/)
-  assert.doesNotMatch(attention, /missionControl\(/)
-  assert.match(attention, /agentSource !== 'observer_online'/)
+  const attention = main.match(/async function focusHighestPriorityAgentResult\(mission\) \{[\s\S]*?\n\}/)?.[0] ?? ''
+  assert.doesNotMatch(attention, /collectMissionControl|missionControl\(/)
+  assert.match(attention, /agentSource !== 'observer_online'.*codexCatalogSource !== 'recent_tasks'/)
   assert.match(attention, /projectCompactSnapshot\(mission\)\.attentionSlot/)
   assert.match(attention, /focusAgentFromSnapshot\(slot, mission\)/)
 })

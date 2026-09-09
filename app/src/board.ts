@@ -28,6 +28,7 @@ export interface ExecutionResult {
   output?: string
   needsConfirmation?: boolean
   token?: string
+  actionScope?: { slot: number; provider: 'codex' | 'claude' | null; workspaceLabel: string; workspaceBound: true }
   stagedIntent?: { actionId: string; intent: 'voice_capture' | 'focus_attention' }
 }
 
@@ -371,6 +372,7 @@ export interface AgentSlotSummary {
   state: AgentState
   title: string
   updatedAt: string | null
+  targeting?: 'codex_deep_link'
 }
 
 export interface FleetBrief {
@@ -395,6 +397,7 @@ export interface MissionControlSnapshot {
   schemaVersion: 1
   observedAt: string
   agentSource: 'observer_online' | 'invalid' | 'unavailable'
+  codexCatalogSource?: 'recent_tasks' | 'invalid' | 'unavailable'
   fleetSource: 'status_receipt' | 'invalid' | 'unavailable'
   agents: AgentSlotSummary[]
   fleet: FleetBrief | null
@@ -435,8 +438,8 @@ const actionEntries = [
     `focus_agent_${index + 1}`,
     `Open agent surface ${index + 1}`,
     `Agent ${index + 1}`,
-    'Open the fixed local provider app for the session currently assigned to this slot.',
-    'Foregrounds Codex Desktop or cmux. Exact task or pane focus is reported as unavailable until the provider exposes a verified locator; no prompt is submitted.',
+    'Open the provider target bound to this visible physical slot.',
+    'Recent Codex catalog slots dispatch a validated deep link without claiming visible focus. Hook-only Codex and Claude Code slots foreground the provider app; no prompt or terminal input is submitted.',
     'safe',
     'sparkles',
     `focus_agent_${index + 1}`,

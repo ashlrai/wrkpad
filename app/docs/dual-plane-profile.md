@@ -16,12 +16,13 @@ right.
 
 This preserves Codex's supported device path instead of emulating it. On the
 shared layer, provider hooks normalize Codex and Claude Code lifecycle events
-into the same six stable slots. An occupied slot opens ChatGPT or cmux based on
-its observed provider. Exact Codex-task focus remains native-only. The
-source-tested exact cmux-focus substrate is unreachable in the current installed
-app because locator capture, authorization issuance, and credential enrollment
-are not implemented. Current Claude slots safely foreground cmux at the
-application level and send no terminal input.
+into the same six stable slots. A hook-observed Codex slot foregrounds ChatGPT;
+an inactive position filled from the recent Codex catalog can dispatch a
+validated task deep link without proving visible focus. The source-tested exact
+cmux-focus substrate is unreachable in the current app because locator capture,
+authorization issuance, and credential enrollment are not implemented. Current
+Claude slots safely foreground cmux at the application level and send no
+terminal input.
 
 ## Prepare a trusted source export
 

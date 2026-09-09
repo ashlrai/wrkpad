@@ -34,6 +34,7 @@ test('projects exactly six privacy-minimal slots and strips titles by default', 
   const snapshot = projectCompactSnapshot({
     observedAt: '2026-09-02T20:01:00.000Z',
     agentSource: 'observer_online',
+    codexCatalogSource: 'recent_tasks',
     agents: rawAgents,
     unassignedActiveSessions: 42,
     operatorNotices: [{ detail: 'private' }],
@@ -41,6 +42,7 @@ test('projects exactly six privacy-minimal slots and strips titles by default', 
   assert.equal(snapshot.schema, COMPACT_SNAPSHOT_SCHEMA)
   assert.equal(snapshot.observedAt, '2026-09-02T20:01:00.000Z')
   assert.equal(snapshot.agentSource, 'observer_online')
+  assert.equal(snapshot.codexCatalogSource, 'recent_tasks')
   assert.equal(snapshot.agents.length, 6)
   assert.equal(snapshot.attentionSlot, 4)
   for (const agent of snapshot.agents) {
@@ -107,6 +109,7 @@ test('fails invalid provider, state, source, and time fields closed', () => {
   const snapshot = projectCompactSnapshot({
     observedAt: 'not-a-date',
     agentSource: 'connected',
+    codexCatalogSource: 'connected',
     agents: [
       { slot: 1, provider: 'codex', state: 'invented', title: 'private' },
       { slot: 2, provider: 'invented', state: 'working', title: 'private' },
@@ -114,6 +117,7 @@ test('fails invalid provider, state, source, and time fields closed', () => {
   }, { now })
   assert.equal(snapshot.observedAt, now.toISOString())
   assert.equal(snapshot.agentSource, 'unavailable')
+  assert.equal(snapshot.codexCatalogSource, 'unavailable')
   assert.deepEqual(snapshot.agents[0], { slot: 1, provider: null, state: 'off' })
   assert.deepEqual(snapshot.agents[1], { slot: 2, provider: null, state: 'working' })
   assert.equal(snapshot.attentionSlot, null)

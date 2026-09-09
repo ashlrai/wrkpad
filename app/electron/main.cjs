@@ -4,13 +4,16 @@ const { spawn } = require('node:child_process')
 const { createHash, randomUUID } = require('node:crypto')
 const { existsSync, lstatSync, mkdirSync, renameSync, unlinkSync, writeFileSync } = require('node:fs')
 const path = require('node:path')
-const { ACTION_SPECS, executeSpec } = require('./action-registry.cjs')
+const { ACTION_SPECS, executeSpec, requiresSelectedSlotWorkspace, resolveTerminalPlan } = require('./action-registry.cjs')
+const { createApprovalStore } = require('./approval-store.cjs')
 const { requireCompactAction, requireCompactWorkflowAction } = require('./compact-action-policy.cjs')
 const { readCompactDeckBounds, readCompactDeckSettings, validateCompactDeckSettings, writeCompactDeckSettings } = require('./compact-deck-settings.cjs')
 const { projectCompactActionResult, projectCompactSnapshot } = require('./compact-snapshot.cjs')
 const { detectCreatorMicro2 } = require('./creator-micro-identity.cjs')
+const { createDisplayedMissionBinding } = require('./displayed-mission-binding.cjs')
 const { inspectCodexMicroLogs } = require('./codex-micro-diagnostics.cjs')
 const { inspectChatGptInstallationAsync } = require('./chatgpt-installation.cjs')
+const { createCodexDesktopAdapter } = require('./codex-desktop-adapter.cjs')
 const { createInputInstallationInspector } = require('./input-installation-async.cjs')
 const { inspectInputProfile } = require('./input-profile-diagnostics.cjs')
 const { inspectInputRuntime } = require('./input-runtime-diagnostics.cjs')
@@ -34,11 +37,12 @@ const { createFlightOperationCoordinator, saveBoundFlightReceipt } = require('./
 const { evaluateFlightGates } = require('./flight-gates.cjs')
 const { inspectFlightBuildAcceptance } = require('./flight-build-acceptance.cjs')
 const { inspectWorkspace } = require('./workspace-inspector.cjs')
-const { appForProvider, collectMissionControl } = require('./mission-control.cjs')
+const { appForProvider, collectMissionControl, privateTargetForSlot, workspaceForSlot } = require('./mission-control.cjs')
 const { configuredRendererUrl, trustedRendererUrl } = require('./renderer-trust.cjs')
 const { appSettingsPath, readWorkspaceSettings, saveBoardRouteSettings, saveWorkspaceSettings, validBoardRoute } = require('./settings.cjs')
 const { passiveRouteActionResult, routeAllowsConfiguredActions } = require('./action-route-policy.cjs')
 const { routeAllowsShortcutDelivery, routeOwnsShortcuts, shortcutSignalsForRoute } = require('./board-route-policy.cjs')
+const { selectedWorkspaceIdentity } = require('./selected-workspace-policy.cjs')
 const { createShortcutCallbackGuard, createShortcutOwnershipController } = require('./shortcut-ownership.cjs')
 const { createShortcutObservability, projectFlightSnapshot } = require('./shortcut-observability.cjs')
 const { EDGE_DUPLICATE_WINDOW_NS, EDGE_SIGNAL_IDS, createShortcutEdgeDuplicateFilter } = require('./shortcut-edge-filter.cjs')
@@ -54,7 +58,8 @@ const HOTKEYS = {
 }
 let mainWindow; let rendererUrl; let compactWindow; let compactRendererUrl; let compactSnapshotTimer; let compactBoundsTimer; let currentProfile = 'codex'; let signalSequence = 0; let shortcutRegistrations = []
 let missionCache = null; let missionCacheAt = 0; let missionInFlight = null
-const approvals = new Map()
+const displayedMissions = createDisplayedMissionBinding()
+const approvals = createApprovalStore()
 const flightSession = createFlightSession()
 const shortcutEdgeFilter = createShortcutEdgeDuplicateFilter()
 const flightOperations = createFlightOperationCoordinator(flightSession, { afterActivation: () => shortcutEdgeFilter.reset() })
@@ -68,6 +73,7 @@ const shortcutCallbackGuard = createShortcutCallbackGuard()
 const shortcutObservability = createShortcutObservability({ signalIds: Object.keys(HOTKEYS) })
 const targetedShortcutProbe = createTargetedShortcutProbeCoordinator()
 const cmuxFocusAdapter = createCmuxFocusAdapter({ foreground: () => openFixedApp('cmux') })
+const codexDesktopAdapter = createCodexDesktopAdapter()
 const FLIGHT_COMPLETION_MAX_AGE_NS = 15n * 60n * 1_000_000_000n
 const FLIGHT_RUN_MAX_AGE_MS = 30 * 60 * 1_000
 
@@ -205,6 +211,7 @@ function createWindow() {
   mainWindow.on('closed', () => {
     resetFlightState()
     approvals.clear()
+    displayedMissions.clear('main')
     mainWindow = null
   })
 }
@@ -221,6 +228,7 @@ async function sendCompactSnapshot() {
   if (target !== compactWindow || target.isDestroyed() || !target.isVisible()) return
   const preferences = readCompactSettings(target.getBounds())
   const snapshot = projectCompactSnapshot(mission, { showTitles: preferences.showTitles })
+  displayedMissions.publish('compact', mission)
   target.webContents.send('compact:snapshot', snapshot)
 }
 
@@ -292,6 +300,7 @@ function createCompactWindow() {
     if (compactBoundsTimer) clearTimeout(compactBoundsTimer)
     compactBoundsTimer = null
     compactWindow = null
+    displayedMissions.clear('compact')
   })
   const loadingWindow = compactWindow
   void loadingWindow.loadURL(compactRendererUrl).catch(() => {
@@ -587,12 +596,59 @@ async function verifyBoundFlightGates(variant) {
 async function missionControl(force = false) {
   if (!force && missionCache && Date.now() - missionCacheAt < 8_000) return missionCache
   if (missionInFlight) return missionInFlight
-  missionInFlight = collectMissionControl(app.getPath('home')).then((snapshot) => {
+  missionInFlight = collectMissionControl(app.getPath('home'), { codexDesktopAdapter }).then((snapshot) => {
     missionCache = snapshot
     missionCacheAt = Date.now()
     return snapshot
   }).finally(() => { missionInFlight = null })
   return missionInFlight
+}
+
+function directoryIdentity(workspace) {
+  return selectedWorkspaceIdentity(workspace, { home: app.getPath('home') })
+}
+
+function privateTargetIdentity(target) {
+  if (!target) return null
+  const locator = target.targetKind === 'codex_task' ? target.threadId : target.sessionBinding
+  if (typeof locator !== 'string') return null
+  return createHash('sha256').update(JSON.stringify({
+    slot: target.slot,
+    provider: target.provider,
+    locator,
+    workspace: target.workspace,
+    updatedAt: target.updatedAt,
+  })).digest('hex')
+}
+
+function terminalPlanIdentity(plan) {
+  if (!plan) return null
+  return createHash('sha256').update(JSON.stringify({
+    actionId: plan.actionId,
+    workspace: plan.workspace,
+    tool: plan.tool,
+    executable: plan.executable,
+    executableIdentity: plan.executableIdentity,
+    command: plan.command,
+  })).digest('hex')
+}
+
+function resolveSelectedSlotWorkspace(slot, snapshot) {
+  if (!Number.isInteger(slot) || slot < 1 || slot > 6) return null
+  if (!snapshot || !Array.isArray(snapshot.agents)) return null
+  const target = privateTargetForSlot(snapshot, slot)
+  const workspace = workspaceForSlot(snapshot, slot)
+  const directory = workspace ? directoryIdentity(workspace) : null
+  const targetIdentity = privateTargetIdentity(target)
+  if (!target || !directory || !targetIdentity) return null
+  return {
+    slot,
+    provider: target.provider,
+    workspace: directory.workspace,
+    workspaceLabel: directory.label,
+    directoryIdentity: directory.identity,
+    targetIdentity,
+  }
 }
 
 function openFixedApp(name) {
@@ -622,6 +678,12 @@ async function focusAgentFromSnapshot(slot, snapshot) {
       : 'cmux is foregrounded. Agent Board cannot select or verify an exact pane without a fresh privacy-safe locator and human-enabled socket capability, so no terminal input was sent.'
     return { ok:true,title:'Opened cmux',message,timestamp:new Date().toISOString() }
   }
+  const target = privateTargetForSlot(snapshot, slot)
+  if (agent.provider === 'codex' && target?.targetKind === 'codex_task') {
+    const dispatched = await codexDesktopAdapter.focusTask(target.threadId)
+    if (!dispatched.ok) return { ok:false,title:'Could not open Codex task',message:'The validated Codex task request was rejected. No prompt or approval was submitted.',timestamp:new Date().toISOString() }
+    return { ok:true,title:'Codex task open requested',message:'macOS accepted the validated deep-link dispatch request. Confirm the visible task before acting; Codex task visibility cannot be verified and no prompt or approval was submitted.',timestamp:new Date().toISOString() }
+  }
   const appName = appForProvider(agent.provider)
   if (!appName) return { ok:false,title:'Focus unavailable',message:'This session does not advertise a safe local focus target.',timestamp:new Date().toISOString() }
   const opened = await openFixedApp(appName)
@@ -630,19 +692,20 @@ async function focusAgentFromSnapshot(slot, snapshot) {
   return { ok:true,title:`Opened ${appName}`,message,timestamp:new Date().toISOString() }
 }
 
-async function focusAgentSlotResult(slot) {
+async function focusAgentSlotResult(slot, snapshot) {
   if (!Number.isInteger(slot) || slot < 1 || slot > 6) return focusAgentFromSnapshot(slot, { agents: [] })
-  return focusAgentFromSnapshot(slot, await missionControl(true))
+  if (!snapshot) return { ok:false,title:'Agent runway unavailable',message:'Refresh the visible agent runway before using a physical slot.',timestamp:new Date().toISOString() }
+  return focusAgentFromSnapshot(slot, snapshot)
 }
 
-async function focusHighestPriorityAgentResult() {
+async function focusHighestPriorityAgentResult(mission) {
   if (flightActionsSuppressed()) return focusAgentFromSnapshot(null, { agents: [] })
-  // Attention must resolve and focus from the same new HASP read. Never reuse
-  // the renderer cache or an earlier in-flight refresh for this action.
-  const mission = await collectMissionControl(app.getPath('home'))
-  if (mission.agentSource !== 'observer_online') return { ok:false,title:'Attention unavailable',message:'A fresh valid six-slot agent snapshot is required before Attention can focus a provider.',timestamp:new Date().toISOString() }
+  // Attention selects and focuses from the exact snapshot last projected to
+  // this renderer. A background catalog reorder cannot retarget a visible key.
+  if (!mission) return { ok:false,title:'Attention unavailable',message:'Refresh the visible agent runway before using Attention.',timestamp:new Date().toISOString() }
+  if (mission.agentSource !== 'observer_online' && mission.codexCatalogSource !== 'recent_tasks') return { ok:false,title:'Attention unavailable',message:'A fresh hook snapshot or validated recent Codex catalog is required before Attention can open a provider.',timestamp:new Date().toISOString() }
   const slot = projectCompactSnapshot(mission).attentionSlot
-  if (slot === null) return { ok:false,title:'No focusable agent needs attention',message:'No active Codex or Claude Code slot is available to focus.',timestamp:new Date().toISOString() }
+  if (slot === null) return { ok:false,title:'No focusable agent needs attention',message:'No focusable current or recent Codex or Claude Code target is available.',timestamp:new Date().toISOString() }
   return focusAgentFromSnapshot(slot, mission)
 }
 
@@ -652,18 +715,22 @@ async function collectSystemStatus({ reconcileShortcuts = true } = {}) {
   const codexExecutable = resolveTool('codex', { home })
   const claudeExecutable = resolveTool('claude', { home })
   const ashlrExecutable = resolveTool('ashlr', { home })
-  // Start the longest bounded probe before the synchronous receiver check so
-  // the renderer's outer deadline covers the complete status operation.
+  // Start every bounded asynchronous probe before the synchronous receiver
+  // identity check. Signature, USB, CLI, and workspace probes then overlap
+  // instead of serially consuming the renderer's aggregate deadline.
   const inputInstallationPending = inspectCurrentInputInstallation()
+  const boardPending = boardConnected()
+  const codexPending = codexExecutable ? commandExists(codexExecutable) : Promise.resolve(false)
+  const claudePending = claudeExecutable ? commandExists(claudeExecutable) : Promise.resolve(false)
+  const ashlrPending = ashlrExecutable ? commandExists(ashlrExecutable) : Promise.resolve(false)
+  const workspacePending = inspectWorkspace(settings.workspace)
+  const chatgptInspectionPending = inspectChatGptInstallationAsync()
   const currentReceiverRuntime = reconcileShortcuts
     ? synchronizeShortcutOwnership(settings.boardRoute).runtime
     : inspectCurrentReceiverRuntime()
   const [inputInstallation, board, codex, claude, ashlr, workspaceSnapshot, chatgptInspection] = await Promise.all([
-    inputInstallationPending, boardConnected(), codexExecutable ? commandExists(codexExecutable) : false,
-    claudeExecutable ? commandExists(claudeExecutable) : false,
-    ashlrExecutable ? commandExists(ashlrExecutable) : false,
-    inspectWorkspace(settings.workspace),
-    inspectChatGptInstallationAsync(),
+    inputInstallationPending, boardPending, codexPending, claudePending, ashlrPending,
+    workspacePending, chatgptInspectionPending,
   ])
   const receiverAsarSha256 = currentReceiverRuntime.currentAsarSha256 ?? currentPackagedAsarSha256()
   const buildAcceptance = receiverAsarSha256
@@ -771,7 +838,11 @@ ipcMain.handle('board:getCommissioning', trustedIpc(() => commissioningOperation
 ipcMain.handle('board:prepareCommissioningPlan', trustedIpc(() => commissioningOperations.prepare()))
 ipcMain.handle('board:executeCommissioningOperation', trustedIpc((_event, request) => commissioningAgentOperations.execute(request)))
 ipcMain.handle('board:getFlightSnapshot', trustedIpc(() => publicFlightSnapshot()))
-ipcMain.handle('board:getMissionControl', trustedIpc(() => missionControl()))
+ipcMain.handle('board:getMissionControl', trustedIpc(async () => {
+  const mission = await missionControl()
+  displayedMissions.publish('main', mission)
+  return mission
+}))
 ipcMain.handle('board:getRecoveryGuide', trustedIpc(() => {
   const handoff = readRecoveryReceipt(handoffPath())
   const artifact = observeRecoveryArtifact(handoff)
@@ -821,8 +892,8 @@ ipcMain.handle('board:setBoardRoute', trustedIpc((_event, boardRoute) => {
     return boardRoute
   })
 }))
-ipcMain.handle('board:focusAgentSlot', trustedIpc((_event, slot) => runMappedAction(() => focusAgentSlotResult(slot))))
-ipcMain.handle('board:focusAttention', trustedIpc(() => runMappedAction(() => focusHighestPriorityAgentResult())))
+ipcMain.handle('board:focusAgentSlot', trustedIpc((_event, slot) => runMappedAction(() => focusAgentSlotResult(slot, displayedMissions.read('main')))))
+ipcMain.handle('board:focusAttention', trustedIpc(() => runMappedAction(() => focusHighestPriorityAgentResult(displayedMissions.read('main')))))
 ipcMain.handle('board:showCompactDeck', trustedIpc(() => {
   showCompactDeck()
   return { ok: true }
@@ -830,18 +901,19 @@ ipcMain.handle('board:showCompactDeck', trustedIpc(() => {
 
 ipcMain.handle('compact:getSnapshot', trustedCompactIpc(async () => {
   const mission = await missionControl(true)
+  displayedMissions.publish('compact', mission)
   const preferences = readCompactSettings(compactWindow?.getBounds())
   return projectCompactSnapshot(mission, { showTitles: preferences.showTitles })
 }))
 ipcMain.handle('compact:focusAgentSlot', trustedCompactIpc((_event, slot) => runMappedAction(
-  async () => projectCompactActionResult(await focusAgentSlotResult(slot)),
+  async () => projectCompactActionResult(await focusAgentSlotResult(slot, displayedMissions.read('compact'))),
   () => projectCompactActionResult(flightInterlockResult('Compact actions are disabled until hardware acceptance ends.')),
 )))
 ipcMain.handle('compact:focusAttention', trustedCompactIpc(async () => {
   return runMappedAction(async () => {
     requireCompactWorkflowAction('stage_attention', ACTION_SPECS)
     await executeSpec('stage_attention', readSettings().workspace, { clipboard, home: app.getPath('home') })
-    return projectCompactActionResult(await focusHighestPriorityAgentResult())
+    return projectCompactActionResult(await focusHighestPriorityAgentResult(displayedMissions.read('compact')))
   }, () => projectCompactActionResult(flightInterlockResult('Compact actions are disabled until hardware acceptance ends.')))
 }))
 ipcMain.handle('compact:runSkillAction', trustedCompactIpc(async (_event, actionId) => {
@@ -1158,7 +1230,7 @@ ipcMain.handle('board:saveFlightReceipt', trustedIpc(async (_event, receipt) => 
     },
   })
 }))
-ipcMain.handle('board:requestAction', trustedIpc(async (_event, actionId) => {
+ipcMain.handle('board:requestAction', trustedIpc(async (_event, actionId, selectedSlot) => {
   const settings = readSettings()
   if (!routeAllowsConfiguredActions(settings)) {
     approvals.clear()
@@ -1167,21 +1239,50 @@ ipcMain.handle('board:requestAction', trustedIpc(async (_event, actionId) => {
   if (flightActionsSuppressed()) return flightInterlockResult()
   const spec = ACTION_SPECS[actionId]
   if (!spec) return { ok:false,title:'Action unavailable',message:'This action is not allowlisted.',timestamp:new Date().toISOString() }
+  const selectedWorkspace = requiresSelectedSlotWorkspace(actionId)
+    ? resolveSelectedSlotWorkspace(selectedSlot, displayedMissions.read('main'))
+    : null
+  if (requiresSelectedSlotWorkspace(actionId) && !selectedWorkspace) {
+    return { ok:false,title:'Selected workspace unavailable',message:'Choose a current Codex or Claude slot with a verified local workspace, then try again. Agent Board will not fall back to a global directory.',timestamp:new Date().toISOString() }
+  }
+  const executionWorkspace = selectedWorkspace?.workspace ?? settings.workspace
+  const actionScope = selectedWorkspace
+    ? { slot: selectedWorkspace.slot, provider: selectedWorkspace.provider, workspaceLabel: selectedWorkspace.workspaceLabel, workspaceBound: true }
+    : undefined
+  const terminalPlan = spec.kind === 'terminal'
+    ? resolveTerminalPlan(actionId, executionWorkspace, {
+        home: app.getPath('home'),
+        workspaceIdentity: selectedWorkspace?.directoryIdentity,
+      })
+    : null
+  if (spec.kind === 'terminal' && !terminalPlan) {
+    return { ok:false,title:'Command authorization unavailable',message:'A trusted executable and unchanged workspace could not be bound to this action. No Terminal command was started.',timestamp:new Date().toISOString() }
+  }
   if (spec.safety !== 'safe') {
     const issuedAt = Date.now()
     const token = randomUUID()
-    approvals.set(token, {
+    const stored = approvals.set(token, {
       actionId,
-      workspace: settings.workspace,
+      workspace: executionWorkspace,
+      selectedSlot: selectedWorkspace?.slot ?? null,
+      provider: selectedWorkspace?.provider ?? null,
+      directoryIdentity: selectedWorkspace?.directoryIdentity ?? null,
+      targetIdentity: selectedWorkspace?.targetIdentity ?? null,
+      workspaceLabel: selectedWorkspace?.workspaceLabel ?? null,
+      terminalPlanIdentity: terminalPlanIdentity(terminalPlan),
       webContentsId: _event.sender.id,
       boardRoute: settings.boardRoute,
       safety: spec.safety,
       holdStartedAt: null,
       expires: issuedAt + 30_000,
     })
-    return { ok:true,title:'Confirmation required',message:'Review the consequence before continuing.',needsConfirmation:true,token,timestamp:new Date().toISOString() }
+    if (!stored) return { ok:false,title:'Authorization queue full',message:'Too many pending confirmations are open. Cancel or finish an existing confirmation, then try again.',timestamp:new Date().toISOString() }
+    return { ok:true,title:'Confirmation required',message:`Review this action for Agent ${selectedWorkspace?.slot ?? 'workspace'} before continuing.`,needsConfirmation:true,token,actionScope,timestamp:new Date().toISOString() }
   }
-  return runMappedAction(() => executeSpec(actionId, settings.workspace, { clipboard, home: app.getPath('home') }))
+  return runMappedAction(async () => ({
+    ...await executeSpec(actionId, executionWorkspace, { clipboard, home: app.getPath('home') }),
+    ...(actionScope ? { actionScope } : {}),
+  }))
 }))
 ipcMain.handle('board:beginHold', trustedIpc((_event, actionId, token) => {
   const settings = readSettings()
@@ -1205,17 +1306,46 @@ ipcMain.handle('board:cancelHold', trustedIpc((_event, actionId, token) => {
   approval.holdStartedAt = null
   return true
 }))
-ipcMain.handle('board:confirmAction', trustedIpc(async (_event, actionId, token) => {
-  const approval = approvals.get(token); approvals.delete(token)
+ipcMain.handle('board:cancelApproval', trustedIpc((_event, actionId, token) => {
+  const approval = approvals.get(token)
+  if (!approval || approval.actionId !== actionId || approval.webContentsId !== _event.sender.id) return false
+  return approvals.delete(token)
+}))
+ipcMain.handle('board:confirmAction', trustedIpc(async (_event, actionId, token, selectedSlot) => {
+  const approval = approvals.consume(token)
   const settings = readSettings()
   if (!routeAllowsConfiguredActions(settings)) return passiveRouteActionResult()
   if (flightActionsSuppressed()) return flightInterlockResult('The pending approval was canceled when hardware acceptance began.')
   if (!approval || approval.actionId !== actionId || approval.expires < Date.now()) return { ok:false,title:'Approval expired',message:'Select the action again to create a fresh authorization.',timestamp:new Date().toISOString() }
   if (approval.webContentsId !== _event.sender.id) return { ok:false,title:'Approval rejected',message:'The confirmation came from a different window.',timestamp:new Date().toISOString() }
   if (approval.boardRoute !== settings.boardRoute) return { ok:false,title:'Board route changed',message:'Review the action again after confirming the current active action route.',timestamp:new Date().toISOString() }
-  if (approval.workspace !== settings.workspace) return { ok:false,title:'Workspace changed',message:'Review the action again for the newly selected working directory.',timestamp:new Date().toISOString() }
+  let selectedWorkspace = null
+  if (requiresSelectedSlotWorkspace(actionId)) {
+    if (approval.selectedSlot !== selectedSlot) return { ok:false,title:'Agent slot changed',message:'Review the action again for the newly selected agent slot.',timestamp:new Date().toISOString() }
+    selectedWorkspace = resolveSelectedSlotWorkspace(selectedSlot, await missionControl(true))
+    if (!selectedWorkspace
+      || approval.workspace !== selectedWorkspace.workspace
+      || approval.workspaceLabel !== selectedWorkspace.workspaceLabel
+      || approval.directoryIdentity !== selectedWorkspace.directoryIdentity
+      || approval.targetIdentity !== selectedWorkspace.targetIdentity) {
+      return { ok:false,title:'Selected workspace changed',message:'The selected agent target or working directory changed. Review the action again against a fresh snapshot.',timestamp:new Date().toISOString() }
+    }
+  } else if (approval.workspace !== settings.workspace) return { ok:false,title:'Workspace changed',message:'Review the action again for the newly selected working directory.',timestamp:new Date().toISOString() }
+  const spec = ACTION_SPECS[actionId]
+  const terminalPlan = spec?.kind === 'terminal'
+    ? resolveTerminalPlan(actionId, approval.workspace, {
+        home: app.getPath('home'),
+        workspaceIdentity: selectedWorkspace?.directoryIdentity,
+      })
+    : null
+  if (spec?.kind === 'terminal' && (!terminalPlan || approval.terminalPlanIdentity !== terminalPlanIdentity(terminalPlan))) {
+    return { ok:false,title:'Command identity changed',message:'The trusted executable, test command, or workspace guard changed. Review the action again before opening Terminal.',timestamp:new Date().toISOString() }
+  }
   if (approval.safety === 'hold' && !holdSatisfied(approval)) return { ok:false,title:'Hold incomplete',message:'Keep holding continuously until the authorization indicator completes.',timestamp:new Date().toISOString() }
-  return runMappedAction(() => executeSpec(actionId, approval.workspace, { clipboard, home: app.getPath('home') }))
+  return runMappedAction(async () => ({
+    ...await executeSpec(actionId, approval.workspace, { clipboard, home: app.getPath('home'), terminalPlan }),
+    ...(approval.selectedSlot ? { actionScope: { slot: approval.selectedSlot, provider: approval.provider, workspaceLabel: approval.workspaceLabel, workspaceBound: true } } : {}),
+  }))
 }))
 
 app.setName('Ashlr Agent Board')

@@ -36,6 +36,7 @@ export interface CompactSnapshot {
   schema: 'ai.ashlr.agent-board.compact-snapshot/v1'
   observedAt: string
   agentSource: 'observer_online' | 'invalid' | 'unavailable'
+  codexCatalogSource: 'recent_tasks' | 'invalid' | 'unavailable'
   agents: CompactAgent[]
   attentionSlot: number | null
 }
@@ -98,6 +99,7 @@ const fallbackSnapshot: CompactSnapshot = {
   schema: 'ai.ashlr.agent-board.compact-snapshot/v1',
   observedAt: new Date(0).toISOString(),
   agentSource: 'unavailable',
+  codexCatalogSource: 'unavailable',
   agents: emptyAgents,
   attentionSlot: null,
 }
@@ -298,7 +300,11 @@ export default function CompactDeckApp() {
         setPreferences(nextPreferences)
         setSelectedSlot(nextSnapshot.attentionSlot ?? nextSnapshot.agents.find((agent) => agent.state !== 'off')?.slot ?? 1)
         setFailed(false)
-        setReceipt(nextSnapshot.agentSource === 'observer_online' ? 'Session feed live; hardware control unproven.' : 'Agent session feed is not available yet.')
+        setReceipt(nextSnapshot.agentSource === 'observer_online'
+          ? 'Session feed live; hardware control unproven.'
+          : nextSnapshot.codexCatalogSource === 'recent_tasks'
+            ? 'Recent Codex catalog available; hook feed is not live.'
+            : 'Agent session feed is not available yet.')
       })
       .catch(() => {
         if (!active) return
@@ -335,7 +341,11 @@ export default function CompactDeckApp() {
       <strong>Virtual Deck — Creator Micro 2 layout</strong>
       <span className={`route-label session-feed-label ${snapshot.agentSource}`} role="status">
         <i className={`bridge-light ${snapshot.agentSource}`} aria-hidden="true" />
-        {snapshot.agentSource === 'observer_online' ? 'session feed live' : snapshot.agentSource === 'invalid' ? 'session feed invalid' : 'session feed unavailable'}
+        {snapshot.agentSource === 'observer_online'
+          ? snapshot.codexCatalogSource === 'recent_tasks' ? 'hooks + recent Codex' : 'session feed live'
+          : snapshot.agentSource === 'invalid'
+            ? snapshot.codexCatalogSource === 'recent_tasks' ? 'hooks invalid · Codex catalog ready' : 'session feed invalid'
+            : snapshot.codexCatalogSource === 'recent_tasks' ? 'recent Codex catalog' : 'session feed unavailable'}
       </span>
       <button type="button" className="chrome-button" aria-label="Compact Deck settings" aria-expanded={settingsOpen} onClick={() => setSettingsOpen((open) => !open)}><Settings2 size={13} /></button>
       <button type="button" className="chrome-button" aria-label="Hide Compact Deck" onClick={() => { void hideDeck() }}><Minus size={15} /></button>

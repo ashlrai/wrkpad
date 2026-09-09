@@ -464,7 +464,13 @@ Do not remove a Fleet guard merely to turn the UI green. Resolve the named issue
 
 ## Selecting a slot opens the wrong surface
 
-The focus contract is narrow: Codex opens ChatGPT, Claude Code opens cmux, and unknown providers open nothing. Exact Codex task and cmux pane correlation are not implemented. There is no window search, terminal typing, or prompt fallback.
+The focus contract is narrow. A hook-observed Codex slot foregrounds ChatGPT at
+the application level. A recent Codex catalog slot dispatches its validated task
+deep link, but LaunchServices does not provide a visible-focus receipt; confirm
+the task on screen before acting. Claude Code slots currently foreground cmux
+because private locator capture, one-use authorization issuance, and password
+enrollment are not enabled. Unknown providers open nothing. There is no window
+search, terminal typing, prompt submission, or exact cmux-pane fallback.
 
 ## A CLI appears missing
 
@@ -474,7 +480,7 @@ The doctor evaluates prerequisites for the requested route. **Ashlr Layer** requ
 
 ## A confirmation expires
 
-Authorizations expire after 30 seconds and fail if the window, action, or workspace changes. Select the action again. Hold actions also require a continuous 1.6-second hold.
+Authorizations expire after 30 seconds and fail if the window, action, selected slot, workspace, detected test command, or resolved executable identity changes. Cancel explicitly revokes the pending main-process token, and the bounded authorization store prunes expired entries. Select the action again. Hold actions also require a continuous 1.6-second hold.
 
 ## The package will not open
 

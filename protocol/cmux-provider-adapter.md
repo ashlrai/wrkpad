@@ -88,12 +88,18 @@ cached “cmux connected” flag:
    `automation`, `allowAll`, `off`, missing, and unknown modes all fail closed.
 4. Pin that admitted socket path for the remainder of the attempt. Run `--socket
    <admitted-path> --json --id-format uuids identify --workspace <workspace>
-   --surface <surface>` and require the echoed socket path, bundle identifier,
-   fixed app/binary/CLI paths, and both locators to match the stored association.
-   Capture the same-user Unix socket's device and inode before this probe and
-   require that fingerprint to remain unchanged after identify, app foreground,
-   workspace selection, and surface focus. A pathname alone is not server-instance
-   identity because a different listener can replace it between subprocesses.
+   --surface <surface>` and require the echoed socket path and caller UUIDs to
+   match the stored association. The exact inspected `0.62.2` schema has
+   `socket_path`, `focused`, and `caller` but no bundle/app/binary/CLI provenance
+   fields, so only that exact version may take the legacy branch. It must still
+   originate from the fixed bundled CLI invocation and satisfy every capability,
+   access-mode, and socket check. If any newer provenance field is present, all
+   fields must be present and exactly match the expected bundle and paths; partial
+   or mismatched provenance fails closed. Capture the mode-`0600` same-user Unix
+   socket's device and inode before this probe and require that fingerprint to
+   remain unchanged after identify, app foreground, workspace selection, and
+   surface focus. A pathname alone is not server-instance identity because a
+   different listener can replace it between subprocesses.
 5. Only within that same bounded operation, and still pinned to the admitted
    socket path, run `select-workspace --workspace <workspace>` followed by
    `focus-panel --workspace <workspace> --panel <surface>`.

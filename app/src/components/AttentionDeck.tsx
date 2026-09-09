@@ -28,7 +28,9 @@ function Slot({ agent, selected, outsideLens, onSelect, onFocus }: {
   const ProviderIcon = agent.provider === 'claude' ? Bot : agent.provider === 'codex' ? Command : Radio
   const visibleState = agentVisibleStateLabel(agent)
   const providerLabel = agentProviderLabel(agent)
-  const consequence = agent.provider && agent.state !== 'off' ? 'Activate to open its provider app.' : 'Activate to select this slot.'
+  const consequence = agent.targeting === 'codex_deep_link'
+    ? 'Activate to request this recent task in Codex.'
+    : agent.provider && agent.state !== 'off' ? 'Activate to open its provider app.' : 'Activate to select this slot.'
   return <button
     type="button"
     className={`attention-slot ${agent.provider ?? 'empty'} state-${agent.state} ${selected ? 'selected' : ''} ${outsideLens ? 'outside-lens' : ''}`}
@@ -39,14 +41,16 @@ function Slot({ agent, selected, outsideLens, onSelect, onFocus }: {
     <span className="slot-index">AG0{agent.slot - 1}</span>
     <span className="slot-provider"><ProviderIcon size={13} />{agent.provider === 'claude' ? 'CLAUDE' : agent.provider === 'codex' ? 'CODEX' : agent.provider === 'manual' ? 'LOCAL' : 'OPEN'}</span>
     <strong>{agent.title}</strong>
+    {agent.targeting === 'codex_deep_link' && <span className="slot-workspace">Workspace bound</span>}
     <span className="slot-state"><StateIcon state={agent.state} />{visibleState}</span>
   </button>
 }
 
-export default function AttentionDeck({ agents, selectedSlot, source, boardRoute, onSelect, onFocus }: {
+export default function AttentionDeck({ agents, selectedSlot, source, codexCatalogSource, boardRoute, onSelect, onFocus }: {
   agents: AgentSlotSummary[]
   selectedSlot: number
   source: 'observer_online' | 'invalid' | 'unavailable'
+  codexCatalogSource?: 'recent_tasks' | 'invalid' | 'unavailable'
   boardRoute: BoardRoute
   onSelect: (slot: number) => void
   onFocus: (slot: number) => void
@@ -79,7 +83,10 @@ export default function AttentionDeck({ agents, selectedSlot, source, boardRoute
     <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{urgentAnnouncement}</div>
     <div className="attention-heading">
       <div><span className="eyebrow">LIVE ATTENTION RUNWAY</span><h2 id="attention-title">One stable screen and Ashlr-layer map.</h2></div>
-      <span className={`source-receipt ${source}`}>{source === 'observer_online' ? 'CURRENT SNAPSHOT' : source === 'invalid' ? 'SESSION SNAPSHOT INVALID' : 'SESSION SNAPSHOT UNAVAILABLE'}</span>
+      <span className={`source-receipt ${source}`}>{source === 'observer_online'
+        ? codexCatalogSource === 'recent_tasks' ? 'HOOKS + RECENT CODEX' : 'CURRENT HOOK SNAPSHOT'
+        : source === 'invalid' ? codexCatalogSource === 'recent_tasks' ? 'HOOKS INVALID · RECENT CODEX AVAILABLE' : 'SESSION SNAPSHOT INVALID'
+          : codexCatalogSource === 'recent_tasks' ? 'RECENT CODEX CATALOG' : 'SESSION SNAPSHOT UNAVAILABLE'}</span>
     </div>
     <div className="provider-routing-row">
       <div className={`provider-contract route-${boardRoute}`} role="note">
@@ -103,7 +110,7 @@ export default function AttentionDeck({ agents, selectedSlot, source, boardRoute
       <div className="slot-row top"><span className="slot-anchor" aria-hidden="true">DIAL</span>{slots.slice(0, 2).map((agent) => <Slot key={agent.slot} agent={agent} selected={agent.slot === selectedSlot} outsideLens={outsideLens(agent)} onSelect={onSelect} onFocus={onFocus} />)}<span className="slot-anchor" aria-hidden="true">STICK</span></div>
       <div className="slot-row bottom">{slots.slice(2).map((agent) => <Slot key={agent.slot} agent={agent} selected={agent.slot === selectedSlot} outsideLens={outsideLens(agent)} onSelect={onSelect} onFocus={onFocus} />)}</div>
     </div>
-    <p className="appsense-handoff"><strong>Provider handoff:</strong> an occupied slot uses observed provider metadata to foreground ChatGPT or cmux. Exact Codex task focus is unavailable; cmux pane focus is upgradeable only after capability negotiation and human-enabled access. No prompt, terminal input, or key is sent.</p>
+    <p className="appsense-handoff"><strong>Provider handoff:</strong> a hook-observed Codex slot foregrounds Codex Desktop, while a recent Codex catalog slot dispatches its validated task deep link; the app cannot verify what is visibly focused. Hook-observed Claude slots foreground cmux until private pane locators and human-enabled password access are enrolled. No prompt, terminal input, or key is sent.</p>
     <div className="screen-legend" aria-label="Agent state legend for opaque keycaps">
       <span className="legend-title">BLACK-CAP LEGEND</span>
       {agentStateLegendOrder.map((state) => <span key={state}><i className={agentStateClassName(state)} />{agentStateLabels[state]}</span>)}
