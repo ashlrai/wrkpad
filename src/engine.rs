@@ -6,7 +6,10 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::HASP_SCHEMA;
-use crate::model::{AgentState, ApplyOutcome, BoardSnapshot, HaspEvent, SessionRecord, SlotView};
+use crate::model::{
+    AgentState, ApplyOutcome, BoardSnapshot, CWD_REVOKED_SENTINEL, EventKind, HaspEvent,
+    SessionRecord, SlotView,
+};
 
 const SLOT_COUNT: usize = 6;
 const EVENT_HISTORY_LIMIT: usize = 4096;
@@ -23,6 +26,8 @@ pub enum EngineError {
     TitleTooLong,
     #[error("cwd exceeds 4096 characters")]
     CwdTooLong,
+    #[error("event timestamp predates the current session state")]
+    OutOfOrderEvent,
     #[error("all six sticky slots are protected; acknowledge or forget an inactive session")]
     SlotsFull,
     #[error("agent slot must be between AG00 and AG05")]
@@ -66,6 +71,14 @@ impl StateEngine {
             });
         }
 
+        if self
+            .sessions
+            .get(&event.session_id)
+            .is_some_and(|session| event.at < session.updated_at)
+        {
+            return Err(EngineError::OutOfOrderEvent);
+        }
+
         let previous_engine = self.clone();
         let current_state = self
             .sessions
@@ -78,6 +91,17 @@ impl StateEngine {
             .map_or(event.at, |session| session.first_seen_at);
         let previous = self.sessions.get(&event.session_id).cloned();
 
+        let cwd = if matches!(event.kind, EventKind::SessionEnd)
+            || event.cwd.as_deref() == Some(CWD_REVOKED_SENTINEL)
+        {
+            None
+        } else {
+            event
+                .cwd
+                .clone()
+                .or_else(|| previous.as_ref().and_then(|session| session.cwd.clone()))
+        };
+
         self.sessions.insert(
             event.session_id.clone(),
             SessionRecord {
@@ -88,10 +112,7 @@ impl StateEngine {
                     .title
                     .clone()
                     .or_else(|| previous.as_ref().and_then(|session| session.title.clone())),
-                cwd: event
-                    .cwd
-                    .clone()
-                    .or_else(|| previous.as_ref().and_then(|session| session.cwd.clone())),
+                cwd,
                 first_seen_at,
                 updated_at: event.at,
                 last_event_id: event.event_id,
@@ -278,6 +299,75 @@ mod tests {
     }
 
     #[test]
+    fn absent_cwd_inherits_but_explicit_revocation_does_not() -> anyhow::Result<()> {
+        let mut engine = StateEngine::default();
+        let mut start = HaspEvent::new(Provider::Claude, "claude-cwd", EventKind::Working);
+        start.cwd = Some("/work/repo".to_owned());
+        engine.apply(start)?;
+
+        let inherited = engine.apply(HaspEvent::new(
+            Provider::Claude,
+            "claude-cwd",
+            EventKind::NeedsInput,
+        ))?;
+        assert_eq!(
+            inherited.snapshot.slots[0]
+                .session
+                .as_ref()
+                .and_then(|session| session.cwd.as_deref()),
+            Some("/work/repo")
+        );
+
+        let mut revoked = HaspEvent::new(Provider::Claude, "claude-cwd", EventKind::Working);
+        revoked.cwd = Some(super::CWD_REVOKED_SENTINEL.to_owned());
+        let revoked = engine.apply(revoked)?;
+        assert_eq!(
+            revoked.snapshot.slots[0]
+                .session
+                .as_ref()
+                .and_then(|session| session.cwd.as_deref()),
+            None
+        );
+        assert!(!serde_json::to_string(&revoked.snapshot)?.contains(r#""cwd":"""#));
+
+        let still_absent = engine.apply(HaspEvent::new(
+            Provider::Claude,
+            "claude-cwd",
+            EventKind::NeedsInput,
+        ))?;
+        assert_eq!(
+            still_absent.snapshot.slots[0]
+                .session
+                .as_ref()
+                .and_then(|session| session.cwd.as_deref()),
+            None
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn session_end_clears_cwd_even_when_attention_state_is_retained() -> anyhow::Result<()> {
+        let mut engine = StateEngine::default();
+        let mut error = HaspEvent::new(Provider::Codex, "codex-cwd", EventKind::Error);
+        error.cwd = Some("/work/repo".to_owned());
+        engine.apply(error)?;
+
+        let ended = engine.apply(HaspEvent::new(
+            Provider::Codex,
+            "codex-cwd",
+            EventKind::SessionEnd,
+        ))?;
+        let session = ended.snapshot.slots[0]
+            .session
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("retained attention record disappeared"))?;
+        assert_eq!(session.state, AgentState::Error);
+        assert_eq!(session.cwd, None);
+        assert!(!serde_json::to_string(&ended.snapshot)?.contains("/work/repo"));
+        Ok(())
+    }
+
+    #[test]
     fn higher_priority_session_evicts_oldest_lower_priority_slot() -> anyhow::Result<()> {
         let mut engine = StateEngine::default();
         let base = Utc::now() - Duration::minutes(10);
@@ -307,6 +397,76 @@ mod tests {
         assert!(!first.duplicate);
         assert!(second.duplicate);
         assert_eq!(first.snapshot.revision, second.snapshot.revision);
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_older_lifecycle_events_without_regressing_attention() -> anyhow::Result<()> {
+        let mut engine = StateEngine::default();
+        let base = Utc::now();
+
+        let mut initial_working =
+            HaspEvent::new(Provider::Claude, "claude-ordered", EventKind::Working);
+        initial_working.at = base + Duration::seconds(1);
+        let initial_working_replay = initial_working.clone();
+        engine.apply(initial_working)?;
+
+        let mut needs_input =
+            HaspEvent::new(Provider::Claude, "claude-ordered", EventKind::NeedsInput);
+        needs_input.at = base + Duration::seconds(2);
+        needs_input.title = Some("current title".to_owned());
+        let accepted = engine.apply(needs_input)?;
+        let accepted_session = accepted.snapshot.slots[0]
+            .session
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("session was not assigned"))?;
+        assert_eq!(accepted_session.state, AgentState::NeedsInput);
+
+        let duplicate = engine.apply(initial_working_replay)?;
+        assert!(duplicate.duplicate);
+        assert_eq!(duplicate.snapshot.revision, accepted.snapshot.revision);
+        assert_eq!(
+            duplicate.snapshot.slots[0]
+                .session
+                .as_ref()
+                .map(|session| session.state),
+            Some(AgentState::NeedsInput)
+        );
+
+        let mut older_working =
+            HaspEvent::new(Provider::Claude, "claude-ordered", EventKind::Working);
+        older_working.at = base + Duration::milliseconds(1_500);
+        older_working.title = Some("stale title".to_owned());
+        let rejected_event_id = older_working.event_id;
+        assert!(matches!(
+            engine.apply(older_working),
+            Err(super::EngineError::OutOfOrderEvent)
+        ));
+
+        let after_rejection = engine.snapshot();
+        let current = after_rejection.slots[0]
+            .session
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("session disappeared"))?;
+        assert_eq!(after_rejection.revision, accepted.snapshot.revision);
+        assert_eq!(current.state, AgentState::NeedsInput);
+        assert_eq!(current.updated_at, base + Duration::seconds(2));
+        assert_eq!(current.title.as_deref(), Some("current title"));
+        assert_eq!(current.last_event_id, accepted_session.last_event_id);
+        assert!(!engine.seen_events.contains(&rejected_event_id));
+        assert!(!engine.event_history.contains(&rejected_event_id));
+
+        let mut newer_working =
+            HaspEvent::new(Provider::Claude, "claude-ordered", EventKind::Working);
+        newer_working.at = base + Duration::seconds(3);
+        let resumed = engine.apply(newer_working)?;
+        assert_eq!(
+            resumed.snapshot.slots[0]
+                .session
+                .as_ref()
+                .map(|session| session.state),
+            Some(AgentState::Working)
+        );
         Ok(())
     }
 

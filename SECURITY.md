@@ -23,9 +23,10 @@ are response targets, not a service-level agreement or bug-bounty promise.
 
 ## Supported scope
 
-Until component-specific signed release policies exist, security fixes target
-the current `main` branch and latest namespaced prerelease tag. Core releases use
-`wrkpad-v*`; desktop releases use `agent-board-v*`.
+Until the first component-specific release exists, security fixes target the
+current `main` branch. Future core releases will use `wrkpad-v*`; future desktop
+releases will use `agent-board-v*`. This statement does not claim that either tag
+or a supported binary release exists today.
 
 In scope includes:
 
@@ -56,7 +57,9 @@ See [the desktop supplement](app/SECURITY.md) and the retained
   foreign or ambiguous configuration.
 - Device evidence is exact-version gated. VID/PID or process absence alone never
   authorizes writes or proves exclusive ownership.
-- Current source performs no HID, keymap, profile, firmware, or bootloader writes.
+- Current source does not mutate Input's cache/database, active profile, HID
+  state, keymap, firmware, bootloader, or device filesystem. Agent Board can
+  write a new private offline profile export selected by the operator.
 - Agent Board exposes allowlisted action IDs only. Consequential actions require
   confirmation or a continuous main-process hold.
 - No one-press push, merge, deploy, publish, delete, spend, credential, or

@@ -12,8 +12,10 @@ execution are especially important.
 
 ## Supported versions
 
-Until the project reaches `1.0.0`, security fixes are made on the default branch
-and the latest tagged `0.x` release. Older prereleases may not receive patches.
+No Agent Board release is currently published. Security fixes target the default
+branch until the first namespaced `agent-board-v*` release exists; a source or
+ad-hoc-sealed local or CI audit build is not a supported binary release. Public
+CI does not upload the non-distribution application package.
 
 ## Report a vulnerability privately
 

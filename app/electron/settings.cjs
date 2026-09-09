@@ -2,8 +2,14 @@ const { existsSync, readFileSync, renameSync, statSync, writeFileSync } = requir
 const { randomUUID } = require('node:crypto')
 const path = require('node:path')
 
+const APP_DATA_DIRECTORY_NAME = 'ashlr-agent-board'
 const MAX_SETTINGS_BYTES = 64 * 1024
-const BOARD_ROUTES = new Set(['unknown', 'codex_native', 'ashlr_layer'])
+const BOARD_ROUTES = new Set(['unknown', 'codex_native', 'ashlr_layer', 'hybrid_native'])
+
+function appSettingsPath(appDataRoot) {
+  if (!validWorkspace(appDataRoot)) throw new TypeError('appDataRoot must be an absolute local path')
+  return path.join(appDataRoot, APP_DATA_DIRECTORY_NAME, 'settings.json')
+}
 
 function validWorkspace(value) {
   return typeof value === 'string' && path.isAbsolute(value) && value.length <= 4096 && !value.includes('\0')
@@ -54,6 +60,7 @@ const readWorkspaceSettings = readAppSettings
 module.exports = {
   BOARD_ROUTES,
   MAX_SETTINGS_BYTES,
+  appSettingsPath,
   readAppSettings,
   readWorkspaceSettings,
   saveBoardRouteSettings,

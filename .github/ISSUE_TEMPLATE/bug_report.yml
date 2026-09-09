@@ -35,3 +35,20 @@ body:
       description: OS, architecture, commit or version, firmware if relevant, and redacted doctor output.
     validations:
       required: true
+  - type: dropdown
+    id: board_route
+    attributes:
+      label: Declared board route
+      description: Choose the route you were actually testing; they have different owners and acceptance gates.
+      options:
+        - Not a hardware issue
+        - Ashlr Layer (shared Codex and Claude shortcuts)
+        - Codex Native (exclusive native protocol)
+        - Unknown or not selected
+    validations:
+      required: true
+  - type: textarea
+    id: hardware_evidence
+    attributes:
+      label: Hardware evidence
+      description: If relevant, include redacted preflight/doctor reason codes, Input version, firmware version, and whether USB discovery, provider receipt, and physical Flight Check passed separately.

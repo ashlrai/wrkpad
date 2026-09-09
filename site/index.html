@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="wrkpad is a local-first tactile control plane for Codex, Claude Code, and agentic engineering fleets.">
+  <meta name="theme-color" content="#111318">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self'; style-src 'self'; script-src 'self'; connect-src 'none'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="wrkpad — Tactile agent operations">
+  <meta property="og:description" content="See the six agents that need you. Run bounded engineering actions. Keep consequential authority human.">
+  <meta name="twitter:card" content="summary">
+  <title>wrkpad — Tactile agent operations</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css"><script src="app.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to main content</a>
+  <div class="preview" role="note"><strong>Developer preview.</strong> Build from source today. This checked-in page is a source preview, not proof of a GitHub Pages deployment. Signed distribution, physical RGB support, and full hardware acceptance are still gated.</div>
+  <header>
+    <a class="logo" href="#top" aria-label="wrkpad home"><i aria-hidden="true"></i>wrkpad</a>
+    <nav aria-label="Primary"><a href="#demo">Demo</a><a href="#commissioner">Commissioner</a><a href="#safety">Safety</a><a href="#source">Open source</a><a href="#organizations">Organizations</a><a href="https://github.com/ashlrai/wrkpad">GitHub</a></nav>
+  </header>
+  <main id="main">
+    <section class="hero" id="top">
+      <div class="hero-copy">
+        <p class="signal-line"><i></i>Local-first. Screen-legible. Human-authorized.</p>
+        <h1>One tactile control plane for Codex, Claude Code, and local agent fleets.</h1>
+        <p class="lede">See the six agents that need you, focus their native tools, and run bounded engineering actions while approvals and release authority stay human.</p>
+        <div class="actions"><a class="button primary" href="#build">Build locally</a><a class="button" href="#demo">Explore the synthetic demo</a></div>
+        <ul class="facts"><li><b>MIT</b> core</li><li><b>Apache-2.0</b> app</li><li><b>0</b> device writes</li><li><b>6</b> stable slots</li></ul>
+      </div>
+      <aside class="hero-device" aria-labelledby="hardware-reference-title">
+        <div class="hero-device-head"><div><span>Interactive screen twin</span><h2 id="hardware-reference-title">Creator Micro 2 layout</h2></div><b>Synthetic</b></div>
+        <div class="hero-chassis" role="group" aria-label="Synthetic four by four Creator Micro 2 control layout. Dial left, directional stick right, thirteen switches, and touch selector.">
+          <button class="hero-control hero-dial" type="button" data-hero-target="Dial press" aria-label="Dial on the left. Open its synthetic demo control"><i aria-hidden="true"></i><span>Dial</span></button>
+          <button class="hero-cap agent error" type="button" data-hero-target="Chat 1"><span>01</span><b>Needs you</b></button>
+          <button class="hero-cap agent working" type="button" data-hero-target="Chat 2"><span>02</span><b>Working</b></button>
+          <button class="hero-control hero-stick" type="button" data-hero-target="Planar right" aria-label="Four-direction planar stick on the right. Open its synthetic demo control"><i aria-hidden="true"></i><span>4-way stick</span></button>
+          <button class="hero-cap agent complete" type="button" data-hero-target="Chat 3"><span>03</span><b>Ready</b></button>
+          <button class="hero-cap agent idle" type="button" data-hero-target="Chat 4"><span>04</span><b>Idle</b></button>
+          <button class="hero-cap agent" type="button" data-hero-target="Chat 5"><span>05</span><b>Open</b></button>
+          <button class="hero-cap agent" type="button" data-hero-target="Chat 6"><span>06</span><b>Open</b></button>
+          <button class="hero-cap" type="button" data-hero-target="Amplify"><span>07</span><b>Amplify</b></button>
+          <button class="hero-cap" type="button" data-hero-target="Verify"><span>08</span><b>Verify</b></button>
+          <button class="hero-cap" type="button" data-hero-target="Polish"><span>09</span><b>Polish</b></button>
+          <button class="hero-cap" type="button" data-hero-target="Advance"><span>10</span><b>Advance</b></button>
+          <button class="hero-control hero-touch" type="button" data-hero-target="Layer and connection touch" aria-label="Firmware-owned touch selector. Open its synthetic demo control"><i aria-hidden="true"></i><span>Layer</span></button>
+          <button class="hero-cap" type="button" data-hero-target="Voice"><span>11</span><b>Voice</b></button>
+          <button class="hero-cap" type="button" data-hero-target="Copy next brief"><span>12</span><b>Copy next</b></button>
+          <button class="hero-cap hero-clear error" type="button" data-hero-target="Attention"><span>13</span><b>Attention</b></button>
+        </div>
+        <p class="hero-device-note"><span><b>13</b> switches</span><span><b>1</b> rotary dial</span><span><b>4</b> stick directions</span><span><b>1</b> touch selector</span></p>
+        <a href="https://worklouder.cc/creator-micro-2">See the real hardware on Work Louder</a>
+        <small>Original CSS illustration—not a product photograph. Independent interoperability project; official media is not bundled.</small>
+      </aside>
+    </section>
+
+    <section class="evidence" aria-label="Trust boundaries">
+      <a href="https://github.com/ashlrai/wrkpad/blob/main/docs/architecture.md"><b>Local state</b><span>Authenticated loopback</span></a><a href="https://github.com/ashlrai/wrkpad/blob/main/SECURITY.md"><b>Bounded authority</b><span>No provider approvals</span></a><a href="https://github.com/ashlrai/wrkpad/blob/main/protocol/device-interoperability.md"><b>Observe-only device</b><span>No HID writes</span></a><a href="https://github.com/ashlrai/wrkpad/blob/main/docs/release.md"><b>Evidence first</b><span>Release gates stay separate</span></a>
+    </section>
+
+    <section class="section demo" id="demo">
+      <div class="heading"><div><p>Screen legend for black keycaps</p><h2>The board explains itself.</h2></div><p>The six chat positions never move. Text, icon, color, and freshness stay visible on screen—even when the physical caps are opaque.</p></div>
+      <div class="demo-toolbar">
+        <div class="mode-switch" role="group" aria-label="Demo surface"><span>Surface</span><button type="button" data-view="hardware" aria-pressed="true" aria-controls="demo-board">Hardware</button><button type="button" data-view="deck" aria-pressed="false" aria-controls="demo-board">Desktop Deck</button></div>
+        <div class="scene-switch" role="group" aria-label="Synthetic workload"><span>Workload</span><button type="button" data-scene="build" aria-pressed="true">Live build</button><button type="button" data-scene="review" aria-pressed="false">Review queue</button><button type="button" data-scene="quiet" aria-pressed="false">Quiet desk</button></div>
+      </div>
+      <div class="route" role="group" aria-label="Synthetic route preview"><button type="button" data-route="ashlr" aria-pressed="true">Ashlr Layer</button><button type="button" data-route="native" aria-pressed="false">Codex Native</button><span id="route-summary">Shared Codex + Claude/cmux shortcuts. Actions remain guarded.</span></div>
+      <p class="keyboard-guide" id="keyboard-guide"><strong>Keyboard or numpad:</strong> 1–6 agents · 7–0 delivery · arrows move the four-way stick · [ / ] or numpad − / + turns the dial · V voice · N previews Copy next · Space attention.</p>
+      <div class="demo-grid">
+        <div class="board" id="demo-board" role="region" data-view="hardware" data-scene="build" aria-label="Synthetic Creator Micro 2 screen twin" aria-describedby="keyboard-guide">
+          <div class="board-head"><span id="surface-name">Creator Micro 2 · hardware map</span><b>Synthetic demo</b></div>
+          <div class="keys">
+            <div class="control dial" role="group" aria-label="Rotary dial on the left"><button class="dial-step dial-back" type="button" data-control="Dial left" data-detail="Move backward through the synthetic review timeline" data-shortcut="[" aria-keyshortcuts="[" aria-label="Turn rotary dial left">−</button><button class="dial-face" type="button" data-control="Dial press" data-detail="Select the highlighted synthetic timeline item" data-shortcut="D" aria-keyshortcuts="D" aria-label="Press rotary dial"><i aria-hidden="true"></i><span>Review timeline</span></button><button class="dial-step dial-forward" type="button" data-control="Dial right" data-detail="Move forward through the synthetic review timeline" data-shortcut="]" aria-keyshortcuts="]" aria-label="Turn rotary dial right">+</button></div>
+            <button class="key agent error selected" type="button" data-slot="0" data-control="Chat 1" data-detail="Needs your input · review blocked" data-shortcut="1" aria-keyshortcuts="1"><span>01</span><b>Needs you</b><small>Codex</small></button>
+            <button class="key agent working" type="button" data-slot="1" data-control="Chat 2" data-detail="Working · tests running" data-shortcut="2" aria-keyshortcuts="2"><span>02</span><b>Working</b><small>Claude</small></button>
+            <div class="control joystick" role="group" aria-label="Four-direction planar stick on the right"><button class="joy-up" type="button" data-control="Planar up" data-detail="Move to the synthetic status lane above" data-shortcut="↑" aria-keyshortcuts="ArrowUp" aria-label="Move planar stick up">↑</button><button class="joy-left" type="button" data-control="Planar left" data-detail="Move to the previous synthetic workspace" data-shortcut="←" aria-keyshortcuts="ArrowLeft" aria-label="Move planar stick left">←</button><i class="joy-center" aria-hidden="true"></i><button class="joy-right" type="button" data-control="Planar right" data-detail="Move to the next synthetic workspace" data-shortcut="→" aria-keyshortcuts="ArrowRight" aria-label="Move planar stick right">→</button><button class="joy-down" type="button" data-control="Planar down" data-detail="Move to the synthetic status lane below" data-shortcut="↓" aria-keyshortcuts="ArrowDown" aria-label="Move planar stick down">↓</button></div>
+            <button class="key agent complete" type="button" data-slot="2" data-control="Chat 3" data-detail="Ready to review · diff prepared" data-shortcut="3" aria-keyshortcuts="3"><span>03</span><b>Ready</b><small>Codex</small></button>
+            <button class="key agent idle" type="button" data-slot="3" data-control="Chat 4" data-detail="Idle · repo enrolled" data-shortcut="4" aria-keyshortcuts="4"><span>04</span><b>Idle</b><small>Fleet</small></button>
+            <button class="key agent" type="button" data-slot="4" data-control="Chat 5" data-detail="Available slot" data-shortcut="5" aria-keyshortcuts="5"><span>05</span><b>Open</b><small>Available</small></button>
+            <button class="key agent" type="button" data-slot="5" data-control="Chat 6" data-detail="Available slot" data-shortcut="6" aria-keyshortcuts="6"><span>06</span><b>Open</b><small>Available</small></button>
+            <button class="key action" type="button" data-control="Amplify" data-detail="Prepare an ambitious, multi-agent expansion brief" data-shortcut="7" aria-keyshortcuts="7"><span>07</span><b>Amplify</b><small>Prepared brief</small></button>
+            <button class="key action" type="button" data-control="Verify" data-detail="Run allowlisted checks and collect exact evidence" data-shortcut="8" aria-keyshortcuts="8"><span>08</span><b>Verify</b><small>Local checks</small></button>
+            <button class="key action" type="button" data-control="Polish" data-detail="Prepare a production-readiness and documentation pass" data-shortcut="9" aria-keyshortcuts="9"><span>09</span><b>Polish</b><small>Prepared brief</small></button>
+            <button class="key action" type="button" data-control="Advance" data-detail="Prepare the safest highest-value next step" data-shortcut="0" aria-keyshortcuts="0"><span>10</span><b>Advance</b><small>Prepared brief</small></button>
+            <button class="control touch" type="button" data-control="Layer and connection touch" data-detail="Preview the firmware-owned layer and connection selector" data-shortcut="L" aria-keyshortcuts="L" aria-label="Firmware-owned touch selector"><span aria-hidden="true"></span><i aria-hidden="true"></i><i aria-hidden="true"></i><i aria-hidden="true"></i><small>Layer / link</small></button>
+            <button class="key utility" type="button" data-control="Voice" data-detail="Proposed: stage a local voice capture" data-shortcut="V" aria-keyshortcuts="V"><span>11</span><b>Voice</b><small>Proposed</small></button>
+            <button class="key utility" type="button" data-control="Copy next brief" data-detail="Preview a bounded continuation brief for the operator to copy, review, and submit" data-shortcut="N" aria-keyshortcuts="N"><span>12</span><b>Copy next brief</b><small>Clipboard-only proposal</small></button>
+            <button class="key hero-key transparent-key" type="button" data-control="Attention" data-detail="Select and foreground the highest-priority visible item" data-shortcut="Space" aria-keyshortcuts="Space"><span>13</span><b>Attention</b><small>Transparent · never replies</small></button>
+          </div>
+          <div class="legend"><span><i class="red"></i>Error</span><span><i class="amber"></i>Needs you</span><span><i class="blue"></i>Working</span><span><i class="green"></i>Ready</span><span><i class="white"></i>Idle</span></div>
+        </div>
+        <aside class="receipt"><span>Selected control</span><h3 id="control-name">Chat 1</h3><p id="control-detail">Needs your input · review blocked</p><dl><div><dt>Surface</dt><dd id="control-surface">Hardware</dd></div><div><dt>Route</dt><dd id="control-route">Ashlr Layer</dd></div><div><dt>Authority</dt><dd id="control-authority">Preview only</dd></div><div><dt>Evidence</dt><dd>Synthetic fixture</dd></div></dl><small>This demo never reads local agents, opens apps, sends input, or controls hardware.</small><p class="demo-announcement" id="demo-announcement" role="status" aria-live="polite">Hardware simulator ready. Select any control.</p></aside>
+      </div>
+    </section>
+
+    <section class="sequence"><div class="heading one"><div><p>Complete operator loop</p><h2>Observe. Choose. Act. Prove.</h2></div></div><ol><li><b>Observe</b><p>Sanitized lifecycle events become six sticky status slots.</p></li><li><b>Choose</b><p>Select the work without sending a prompt.</p></li><li><b>Act</b><p>Use direct, confirm, or continuous-hold safety.</p></li><li><b>Prove</b><p>Keep source, provider, hardware, and human acceptance separate.</p></li></ol></section>
+
+    <section class="section grammar" id="grammar"><div class="heading"><div><p>Four implemented delivery modes</p><h2>Replace repeated prompting with an operating contract.</h2></div><p>The provider-neutral <code>$ashlr-delivery</code> contract is implemented in repository source; automatic discovery and one provider-fired invocation remain unverified. This synthetic demo keeps submission under operator control.</p></div><div class="command-grid">
+      <article><span>ACT06 / 01</span><b>Amplify</b><p>Map the ambitious end state, delegate independent investigation, and extend the useful scope without crossing authority boundaries.</p><small>Prepared brief · no automatic send</small></article>
+      <article><span>ACT07 / 02</span><b>Verify</b><p>Run exact tests, inspect failure modes, and report what source, packaging, provider, and physical evidence each result actually proves.</p><small>Allowlisted local checks</small></article>
+      <article><span>ACT08 / 03</span><b>Polish</b><p>Make the current slice clearer, safer, more accessible, better documented, and ready for independent review.</p><small>Prepared brief · no automatic send</small></article>
+      <article><span>ACT09 / 04</span><b>Advance</b><p>Choose the safest highest-value next action, complete it, and leave a precise receipt instead of stopping at a suggestion.</p><small>Prepared brief · no automatic send</small></article>
+    </div><p class="skill-call"><a href="https://github.com/ashlrai/wrkpad/blob/main/.agents/skills/ashlr-delivery/SKILL.md">Source-implemented contract</a>: <code>$ashlr-delivery Amplify|Verify|Polish|Advance</code></p></section>
+
+    <section class="section workflows"><div class="heading"><div><p>One grammar, three operating planes</p><h2>Useful across the tools you already run.</h2></div><p>The guarded Dual Plane profile keeps Codex Native on firmware layer 1 and gives Codex, Claude Code, cmux, and Fleet one provider-neutral workflow on layer 2. An opt-in Hybrid Native source experiment instead splits layer 1: six Codex-only Agent keys plus fourteen Agent Board shortcuts. Neither profile is imported or physically accepted by source tests.</p></div><div class="rows">
+      <article><span>Codex Desktop</span><h3>Native when it should be.</h3><p>Agent Board releases every shortcut and becomes a passive evidence watcher. Actual task navigation remains Codex-owned; source checks cannot prove that a physical key changed the visible task. Codex keeps its keys, lighting, and permissions.</p><a href="https://github.com/ashlrai/wrkpad/blob/main/app/docs/setup.md">Native handoff</a></article>
+      <article><span>Hybrid Native · experimental</span><h3>Six native. Fourteen shared.</h3><p>The offline generator creates two layers and twenty action definitions total; its mixed first layer references only the fourteen action, stick, and dial shortcuts. The six physical Agent keys remain Codex-only, and combined 14+6 desk acceptance is still pending.</p><a href="https://github.com/ashlrai/wrkpad/blob/main/app/docs/hybrid-native-profile.md">Evidence contract</a></article>
+      <article><span>Claude Code + cmux</span><h3>Focus work without typing into it.</h3><p>Provider events populate stable slots. Terminal input is always prohibited. Exact pane focus is a separate future capability gated by a fresh locator, explicit human authorization, and capability negotiation; today production safely foregrounds cmux.</p><a href="https://github.com/ashlrai/wrkpad/blob/main/docs/hook-setup.md">Hook contract</a></article>
+      <article><span>Ashlr Fleet</span><h3>Exceptions before activity.</h3><p>Errors, input requests, and reviewable work outrank motion. Proposals remain distinct from execution.</p><a href="https://github.com/ashlrai/wrkpad/blob/main/docs/agent-operations.md">Operations model</a></article>
+    </div></section>
+
+    <section class="commissioner-showcase" id="commissioner">
+      <div class="commissioner-heading"><div><p>Local commissioning agent</p><h2>One answer: what is proven, and what comes next.</h2></div><p>The source-built desktop app reduces a noisy setup problem to six named proof gates. It reads bounded local evidence and prepares a non-executable plan; a capable enrolled external agent can then operate visible Work Louder Input UI with exact backup, readback, and rollback—not a hidden cache or HID writer.</p></div>
+      <div class="commissioner-shell">
+        <div class="commissioner-shell-head"><span>Creator Micro 2 / Ashlr Layer</span><b>Interactive evidence preview</b></div>
+        <ol class="proof-runway" aria-label="Commissioning proof gates">
+          <li><button type="button" data-proof="device" aria-pressed="true"><i aria-hidden="true">1</i><span><b>Exact device</b><small>Observed</small></span></button></li>
+          <li><button type="button" data-proof="input" aria-pressed="false"><i aria-hidden="true">2</i><span><b>Input trust</b><small>Verified</small></span></button></li>
+          <li><button type="button" data-proof="receiver" aria-pressed="false"><i aria-hidden="true">3</i><span><b>Receiver</b><small>Verified</small></span></button></li>
+          <li><button type="button" data-proof="baseline" aria-pressed="false"><i aria-hidden="true">4</i><span><b>Rollback point</b><small>Required before write</small></span></button></li>
+          <li><button type="button" data-proof="candidate" aria-pressed="false"><i aria-hidden="true">5</i><span><b>Candidate</b><small>Validated offline</small></span></button></li>
+          <li><button type="button" data-proof="physical" aria-pressed="false"><i aria-hidden="true">6</i><span><b>Physical proof</b><small>Pending</small></span></button></li>
+        </ol>
+        <div class="commissioner-readout">
+          <div><span id="proof-state">Observed, not accepted</span><h3 id="proof-title">Exact USB identity</h3><p id="proof-detail">An allowlisted Creator Micro 2 is present. That does not establish its active layer, shortcut mapping, or a working key.</p></div>
+          <dl><div><dt>Evidence</dt><dd id="proof-evidence">Bounded USB receipt</dd></div><div><dt>Safe next action</dt><dd id="proof-next">Verify local environment</dd></div><div><dt>Authority</dt><dd>Read/plan today · exact enrolled UI apply specified</dd></div></dl>
+        </div>
+        <div class="commissioner-rule"><strong>Delegate the toil, keep the evidence.</strong><span>One-time enrollment lets a capable external agent protect the live before-state, import and activate one exact profile through visible Input UI, cold-relaunch for checksum readback, and roll back once on failure. The embedded unattended executor remains unconfigured. Reset, deletion, firmware, direct cache/HID writes, and macOS permission changes stay out of scope. A real-key Flight Check remains the final gate.</span></div>
+        <p class="commissioner-announcement" id="commissioner-announcement" role="status" aria-live="polite">Exact device evidence selected. This preview reads no local or hardware state.</p>
+      </div>
+      <div class="commissioner-links"><a href="https://github.com/ashlrai/wrkpad/blob/main/docs/commissioner-architecture.md">Read the authority model</a><a href="https://github.com/ashlrai/wrkpad/blob/main/app/docs/setup.md">Run the supported setup</a><a href="https://github.com/ashlrai/wrkpad/blob/main/app/docs/troubleshooting.md">Recover a silent board</a></div>
+    </section>
+
+    <section class="recovery" id="first-run"><div><p>First-run commissioning</p><h2>Connected is the start—not proof that a key works.</h2><span>Prove transport, layer, permission, input, assignment, and visible navigation in order. Enrollment can delegate repeatable Input UI work, but it cannot manufacture a physical signal or bypass destructive recovery boundaries.</span><div class="recovery-links"><a href="https://learn.chatgpt.com/docs/features/codex-micro">Official Codex Micro guide</a><a href="https://worklouder.cc/micro-setup">Work Louder setup</a><a href="https://github.com/ashlrai/wrkpad/blob/main/app/docs/setup.md">Full wrkpad handoff</a></div></div><ol><li><b>1</b><span><strong>Power + data</strong><small>Turn on the Pro model and use a data-capable USB-C cable.</small></span></li><li><b>2</b><span><strong>Choose white wired mode</strong><small>Hold the bottom-left touch control for three seconds, then tap until the underglow is white. A cable can charge while Bluetooth is still selected.</small></span></li><li><b>3</b><span><strong>Establish layer 1—do not guess</strong><small>A short touch advances the layer; it does not select layer 1. Treat only the expected visible response from a harmless assigned Codex Agent Key as evidence that native layer 1 is active.</small></span></li><li><b>4</b><span><strong>Check Settings, then restart</strong><small>Confirm Connected and Input Monitoring Granted. If permission or the layer changed, quit and reopen ChatGPT. Those indicators still do not prove key routing.</small></span></li><li><b>5</b><span><strong>Prove a visible action</strong><small>From a normal task, double-tap a different assigned Agent Key within 350 ms. It should select that task and bring ChatGPT forward; one tap can switch without foregrounding.</small></span></li><li><b>6</b><span><strong>Recover without wiping</strong><small>Quit Karabiner or Logitech Options+ if it has Input Monitoring, reconnect, and run the read-only doctor. Do not use Input's Reset settings unless profiles are backed up and deletion is intentional; agent import and activation require a verified rollback first.</small></span></li></ol></section>
+
+    <section class="safety" id="safety"><div><p>Ambitious controls need visible limits</p><h2>Fast for reversible work. Deliberate for consequences.</h2><span>Provider-native approvals remain provider-owned.</span></div><div class="boundary" role="region" aria-label="Safety boundary" tabindex="0"><div><b>It does</b><b>It deliberately does not</b></div><div><span>Show sanitized agent states</span><span>Store prompts or transcripts</span></div><div><span>Focus a known provider app</span><span>Submit prompts or terminal input</span></div><div><span>Run allowlisted local checks</span><span>Approve provider permissions</span></div><div><span>Require confirmation or hold</span><span>One-press push, merge, deploy, delete, or spend</span></div><div><span>Specify enrolled, visible Input UI commissioning</span><span>Edit Input cache, call private IPC, write raw HID, reset, or flash firmware</span></div></div></section>
+
+    <section class="section source" id="source"><div class="heading"><div><p>Open by component, explicit by boundary</p><h2>Fork it. Audit it. Keep operating it yourself.</h2></div><p>The open-source path is the product path. Future organizational services are optional and do not narrow the community licenses.</p></div><div class="licenses"><article><h3>wrkpad core</h3><b>MIT</b><p>Rust CLI/TUI, HASP, hooks, device evidence, and service lifecycle.</p><a href="https://github.com/ashlrai/wrkpad/blob/main/LICENSE-MIT">License</a></article><article><h3>Agent Board</h3><b>Apache-2.0</b><p>Mission control, guarded actions, setup, Flight Check, and screen legend.</p><a href="https://github.com/ashlrai/wrkpad/blob/main/app/LICENSE">License</a></article><article><h3>Organizational services</h3><b>Optional</b><p>Rollout, provider adapters, policy/evidence design, training, and support.</p><a href="#organizations">Evaluation path</a></article></div></section>
+
+    <section class="organizations" id="organizations"><div><p>For teams with hard constraints</p><h2>Open-source licenses now. Organizational terms by inquiry.</h2><span>The MIT and Apache-2.0 grants are the current software licenses. Ashlr can separately evaluate support, rollout, or negotiated commercial terms for engineering, enterprise, government, and regulated teams. An inquiry is not an offer, SLA, or procurement eligibility. No compliance certification or government authorization is claimed.</span><div class="actions"><a class="button primary" href="mailto:hello@ashlr.ai?subject=wrkpad%20organizational%20evaluation">Request an evaluation</a><a class="button dark" href="https://github.com/ashlrai/wrkpad/blob/main/ORGANIZATIONS.md">Read the organizational brief</a><a class="button dark" href="https://github.com/ashlrai/wrkpad/security">Review security</a></div></div><div class="matrix" role="region" aria-label="Current evaluation status" tabindex="0"><div><b>Capability</b><b>Status</b></div><div data-capability="source"><span>Source, licenses, CI, security policy</span><b class="available">Available</b></div><div data-capability="local-build"><span>Ad-hoc-sealed local macOS preview</span><b class="available">Available</b></div><div data-capability="commissioner"><span>Read-only local commissioner</span><b class="available">Source-built</b></div><div data-capability="agent-commissioning"><span>Agent-operated Input UI commissioning</span><b class="available">External agent</b></div><div data-capability="hardware-route"><span>Hardware route and provider hooks</span><b class="manual">Physical receipt</b></div><div data-capability="signed-release"><span>Developer ID-signed, notarized public distribution</span><b class="planned">Planned</b></div><div data-capability="sbom"><span>Release SBOM and provenance</span><b class="planned">Planned</b></div><div data-capability="certifications"><span>Compliance certifications</span><b class="unsupported">Not claimed</b></div><a href="capabilities.json">Machine-readable capability record</a></div></section>
+
+    <section class="build" id="build"><div><p>Build from source</p><h2>Core observer and desktop board.</h2><span>No account or hosted control plane is required. These commands build both local components; hardware setup remains a separate acceptance flow.</span></div><div class="terminal"><header><i></i><i></i><i></i><b>terminal</b></header><pre><code>git clone https://github.com/ashlrai/wrkpad.git
+cd wrkpad
+cargo install --path . --locked --root "$HOME/.local"
+~/.local/bin/wrkpad init
+~/.local/bin/wrkpad doctor
+~/.local/bin/wrkpad demo
+
+cd app
+npm ci
+npm run doctor
+npm test
+npm run dev</code></pre></div></section>
+
+    <section class="section docs"><h2>Follow the evidence, not the marketing.</h2><div><a href="https://github.com/ashlrai/wrkpad#quick-start-agent-board"><b>Desktop quickstart</b><span>Agent Board build path</span></a><a href="https://github.com/ashlrai/wrkpad/blob/main/docs/commissioner-architecture.md"><b>Local commissioner</b><span>Proof ladder and authority</span></a><a href="https://github.com/ashlrai/wrkpad/blob/main/app/docs/dual-plane-profile.md"><b>Dual Plane</b><span>Codex + Claude setup</span></a><a href="https://github.com/ashlrai/wrkpad/blob/main/app/docs/hybrid-native-profile.md"><b>Hybrid Native</b><span>Experimental 14+6 contract</span></a><a href="https://github.com/ashlrai/wrkpad/blob/main/app/docs/controls.md"><b>Controls</b><span>Physical map</span></a><a href="https://github.com/ashlrai/wrkpad/blob/main/docs/architecture.md"><b>Architecture</b><span>Data and trust</span></a><a href="https://github.com/ashlrai/wrkpad/blob/main/SECURITY.md"><b>Security</b><span>Boundaries</span></a><a href="https://github.com/ashlrai/wrkpad/blob/main/docs/release.md"><b>Release status</b><span>Evidence gates</span></a></div></section>
+  </main>
+  <footer><div><a class="logo foot-logo" href="#top"><i aria-hidden="true"></i>wrkpad</a><p>Tactile agent operations with visible authority.</p></div><div class="footer-links"><a href="https://github.com/ashlrai/wrkpad">GitHub</a><a href="https://github.com/ashlrai/wrkpad/discussions">Discussions</a><a href="https://github.com/ashlrai/wrkpad/blob/main/CONTRIBUTING.md">Contribute</a><a href="https://github.com/ashlrai/wrkpad/blob/main/THIRD_PARTY_MEDIA.md">Media notice</a><a href="https://github.com/ashlrai/wrkpad/security/advisories/new">Report security</a><a href="mailto:hello@ashlr.ai">Contact</a></div><p class="fine">This page sets no client-side cookies and loads no analytics, remote fonts, embeds, or live local data. The hosting provider may retain operational logs. wrkpad is an independent project and is not affiliated with, sponsored by, endorsed by, or supported by Work Louder, OpenAI, or Anthropic. Product and company names identify interoperable products and remain the property of their respective owners. Accessibility target: WCAG 2.2 AA; conformance has not been certified.</p></footer>
+</body>
+</html>

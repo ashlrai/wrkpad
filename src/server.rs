@@ -15,10 +15,12 @@ use tokio::net::TcpListener;
 use tokio::sync::RwLock;
 
 use crate::engine::{EngineError, StateEngine};
-use crate::model::{ApplyOutcome, HaspEvent};
+use crate::model::{ApplyOutcome, CWD_REVOKED_SENTINEL, HaspEvent};
 use crate::storage::JsonStore;
 
 type HmacSha256 = Hmac<Sha256>;
+const SESSION_BINDING_DOMAIN: &[u8] = b"wrkpad.hasp.session.v1\0";
+const MAX_WORKSPACE_PATH_CHARS: usize = 2048;
 
 #[derive(Clone)]
 struct AppState {
@@ -203,14 +205,60 @@ fn authorize(state: &AppState, headers: &HeaderMap, require_json: bool) -> Resul
 fn privatize_identity(token: &str, event: &mut HaspEvent) -> Result<(), String> {
     let mut mac = HmacSha256::new_from_slice(token.as_bytes())
         .map_err(|_| "invalid local authentication key".to_owned())?;
-    mac.update(format!("{:?}\0{}\0", event.provider, event.session_id).as_bytes());
-    if let Some(cwd) = &event.cwd {
-        mac.update(cwd.as_bytes());
-    }
+    mac.update(SESSION_BINDING_DOMAIN);
+    mac.update(provider_binding_tag(event.provider));
+    mac.update(b"\0");
+    mac.update(event.session_id.as_bytes());
     let binding = hex::encode(mac.finalize().into_bytes());
     event.session_id = format!("hmac-sha256:{binding}");
-    event.cwd = None;
+    event.cwd = event.cwd.take().map(|cwd| {
+        sanitize_workspace_path(&cwd).unwrap_or_else(|| CWD_REVOKED_SENTINEL.to_owned())
+    });
     Ok(())
+}
+
+fn sanitize_workspace_path(value: &str) -> Option<String> {
+    if value.is_empty()
+        || value.trim() != value
+        || value.chars().count() > MAX_WORKSPACE_PATH_CHARS
+        || value.chars().any(char::is_control)
+    {
+        return None;
+    }
+    let portable = value.replace('\\', "/");
+    let unix_absolute = portable.starts_with('/');
+    let drive_absolute = portable.as_bytes().get(1) == Some(&b':')
+        && portable.as_bytes().get(2) == Some(&b'/')
+        && portable
+            .as_bytes()
+            .first()
+            .is_some_and(u8::is_ascii_alphabetic);
+    if !unix_absolute && !drive_absolute {
+        return None;
+    }
+    let body = if drive_absolute {
+        &portable[3..]
+    } else {
+        &portable[1..]
+    };
+    if body.is_empty()
+        || body.ends_with('/')
+        || body
+            .split('/')
+            .any(|segment| segment.is_empty() || segment == "." || segment == "..")
+    {
+        return None;
+    }
+    Some(value.to_owned())
+}
+
+const fn provider_binding_tag(provider: crate::model::Provider) -> &'static [u8] {
+    match provider {
+        crate::model::Provider::Claude => b"claude",
+        crate::model::Provider::Codex => b"codex",
+        crate::model::Provider::Manual => b"manual",
+        crate::model::Provider::Unknown => b"unknown",
+    }
 }
 
 fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
@@ -270,9 +318,16 @@ fn protect_response(mut response: Response) -> Response {
 mod tests {
     use tempfile::tempdir;
 
-    use super::{allowed_hosts, apply_persisted, constant_time_eq};
-    use crate::engine::StateEngine;
-    use crate::model::{EventKind, HaspEvent, Provider};
+    use chrono::{Duration, Utc};
+    use serde_json::{Value, json};
+
+    use super::{
+        allowed_hosts, apply_persisted, constant_time_eq, engine_error, privatize_identity,
+        sanitize_workspace_path,
+    };
+    use crate::engine::{EngineError, StateEngine};
+    use crate::hooks::normalize;
+    use crate::model::{AgentState, EventKind, HaspEvent, Provider};
     use crate::storage::JsonStore;
 
     #[test]
@@ -280,6 +335,292 @@ mod tests {
         assert!(constant_time_eq(b"same", b"same"));
         assert!(!constant_time_eq(b"same", b"diff"));
         assert!(!constant_time_eq(b"short", b"longer"));
+    }
+
+    #[test]
+    fn private_session_identity_is_provider_scoped_and_cwd_independent() -> anyhow::Result<()> {
+        let mut without_cwd =
+            HaspEvent::new(Provider::Claude, "provider-session", EventKind::Working);
+        let mut with_cwd = without_cwd.clone();
+        with_cwd.cwd = Some("/work/first".to_owned());
+        let mut with_changed_cwd = without_cwd.clone();
+        with_changed_cwd.cwd = Some("/work/second".to_owned());
+        let mut other_provider =
+            HaspEvent::new(Provider::Codex, "provider-session", EventKind::Working);
+
+        for event in [
+            &mut without_cwd,
+            &mut with_cwd,
+            &mut with_changed_cwd,
+            &mut other_provider,
+        ] {
+            privatize_identity("private-token", event).map_err(anyhow::Error::msg)?;
+            assert!(event.session_id.starts_with("hmac-sha256:"));
+        }
+
+        assert_eq!(without_cwd.cwd, None);
+        assert_eq!(with_cwd.cwd.as_deref(), Some("/work/first"));
+        assert_eq!(with_changed_cwd.cwd.as_deref(), Some("/work/second"));
+
+        assert_eq!(without_cwd.session_id, with_cwd.session_id);
+        assert_eq!(without_cwd.session_id, with_changed_cwd.session_id);
+        assert_eq!(
+            without_cwd.session_id,
+            "hmac-sha256:4336c8bdfd94e9bf492989a8e1fe73333797727e383b265c675a9cc638e624de"
+        );
+        assert_ne!(without_cwd.session_id, other_provider.session_id);
+        Ok(())
+    }
+
+    #[test]
+    fn workspace_identity_is_bounded_absolute_and_control_free() {
+        assert_eq!(
+            sanitize_workspace_path("/work/repo").as_deref(),
+            Some("/work/repo")
+        );
+        assert_eq!(
+            sanitize_workspace_path("C:\\work\\repo").as_deref(),
+            Some("C:\\work\\repo")
+        );
+        for candidate in [
+            "",
+            "/",
+            "relative/repo",
+            "/work/../secret",
+            "/work//repo",
+            "/work/repo/",
+            "/work/\nrepo",
+        ] {
+            assert_eq!(sanitize_workspace_path(candidate), None, "{candidate:?}");
+        }
+        assert_eq!(
+            sanitize_workspace_path(&format!("/{}", "x".repeat(2049))),
+            None
+        );
+    }
+
+    #[test]
+    fn rejected_present_cwd_revokes_prior_workspace_without_persisting_a_sentinel()
+    -> anyhow::Result<()> {
+        let mut initial = HaspEvent::new(Provider::Claude, "session", EventKind::Working);
+        initial.cwd = Some("/work/repo".to_owned());
+        let mut rejected = HaspEvent::new(Provider::Claude, "session", EventKind::NeedsInput);
+        rejected.cwd = Some("/".to_owned());
+        let mut absent = HaspEvent::new(Provider::Claude, "session", EventKind::Working);
+
+        for event in [&mut initial, &mut rejected, &mut absent] {
+            privatize_identity("private-token", event).map_err(anyhow::Error::msg)?;
+        }
+        assert_eq!(initial.cwd.as_deref(), Some("/work/repo"));
+        assert_eq!(rejected.cwd.as_deref(), Some(super::CWD_REVOKED_SENTINEL));
+        assert_eq!(absent.cwd, None);
+
+        let mut engine = StateEngine::default();
+        engine.apply(initial)?;
+        let revoked = engine.apply(rejected)?;
+        assert_eq!(
+            revoked.snapshot.slots[0]
+                .session
+                .as_ref()
+                .and_then(|session| session.cwd.as_deref()),
+            None
+        );
+        assert!(!serde_json::to_string(&revoked.snapshot)?.contains(r#""cwd":"""#));
+
+        let after_absent = engine.apply(absent)?;
+        assert_eq!(
+            after_absent.snapshot.slots[0]
+                .session
+                .as_ref()
+                .and_then(|session| session.cwd.as_deref()),
+            None
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn normalized_invalid_cwd_revokes_prior_workspace_without_serializing_the_sentinel()
+    -> anyhow::Result<()> {
+        let invalid_values = [
+            Value::String(format!("/work/{}", "x".repeat(2049))),
+            Value::String("/work/repo\u{001b}[31m".to_owned()),
+            json!({"unexpected": "shape"}),
+        ];
+
+        for invalid_cwd in invalid_values {
+            let mut initial = normalize(
+                Provider::Claude,
+                None,
+                &json!({
+                    "session_id": "claude-invalid-cwd",
+                    "hook_event_name": "UserPromptSubmit",
+                    "cwd": "/work/repo"
+                }),
+            )?
+            .ok_or_else(|| anyhow::anyhow!("initial event was ignored"))?;
+            let mut rejected = normalize(
+                Provider::Claude,
+                None,
+                &json!({
+                    "session_id": "claude-invalid-cwd",
+                    "hook_event_name": "PermissionRequest",
+                    "cwd": invalid_cwd
+                }),
+            )?
+            .ok_or_else(|| anyhow::anyhow!("invalid-cwd event was ignored"))?;
+
+            let serialized_hook_event = serde_json::to_string(&rejected)?;
+            assert!(!serialized_hook_event.contains(r#""cwd":"""#));
+            assert!(!serialized_hook_event.contains("\\u001b"));
+            assert!(!serialized_hook_event.contains(&"x".repeat(2049)));
+
+            privatize_identity("private-token", &mut initial).map_err(anyhow::Error::msg)?;
+            privatize_identity("private-token", &mut rejected).map_err(anyhow::Error::msg)?;
+            assert_eq!(rejected.cwd.as_deref(), Some(super::CWD_REVOKED_SENTINEL));
+
+            let mut engine = StateEngine::default();
+            engine.apply(initial)?;
+            let revoked = engine.apply(rejected)?;
+            let serialized_snapshot = serde_json::to_string(&revoked.snapshot)?;
+            assert_eq!(
+                revoked.snapshot.slots[0]
+                    .session
+                    .as_ref()
+                    .and_then(|session| session.cwd.as_deref()),
+                None
+            );
+            assert!(!serialized_snapshot.contains("/work/repo"));
+            assert!(!serialized_snapshot.contains(r#""cwd":"""#));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn cwd_changes_keep_lifecycle_events_on_one_private_slot() -> anyhow::Result<()> {
+        let mut start = HaspEvent::new(
+            Provider::Claude,
+            "parent\0subagent\0agent-a",
+            EventKind::Working,
+        );
+        start.cwd = Some("/work/repo".to_owned());
+        let mut needs_input = HaspEvent::new(
+            Provider::Claude,
+            "parent\0subagent\0agent-a",
+            EventKind::NeedsInput,
+        );
+
+        privatize_identity("private-token", &mut start).map_err(anyhow::Error::msg)?;
+        privatize_identity("private-token", &mut needs_input).map_err(anyhow::Error::msg)?;
+        assert_eq!(start.session_id, needs_input.session_id);
+        assert_eq!(start.cwd.as_deref(), Some("/work/repo"));
+
+        let mut engine = StateEngine::default();
+        let first = engine.apply(start)?;
+        let second = engine.apply(needs_input)?;
+        assert_eq!(first.assigned_slot, Some(1));
+        assert_eq!(second.assigned_slot, Some(1));
+        assert_eq!(
+            second.snapshot.slots[0]
+                .session
+                .as_ref()
+                .map(|session| session.state),
+            Some(AgentState::NeedsInput)
+        );
+        assert_eq!(
+            second.snapshot.slots[0]
+                .session
+                .as_ref()
+                .and_then(|session| session.cwd.as_deref()),
+            Some("/work/repo")
+        );
+        assert_eq!(
+            second
+                .snapshot
+                .slots
+                .iter()
+                .filter(|slot| slot.session.is_some())
+                .count(),
+            1
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn normalized_same_turn_lifecycle_resumes_after_needs_input() -> anyhow::Result<()> {
+        let base = Utc::now();
+        let mut initial = normalize(
+            Provider::Claude,
+            None,
+            &json!({
+                "session_id": "claude-session",
+                "turn_id": "turn-1",
+                "hook_event_name": "UserPromptSubmit",
+                "cwd": "/work/repo",
+                "prompt": "discarded"
+            }),
+        )?
+        .ok_or_else(|| anyhow::anyhow!("initial event was ignored"))?;
+        let mut needs_input = normalize(
+            Provider::Claude,
+            None,
+            &json!({
+                "session_id": "claude-session",
+                "turn_id": "turn-1",
+                "hook_event_name": "PermissionRequest",
+                "tool_input": {"command": "discarded"}
+            }),
+        )?
+        .ok_or_else(|| anyhow::anyhow!("attention event was ignored"))?;
+        let mut resumed = normalize(
+            Provider::Claude,
+            None,
+            &json!({
+                "session_id": "claude-session",
+                "turn_id": "turn-1",
+                "hook_event_name": "PostToolUse",
+                "tool_response": "discarded"
+            }),
+        )?
+        .ok_or_else(|| anyhow::anyhow!("resume event was ignored"))?;
+        initial.at = base + Duration::seconds(1);
+        needs_input.at = base + Duration::seconds(2);
+        resumed.at = base + Duration::seconds(3);
+        assert_ne!(initial.event_id, resumed.event_id);
+
+        for event in [&mut initial, &mut needs_input, &mut resumed] {
+            privatize_identity("private-token", event).map_err(anyhow::Error::msg)?;
+        }
+        assert_eq!(initial.session_id, needs_input.session_id);
+        assert_eq!(initial.session_id, resumed.session_id);
+
+        let mut engine = StateEngine::default();
+        engine.apply(initial)?;
+        let attention = engine.apply(needs_input)?;
+        assert_eq!(
+            attention.snapshot.slots[0]
+                .session
+                .as_ref()
+                .map(|session| session.state),
+            Some(AgentState::NeedsInput)
+        );
+        let resumed = engine.apply(resumed)?;
+        assert_eq!(
+            resumed.snapshot.slots[0]
+                .session
+                .as_ref()
+                .map(|session| session.state),
+            Some(AgentState::Working)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn out_of_order_engine_errors_map_to_bounded_unprocessable_responses() {
+        let response = engine_error(&EngineError::OutOfOrderEvent);
+        assert_eq!(
+            response.status(),
+            axum::http::StatusCode::UNPROCESSABLE_ENTITY
+        );
     }
 
     #[test]

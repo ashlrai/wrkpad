@@ -4,11 +4,14 @@ use std::path::Path;
 use anyhow::{Context, Result, bail};
 use chrono::Utc;
 use serde_json::Value;
-use uuid::Uuid;
 
 use crate::model::{EventKind, HaspEvent, Provider};
 
-const EVENT_NAMESPACE: Uuid = Uuid::from_u128(0x517c7f8d_f6b0_4777_921e_f0658249f380);
+// Hook payloads cross the authenticated loopback boundary before the server can
+// turn an invalid cwd into its reducer-only empty sentinel. Keep "missing" and
+// "present but invalid" distinct without serializing that internal sentinel or
+// forwarding malformed/private path text.
+const INVALID_CWD_REVOCATION_MARKER: &str = ".";
 
 pub fn normalize(
     provider: Provider,
@@ -76,24 +79,27 @@ pub fn normalize(
         _ => bail!("unsupported hook event"),
     };
 
-    let cwd = object
-        .get("cwd")
-        .and_then(Value::as_str)
-        .filter(|value| value.len() <= 4096)
-        .map(|value| {
-            value
-                .chars()
-                .filter(|character| !character.is_control())
-                .collect::<String>()
-        })
-        .filter(|value| !value.is_empty());
-    let title = cwd.as_deref().and_then(workspace_label);
+    let cwd = match object.get("cwd") {
+        None => None,
+        Some(Value::String(value))
+            if value.chars().count() <= 2048
+                && !value.is_empty()
+                && !value.chars().any(char::is_control) =>
+        {
+            Some(value.clone())
+        }
+        Some(_) => Some(INVALID_CWD_REVOCATION_MARKER.to_owned()),
+    };
+    let title = cwd
+        .as_deref()
+        .filter(|value| *value != INVALID_CWD_REVOCATION_MARKER)
+        .and_then(workspace_label);
     let turn_id = first_string(object, &["turn_id", "turn-id", "prompt_id"]);
 
-    let event_id = turn_id.map_or_else(Uuid::new_v4, |turn| {
-        let key = format!("{provider:?}\0{session_id}\0{turn}\0{kind:?}");
-        Uuid::new_v5(&EVENT_NAMESPACE, key.as_bytes())
-    });
+    // The hook client never retries. A fresh identifier per delivered lifecycle
+    // signal avoids collapsing distinct events that share a provider turn and
+    // resulting state, such as UserPromptSubmit and PostToolUse.
+    let event_id = uuid::Uuid::new_v4();
     let mut labels = BTreeMap::new();
     labels.insert("source_event".to_owned(), source_event.to_owned());
     if let Some(turn) = turn_id {
@@ -179,6 +185,35 @@ mod tests {
     }
 
     #[test]
+    fn same_turn_lifecycle_signals_receive_distinct_event_ids() -> anyhow::Result<()> {
+        let initial = normalize(
+            Provider::Claude,
+            None,
+            &json!({
+                "session_id": "claude-1",
+                "turn_id": "turn-1",
+                "hook_event_name": "UserPromptSubmit"
+            }),
+        )?
+        .ok_or_else(|| anyhow::anyhow!("event ignored"))?;
+        let resumed = normalize(
+            Provider::Claude,
+            None,
+            &json!({
+                "session_id": "claude-1",
+                "turn_id": "turn-1",
+                "hook_event_name": "PostToolUse"
+            }),
+        )?
+        .ok_or_else(|| anyhow::anyhow!("event ignored"))?;
+
+        assert_eq!(initial.kind, EventKind::Working);
+        assert_eq!(resumed.kind, EventKind::Working);
+        assert_ne!(initial.event_id, resumed.event_id);
+        Ok(())
+    }
+
+    #[test]
     fn irrelevant_notifications_exit_without_an_event() -> anyhow::Result<()> {
         let payload = json!({
             "session_id": "claude-1",
@@ -238,10 +273,15 @@ mod tests {
         });
         let event = normalize(Provider::Claude, None, &payload)?
             .ok_or_else(|| anyhow::anyhow!("event ignored"))?;
-        assert_eq!(event.title.as_deref(), Some("project[31m"));
+        assert_eq!(event.title, None);
+        assert_eq!(
+            event.cwd.as_deref(),
+            Some(super::INVALID_CWD_REVOCATION_MARKER)
+        );
         let encoded = serde_json::to_string(&event)?;
         assert!(!encoded.contains("private customer"));
         assert!(!encoded.contains("\\u001b"));
+        assert!(!encoded.contains(r#""cwd":"""#));
         Ok(())
     }
 

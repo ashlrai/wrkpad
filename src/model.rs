@@ -6,6 +6,11 @@ use uuid::Uuid;
 
 use crate::{HASP_SCHEMA, SNAPSHOT_SCHEMA};
 
+// This value exists only between authenticated server admission and the state
+// reducer. It distinguishes an explicitly supplied but rejected cwd from an
+// event that did not carry cwd at all. The reducer must never persist it.
+pub(crate) const CWD_REVOKED_SENTINEL: &str = "";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentState {

@@ -4,8 +4,10 @@ Name the component, operator problem, and smallest complete solution.
 
 ## Verification
 
+- [ ] Every commit includes a matching `Signed-off-by` trailer (`git commit -s`).
 - [ ] Core change: `cargo fmt --check`, strict Clippy, tests, and release build passed or are not applicable.
 - [ ] App change: `npm run lint`, tests, build, and relevant package smoke checks passed or are not applicable.
+- [ ] A code owner who is neither the author nor the latest pusher is available to approve the final SHA; otherwise the documented CODEOWNERS recovery must complete before merge.
 - [ ] Hardware/provider behavior was tested, or the exact unverified boundary is stated.
 - [ ] Documentation and changelog match current behavior.
 

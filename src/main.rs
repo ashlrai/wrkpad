@@ -6,6 +6,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use directories::BaseDirs;
 use tracing_subscriber::EnvFilter;
 use wrkpad::client::HaspClient;
+use wrkpad::commissioner::CommissionerStatus;
 use wrkpad::config::Paths;
 use wrkpad::doctor::DoctorReport;
 use wrkpad::engine::StateEngine;
@@ -39,7 +40,10 @@ enum Command {
     Doctor {
         #[arg(long)]
         json: bool,
-        #[arg(long)]
+        #[arg(
+            long,
+            help = "Include descriptor-only HID evidence; no live input reports are read"
+        )]
         dump_hid: bool,
     },
     /// Run the authenticated loopback HASP server.
@@ -80,6 +84,11 @@ enum Command {
     Service {
         #[command(subcommand)]
         command: ServiceCommand,
+    },
+    /// Inspect the opt-in, rollback-first agent commissioning boundary.
+    Commissioner {
+        #[command(subcommand)]
+        command: CommissionerCommand,
     },
     /// Render all six semantic states without touching hardware.
     Demo {
@@ -269,6 +278,15 @@ enum ServiceCommand {
     },
 }
 
+#[derive(Debug, Subcommand)]
+enum CommissionerCommand {
+    /// Report enrollment and transaction state without opening an executor.
+    Status {
+        #[arg(long)]
+        json: bool,
+    },
+}
+
 impl ProviderArg {
     const fn provider(self) -> Provider {
         match self {
@@ -344,6 +362,7 @@ async fn main() -> Result<()> {
         Command::Service { command } => {
             manage_service(&paths, &cli.endpoint, command).await?;
         }
+        Command::Commissioner { command } => manage_commissioner(&paths, command)?,
         Command::Demo { json } => demo(json)?,
         Command::Occupancy { command } => occupancy(&paths, command)?,
         Command::Palette => {
@@ -361,6 +380,34 @@ async fn main() -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&palette)?);
         }
     }
+    Ok(())
+}
+
+fn manage_commissioner(paths: &Paths, command: CommissionerCommand) -> Result<()> {
+    match command {
+        CommissionerCommand::Status { json } => {
+            let status = wrkpad::commissioner::status(&paths.root, chrono::Utc::now());
+            print_commissioner_status(&status, json)?;
+        }
+    }
+    Ok(())
+}
+
+fn print_commissioner_status(status: &CommissionerStatus, json: bool) -> Result<()> {
+    if json {
+        println!("{}", serde_json::to_string_pretty(status)?);
+        return Ok(());
+    }
+    println!("wrkpad commissioner · {}", status.reason);
+    println!("  route: {}", status.route);
+    println!("  enrollment: {:?}", status.enrollment);
+    println!("  transaction: {:?}", status.transaction);
+    println!("  executor: {:?}", status.executor);
+    println!("  device mutation available: {}", status.mutation_available);
+    println!(
+        "  firmware writes available: {}",
+        status.firmware_writes_available
+    );
     Ok(())
 }
 
