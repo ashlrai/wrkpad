@@ -164,9 +164,14 @@ Configuration success ends at verified readback. The agent may then arm Flight
 Check, suppress mapped actions, highlight each expected gesture, and record the
 real events. A person must still move the real control unless a separately
 qualified vendor electrical self-test or robotic fixture exists. Injected
-keyboard events cannot satisfy this gate. The receipt is bound to the current
-route, receiver generation, profile digest, device identity class, and time
-window; a later reconnect or configuration change invalidates it.
+keyboard events can emit the same global shortcuts, so the app cannot establish
+physical causality without the operator or qualified fixture. The main process
+writes only while the same in-memory Flight generation remains current. The
+sealed receipt records the route, receiver-build SHA-256, sanitized profile
+structure, USB-presence gate, ordered callbacks, and timestamps; it does not
+contain a profile digest or uniquely identify the physical device. A later
+runtime must prove current delivery separately even when the exact build retains
+historical qualification.
 
 ## Process boundaries
 

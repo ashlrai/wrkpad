@@ -47,7 +47,7 @@ All notable changes to Ashlr Agent Board will be documented here. The format fol
 - Exact-build Daily Flight receipt projection plus a bounded two-step
   JOY_RIGHT diagnostic: first the Mac keyboard accelerator, then the physical
   top-right stick. The UI keeps current receiver delivery, operator-directed
-  source attestation, full 20-control acceptance, USB identity, and public
+  input, full 20-control acceptance, USB identity, and public
   signing/notarization as separate claims.
 - A typed Agent Operations surface that exposes inspect and plan in-process,
   labels apply and rollback as external-agent visible-UI work, and keeps the

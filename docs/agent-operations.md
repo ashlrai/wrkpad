@@ -128,7 +128,9 @@ proof of source identity, review, provenance, signing, or release.
    receipt are separate evidence. Then arm Daily Flight Check, wait for the
    screen to say actions are suppressed, and have the user complete all 20 gestures
    on the physical board. The receipt is separate from configuration
-   readback and cannot be synthesized.
+   readback. The app cannot distinguish board shortcuts from matching keyboard
+   input, so physical causality remains the operator's or qualified fixture's
+   attestation.
 9. Operate from Agent Board. Slot selection may foreground Codex Desktop or
    cmux; it does not prove exact Codex task or cmux pane focus and sends no
    prompt or terminal input.

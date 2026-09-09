@@ -103,11 +103,13 @@ Direct Input cache/database edits, private IPC, remote debugging, reset,
 firmware, raw HID, and device-filesystem writes remain unavailable. macOS
 permission changes stay user-controlled. A fresh Flight Check separately
 records that the intended real board was used while its shortcut sequence
-reached the active receiver; injected keys cannot satisfy it and macOS does not
-cryptographically identify the source keyboard. The receipt is historical
-after the run and never commissions a future app or device session. Codex
-Native keeps its separate passive handoff because its firmware-owned keys, RGB,
-and visible task behavior cannot be inferred from the Ashlr shortcut route.
+reached the active receiver. Because ordinary or injected keyboard events can
+emit the same shortcuts, physical causality remains an operator attestation;
+macOS does not cryptographically identify the source keyboard. The receipt is
+historical after the run and never commissions a future app or device session.
+Codex Native keeps its separate passive handoff because its firmware-owned
+keys, RGB, and visible task behavior cannot be inferred from the Ashlr shortcut
+route.
 
 See the [commissioner architecture](docs/commissioner-architecture.md), then
 follow [Setup and Flight Check](app/docs/setup.md).
