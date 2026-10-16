@@ -146,7 +146,7 @@ function readTail(candidate) {
 }
 
 function dateParts(date) {
-  return [String(date.getFullYear()), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')]
+  return [String(date.getUTCFullYear()), String(date.getUTCMonth() + 1).padStart(2, '0'), String(date.getUTCDate()).padStart(2, '0')]
 }
 
 function evidenceTime(classified, fallbackMtimeMs) {

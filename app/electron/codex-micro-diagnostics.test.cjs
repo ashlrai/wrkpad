@@ -148,6 +148,37 @@ test('inspects only bounded recent log files under the fixed Codex log root', ()
   }
 })
 
+test('inspects the UTC current-day folder across a local-time date rollover', () => {
+  const home = mkdtempSync(path.join(tmpdir(), 'codex-micro-diagnostics-utc-'))
+  try {
+    const now = new Date('2026-09-03T00:05:00.000Z')
+    // Keep this regression meaningful even when CI itself runs in UTC.
+    now.getFullYear = () => 2026
+    now.getMonth = () => 8
+    now.getDate = () => 2
+    const directory = path.join(home, 'Library', 'Logs', 'com.openai.codex', '2026', '09', '03')
+    mkdirSync(directory, { recursive: true })
+    writeFileSync(path.join(directory, 'codex-desktop.log'), [
+      '2026-09-03T00:04:00.000Z info [CodexMicroService] Connecting with HID',
+      '2026-09-03T00:04:00.001Z info [CodexMicroService] Sending RPC call, id:",101',
+      '2026-09-03T00:04:00.010Z info [CodexMicroService] Received answer, id:",101,"method:","v.oai.rgbcfg"',
+      '2026-09-03T00:04:00.011Z info [CodexMicroService] Sending RPC call, id:",102',
+      '2026-09-03T00:04:00.020Z info [CodexMicroService] Received answer, id:",102,"method:","v.oai.thstatus"',
+      '2026-09-03T00:04:00.021Z info [CodexMicroService] Added notify handler for method: v.oai.hid',
+      '2026-09-03T00:04:00.022Z info [CodexMicroService] Added notify handler for method: v.oai.rad',
+    ].join('\n'))
+
+    assert.deepEqual(inspectCodexMicroLogs(home, now), {
+      status: 'connected',
+      observedAt: '2026-09-03T00:04:00.022Z',
+      detail: 'An ordered Codex log sequence supports inferred native Creator Micro initialization.',
+      fresh: true,
+    })
+  } finally {
+    rmSync(home, { recursive: true, force: true })
+  }
+})
+
 test('chooses the newest evidence across files and expires historical evidence', () => {
   const home = mkdtempSync(path.join(tmpdir(), 'codex-micro-diagnostics-'))
   try {

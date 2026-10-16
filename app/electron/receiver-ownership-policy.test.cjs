@@ -12,8 +12,17 @@ test('main requests one Electron instance and focuses the existing receiver', ()
 })
 
 test('main synchronizes receiver ownership before registering shortcuts', () => {
-  assert.match(source, /function synchronizeShortcutOwnership\(\)/)
-  assert.match(source, /globalShortcut\.unregisterAll\(\)/)
+  assert.match(source, /createShortcutOwnershipController\(\{/)
+  assert.match(source, /function synchronizeShortcutOwnership\(boardRoute\)/)
+  assert.match(source, /unregisterAll: \(\) => globalShortcut\.unregisterAll\(\)/)
+  assert.match(source, /globalShortcut\.register\(accelerator, shortcutCallbackGuard\.bind\(\(\) => \{[\s\S]*flightSession\.record\(envelope\)[\s\S]*webContents\.send\('board:control', envelope\)/)
+  assert.match(source, /if \(boardRoute !== 'ashlr_layer'\) shortcutCallbackGuard\.invalidate\(\)/)
+  assert.match(source, /catch \(error\) \{[\s\S]*shortcutRegistrations = \[\][\s\S]*shortcutCallbackGuard\.invalidate\(\)[\s\S]*throw error/)
+})
+
+test('startup and route switches apply the declared route before owning shortcuts', () => {
+  assert.match(source, /app\.whenReady\(\)\.then\(\(\) => \{ createWindow\(\); synchronizeShortcutOwnership\(readSettings\(\)\.boardRoute\) \}\)/)
+  assert.match(source, /if \(boardRoute !== 'ashlr_layer'\) \{[\s\S]*shortcutState = synchronizeShortcutOwnership\(boardRoute\)[\s\S]*shortcutState\.released !== true[\s\S]*saveBoardRoute\(boardRoute\)[\s\S]*if \(boardRoute === 'ashlr_layer'\) synchronizeShortcutOwnership\(boardRoute\)/)
 })
 
 test('main independently revalidates every Flight Check admission and receipt', () => {

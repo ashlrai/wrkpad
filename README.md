@@ -59,13 +59,20 @@ marks missing observers and optional CLIs as unavailable.
 - Agent Board shows provider, task title, icon, text state, and color in the exact
   black-cap geometry; selecting a slot foregrounds Codex Desktop or cmux without
   sending a prompt or terminal input.
-- Agent Board maps 20 shortcuts across five software lenses, guards consequential
-  actions, and exports a hashed operator-guided Flight Check receipt.
+- On Ashlr Layer, Agent Board maps 20 shortcuts across five software lenses,
+  guards consequential actions, and exports a hashed operator-guided Flight
+  Check receipt. Codex Native and an unselected route keep mapped actions off.
 - Agent Board keeps Codex Native and the cross-provider Ashlr Layer as explicit,
   local-only route declarations; neither is inferred or applied to the board.
 - A privacy-bounded native diagnostic distinguishes historical RPC failures
   from a fresh, inferred initialization sequence while keeping the manual
   Settings connection and physical acceptance separate from the shortcut route.
+- A restart-safe Codex Native handoff first verifies Agent Board released its
+  shortcuts, then binds that inferred sequence to the
+  observed board VID:PID class and fixed-path ChatGPT Desktop metadata, then requires seven explicit
+  operator observations. It stores no prompt, title, session ID, raw log,
+  diagnostic detail, or local path and remains an attestation, not unique-device
+  identity, running-process provenance, or restart proof.
 - Privacy-bounded Input cache/runtime diagnostics report the cache-current
   profile, a uniquely observable single layer, encoder order, and exact
   unresolved-index reason codes without exposing raw logs or claiming current

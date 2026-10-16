@@ -2,6 +2,12 @@
 
 This document is the canonical physical map for Ashlr Agent Board.
 
+The shortcut and action map below applies only while **Ashlr Layer** is
+declared. **Codex Native** and **Not selected** unregister every Agent Board
+shortcut and disable mapped actions; native board behavior remains owned by
+Codex. Software-only Agent-slot focus remains available from the screen and
+never sends prompt or terminal input.
+
 ## Stable Agent-key geometry
 
 The six Agent keys retain the same slot identity in every software lens.

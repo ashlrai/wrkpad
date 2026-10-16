@@ -9,6 +9,8 @@ The roadmap is evidence-gated and ordered by reliable daily value.
 - Add signed/notarized release automation with provenance and rollback.
 - Add fixture-driven compatibility tests for `wrkpad` and Ashlr Hub schema versions.
 - Improve first-run diagnostics and tool-discovery explanations.
+- Package-test the new route-specific Setup flight plans and restart-safe Codex
+  Native operator-attestation handoff on supported Creator Micro 2 variants.
 - Validate keyboard navigation, screen readers, contrast, zoom, and reduced motion on packaged builds.
 
 ## Next: stronger local integrations
