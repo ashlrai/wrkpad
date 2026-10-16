@@ -5,11 +5,11 @@ export interface FlightStep { label: string; instruction: string; signals: Contr
 export interface FlightEvent { signal: ControlId; receivedAt: string; sequence: number; accelerator: string; monotonicNs: string; expectedSignals: ControlId[]; matched: boolean }
 
 export const diagnosticFlightSteps: FlightStep[] = [
-  { label: 'Dial left', instruction: 'Turn the dial three slow detents counterclockwise.', signals: ['dialLeft'], requiredCount: 3 },
-  { label: 'Dial right', instruction: 'Turn the dial three slow detents clockwise.', signals: ['dialRight'], requiredCount: 3 },
-  { label: 'Dial press', instruction: 'Press the dial once.', signals: ['dialPress'] },
-  { label: 'Agent 1', instruction: 'Press the upper Agent key beside the dial.', signals: ['agent1'] },
-  { label: 'Agent 2', instruction: 'Press the upper Agent key beside the joystick.', signals: ['agent2'] },
+  { label: 'Dial left', instruction: 'Turn the top-right rotary dial three slow detents counterclockwise. The bottom-left circle is the layer and connection selector, not the dial.', signals: ['dialLeft'], requiredCount: 3 },
+  { label: 'Dial right', instruction: 'Turn the top-right rotary dial three slow detents clockwise.', signals: ['dialRight'], requiredCount: 3 },
+  { label: 'Dial press', instruction: 'Press the top-right rotary dial once.', signals: ['dialPress'] },
+  { label: 'Agent 1', instruction: 'Press the upper Agent key beside the white joystick.', signals: ['agent1'] },
+  { label: 'Agent 2', instruction: 'Press the upper Agent key beside the black dial.', signals: ['agent2'] },
   { label: 'Joystick up', instruction: 'Push the joystick upward, then return it to center.', signals: ['joyUp'] },
   { label: 'Joystick right', instruction: 'Push the joystick right, then return it to center.', signals: ['joyRight'] },
   { label: 'Joystick down', instruction: 'Push the joystick downward, then return it to center.', signals: ['joyDown'] },
@@ -42,6 +42,17 @@ export const flightStepComplete = (step: FlightStep, events: FlightEvent[]) => {
 
 export const expectedSignalsAfter = (variant: FlightVariant, events: FlightEvent[]) =>
   stepsForVariant(variant).find((step) => !flightStepComplete(step, events))?.signals ?? []
+
+export const noSignalRecoveryNeeded = (
+  active: boolean,
+  startedAt: string | null,
+  events: FlightEvent[],
+  now = Date.now(),
+) => {
+  if (!active || events.length > 0 || startedAt === null) return false
+  const startedAtMs = Date.parse(startedAt)
+  return Number.isFinite(startedAtMs) && now - startedAtMs >= 12_000
+}
 
 export const flightAcceptance = (
   variant: FlightVariant,

@@ -18,6 +18,7 @@ cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-targets
 cargo build --release
+cargo deny check
 ```
 
 Desktop changes:
@@ -29,6 +30,13 @@ npm run lint
 npm test
 npm run build
 npm audit --audit-level=high
+```
+
+Repository contracts and documentation:
+
+```bash
+node --test tools/*.test.mjs
+node tools/docs-check.mjs
 ```
 
 Add tests for every reducer transition, parser edge case, protocol frame, or safety gate you change. A hardware change also needs a fake-transport fixture; physical success alone is not reproducible evidence.
@@ -44,13 +52,36 @@ Add tests for every reducer transition, parser edge case, protocol frame, or saf
 
 ## Commit policy
 
-Use concise imperative commit messages. Sign off commits with `git commit -s` to certify the Developer Certificate of Origin 1.1. Files outside `app/` are MIT; files inside `app/` are Apache-2.0 and must retain `app/NOTICE`. The project does not require a contributor license agreement. Desktop contributors should also read [app/CONTRIBUTING.md](app/CONTRIBUTING.md).
+Use concise imperative commit messages. Sign off commits with `git commit -s`
+to certify the [Developer Certificate of Origin 1.1](DCO). CI verifies that the
+sign-off name and email match each commit author. Files outside `app/` are MIT;
+files inside `app/` are Apache-2.0 and must retain `app/NOTICE`. The project does
+not require a contributor license agreement. Desktop contributors should also
+read [app/CONTRIBUTING.md](app/CONTRIBUTING.md).
 
 Entire session capture is optional developer tooling and is not required to
 build or run either component. Checked-in Claude hooks no-op when Entire is not
 installed, and Entire telemetry is disabled by default. Never install it,
 rewrite another contributor's Git hooks, enable telemetry, or restore a
 checkpoint without that contributor's explicit action.
+
+## Independent review and CODEOWNERS recovery
+
+Protected branches require code-owner approval, resolved conversations, and
+approval after the latest push. A pull-request author or latest pusher must not
+approve their own change or use an administrator bypass.
+
+If the only eligible code owner authored the pull request or made its latest
+push:
+
+1. Do not weaken or bypass protection for the feature pull request.
+2. Ask a different trusted collaborator to author a separate governance pull
+   request that adds a second named code owner or maintainer team.
+3. The existing code owner reviews that governance pull request under normal
+   protection.
+4. After it merges, rebase the feature pull request onto the updated default
+   branch.
+5. Request approval from the newly eligible code owner after the final push.
 
 ## Definition of done
 

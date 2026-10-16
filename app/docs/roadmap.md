@@ -9,6 +9,8 @@ The roadmap is evidence-gated and ordered by reliable daily value.
 - Add signed/notarized release automation with provenance and rollback.
 - Add fixture-driven compatibility tests for `wrkpad` and Ashlr Hub schema versions.
 - Improve first-run diagnostics and tool-discovery explanations.
+- Package-test the new route-specific Setup flight plans and restart-safe Codex
+  Native operator-attestation handoff on supported Creator Micro 2 variants.
 - Validate keyboard navigation, screen readers, contrast, zoom, and reduced motion on packaged builds.
 
 ## Next: stronger local integrations
@@ -17,7 +19,8 @@ The roadmap is evidence-gated and ordered by reliable daily value.
 - Use verified Codex app-server capabilities for richer identity where supported.
 - Correlate Claude Code sessions with cmux panes only when cmux exposes a stable, permissioned locator.
 - Add user-controlled slot pinning and overflow without exposing raw session IDs.
-- Add a secret-free setup exporter/importer.
+- Add a guarded, reversible Input import/activation assistant. The current
+  secret-free transformer only creates a private offline profile artifact.
 - Add menu-bar presence and clear observer-health notifications.
 
 ## Later: qualified hardware feedback

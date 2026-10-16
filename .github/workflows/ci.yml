@@ -13,6 +13,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  dco:
+    name: DCO sign-off
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: .node-version
+      - run: node tools/check-dco.mjs --base "${{ github.event.pull_request.base.sha }}" --head "${{ github.event.pull_request.head.sha }}"
+
+  repository-contract:
+    name: Agent and documentation contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: .node-version
+      - run: node --test tools/*.test.mjs
+      - run: node tools/docs-check.mjs
+
   test:
     timeout-minutes: 25
     strategy:
@@ -59,5 +85,9 @@ jobs:
           toolchain: 1.95.0
       - uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf # main
         with:
-          tool: cargo-audit
+          tool: cargo-audit@0.22.2
       - run: cargo audit
+      - uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf # main
+        with:
+          tool: cargo-deny@0.20.2
+      - run: cargo deny check

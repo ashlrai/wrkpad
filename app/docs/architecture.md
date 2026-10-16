@@ -28,14 +28,33 @@ The browser window uses context isolation, disables Node integration, and enable
 
 The preload exposes named IPC calls rather than `ipcRenderer`. `electron/main.cjs` owns shortcuts, authorization, process execution, workspace selection, acceptance events, and receipts.
 
-Actions resolve through `electron/action-registry.cjs`; unknown IDs fail closed. Renderer-supplied commands, executable paths, arguments, and app names are never executed.
+Actions resolve through `electron/action-registry.cjs`; unknown IDs fail closed.
+The main process admits configured action requests, hold operations, and token
+confirmation only for the exact `ashlr_layer` route. Passive-route attempts
+revoke the affected authorization. Software-only Agent-slot focus remains
+available because it opens a fixed provider surface without executing a
+configured action. Renderer-supplied commands, executable paths, arguments, and
+app names are never executed.
 
 The declared board route is a private local preference with only three values:
 `unknown`, `codex_native`, and `ashlr_layer`. It never changes device state.
-`electron/codex-micro-diagnostics.cjs` reads at most eight recent Codex log
-tails, each capped at 2 MiB, and projects only a reason-coded native state,
+Only `ashlr_layer` may register the 20 global shortcuts. Startup and every route
+change re-evaluate receiver ownership; `unknown` and `codex_native` invalidate
+the callback generation, unregister every known accelerator, clear Flight Check
+and pending approvals, and verify the Electron registration table is empty.
+Native preparation and acceptance fail closed while any known shortcut remains.
+`electron/codex-micro-diagnostics.cjs` reads at most four recent Codex log
+tails, each capped at 512 KiB, and projects only a reason-coded native state,
 timestamp, and fixed detail. Raw logs, private paths, task content, and unknown
 fields never cross IPC.
+
+The Input diagnostics use fixed Creator Micro 2 cache and log paths, reject
+symlinks, and cap each read at 512 KiB. The cache selects the current profile
+using `activeProfileId`, then exposes only sanitized labels, a uniquely
+observable single layer, and encoder
+classification. Runtime output contains only a bounded profile/layer index,
+timestamp, freshness, and reason code for the exact unresolved-combination
+signal. Neither diagnostic proves device synchronization or physical output.
 
 ### Local adapters
 
@@ -88,6 +107,9 @@ This is a status receipt, not proof of remote authority, provider authentication
 8. Mission snapshots omit session IDs, provider cwd values, prompts, transcripts, tool arguments, and raw payloads.
 9. Push, merge, deploy, publish, delete, spend, credential, and permission-approval executors are absent.
 10. The screen remains authoritative; physical RGB and firmware transport are not claimed.
+11. Native evidence polling may advance only the inferred initialization rung;
+    it never records a Settings or physical observation and never accepts an
+    attestation.
 
 ## Process and local-data boundaries
 

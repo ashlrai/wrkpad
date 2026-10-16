@@ -5,14 +5,21 @@ const clone = (value) => JSON.parse(JSON.stringify(value))
 const status = {
   boardConnected: false,
   inputInstalled: false,
+  inputInstallation: { status: 'probe_unavailable', version: null },
+  inputProfile: { cacheStatus: 'missing', activeProfile: null, activeLayer: null, encoderDirection: 'unavailable' },
+  inputRuntime: { status: 'not_observed', profileIndex: null, layerIndex: null, observedAt: null, fresh: false },
   inputMonitoring: 'unverified',
   codex: false,
+  nativeCodexMicro: { status: 'not_observed', observedAt: null, detail: 'Documentation fixture; native connection not inspected.' },
   claude: false,
   ashlr: false,
+  boardRoute: 'unknown',
   workspace: 'No workspace selected',
   shortcutCount: 0,
   shortcutRegistrations: [],
   workspaceSnapshot: null,
+  receiverIdentity: null,
+  receiverRuntime: { status: 'unavailable', instanceCount: 0, distinctBuildCount: 0, currentAsarSha256: null, candidateAsarSha256: null, candidateMatchesCurrent: null },
 }
 
 const mission = {
@@ -71,6 +78,7 @@ contextBridge.exposeInMainWorld('agentBoard', {
   focusAgentSlot: async () => clone(fixtureResult),
   setProfile: async () => {},
   setFlightCheck: async () => ({ acknowledged: false, active: false, startedAt: null }),
+  restartFlightCheck: async () => ({ acknowledged: false, active: false, startedAt: null }),
   requestAction: async () => clone(fixtureResult),
   confirmAction: async () => clone(fixtureResult),
   beginHold: async () => false,

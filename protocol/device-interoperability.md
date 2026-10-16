@@ -41,7 +41,9 @@ Hardware-tested community projects report:
 
 - `v.oai.rgbcfg` controls global keys and ambient zones;
 - `v.oai.thstatus` controls Agent/thread states when supported;
-- active key positions need appropriate `KV_OAI_AG*` bindings for addressable output;
+- native/future lighting takeover needs appropriate `KV_OAI_AG*` bindings on
+  active key positions; the daily Ashlr shortcut route intentionally uses an
+  ordinary non-protected layer;
 - multiple clients can receive foreign replies or race as last writer;
 - an `ok` response can occur without visible light when prerequisites are wrong.
 
@@ -60,7 +62,9 @@ No firmware range such as `>=0.4.0` authorizes writes. Capability lookup uses th
 2. Quit likely writers manually. wrkpad never terminates them.
 3. Capture descriptor and firmware evidence through a reviewed shadow adapter.
 4. Register an exact compatibility tuple with independent capability flags.
-5. Verify the active layer already contains the required OAI bindings without modifying it.
+5. For native lighting takeover only, verify the active layer already contains
+   the required OAI bindings without modifying it. Do not add them to the daily
+   Ashlr shortcut profile.
 6. Request takeover through an explicit local human action and a single-writer lease.
 7. Calibrate one physical key at a time on black opaque caps and the frosted hero cap.
 8. Release, close the handle, restart the native owner, and verify recovery.

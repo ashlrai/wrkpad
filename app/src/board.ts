@@ -71,9 +71,14 @@ export interface WorkspaceSnapshot {
 
 export interface SystemStatus {
   boardConnected: boolean
+  boardVidPid: string | null
   inputInstalled: boolean
+  inputInstallation: InputInstallationStatus
+  inputProfile: InputProfileStatus
+  inputRuntime: InputRuntimeStatus
   inputMonitoring: 'unverified'
   codex: boolean
+  chatgptDesktop: ChatGPTDesktopStatus
   nativeCodexMicro: CodexNativeMicroStatus
   claude: boolean
   ashlr: boolean
@@ -82,6 +87,71 @@ export interface SystemStatus {
   shortcutCount: number
   shortcutRegistrations: ShortcutRegistration[]
   workspaceSnapshot: WorkspaceSnapshot | null
+  receiverIdentity: ReceiverIdentity | null
+  receiverRuntime: ReceiverRuntimeStatus
+}
+
+export interface ChatGPTDesktopStatus {
+  status: 'metadata_observed' | 'missing' | 'unavailable'
+  version: string | null
+  build: string | null
+}
+
+export interface InputInstallationStatus {
+  status: 'verified' | 'missing' | 'multiple_installations' | 'unsafe' | 'invalid_metadata' | 'publisher_unrecognized' | 'invalid_signature' | 'known_resource_mutation' | 'gatekeeper_rejected' | 'probe_unavailable'
+  version: string | null
+}
+
+export interface ReceiverRuntimeStatus {
+  status: 'not_running' | 'exclusive' | 'contended_same_build' | 'contended_distinct_builds' | 'unavailable'
+  instanceCount: number
+  distinctBuildCount: number
+  currentAsarSha256: string | null
+  candidateAsarSha256: string | null
+  candidateMatchesCurrent: boolean | null
+}
+
+export interface InputProfileStatus {
+  cacheStatus: 'available' | 'missing' | 'invalid' | 'unsafe'
+  activeProfile: string | null
+  activeLayer: string | null
+  encoderDirection: 'correct' | 'reversed' | 'unrecognized' | 'unavailable'
+}
+
+export interface InputRuntimeStatus {
+  status: 'unresolved_profile_layer' | 'not_observed' | 'log_missing' | 'log_unsafe' | 'log_unavailable'
+  profileIndex: number | null
+  layerIndex: number | null
+  observedAt: string | null
+  fresh: boolean
+  codexProtocolTraffic?: {
+    status: 'recurring_unresolved_response' | 'not_observed' | 'log_missing' | 'log_unsafe' | 'log_unavailable'
+    observedAt: string | null
+    fresh: boolean
+  }
+}
+
+export interface ReceiverIdentity {
+  appVersion: string
+  packaged: boolean
+  appAsarSha256?: string | null
+}
+
+export const correctedInputProfileObservedForVariant = (profile: InputProfileStatus, variant: 'daily' | 'diagnostic'): boolean =>
+  profile.activeProfile === (variant === 'daily' ? 'Ashlr Agent Board Corrected' : 'Ashlr Flight Check Corrected - diagnostic')
+  && profile.activeLayer === (variant === 'daily' ? 'Ashlr Daily' : 'Ashlr Diagnostic')
+  && profile.encoderDirection === 'correct'
+
+export const correctedInputProfileObserved = (profile: InputProfileStatus): boolean =>
+  correctedInputProfileObservedForVariant(profile, 'daily')
+
+export interface ProfileRepairResult {
+  status: 'saved' | 'canceled' | 'failed'
+  message: string
+  filePath?: string
+  sha256?: string
+  handoffPersisted?: boolean
+  recoverySteps?: string[]
 }
 
 export interface CodexNativeMicroStatus {
@@ -89,6 +159,59 @@ export interface CodexNativeMicroStatus {
   observedAt: string | null
   detail: string
   fresh?: boolean
+}
+
+export type NativeAcceptanceStatus = 'not_prepared' | 'invalid' | 'pending' | 'initialization_observed' | 'accepted'
+
+export interface NativeAcceptanceAttestations {
+  settingsConnected: boolean
+  dial: boolean
+  joystick: boolean
+  agentKeys: boolean
+  actionKeys: boolean
+  microphone: boolean
+  lighting: boolean
+}
+
+export interface NativeAcceptanceContext {
+  route: 'codex_native'
+  device: {
+    vidPid: string
+  }
+  codex: {
+    version: string
+    build: string
+  }
+}
+
+export interface NativeAcceptanceReceipt {
+  schema: 'ai.ashlr.agent-board.native-acceptance/v1'
+  state: 'prepared' | 'accepting' | 'accepted'
+  preparedAt: string
+  initializationObservedAt: string | null
+  acceptedAt: string | null
+  context: NativeAcceptanceContext
+  attestations: NativeAcceptanceAttestations
+}
+
+export interface NativeAcceptanceEvaluation {
+  status: NativeAcceptanceStatus
+  reason: string
+  preparedAt?: string
+  initializationObservedAt?: string | null
+  acceptedAt?: string | null
+  attestations?: NativeAcceptanceAttestations
+}
+
+export interface NativeAcceptanceSnapshot {
+  receipt: NativeAcceptanceReceipt | null
+  evaluation: NativeAcceptanceEvaluation
+}
+
+export interface NativeAcceptanceActionResult {
+  ok: boolean
+  message: string
+  snapshot: NativeAcceptanceSnapshot
 }
 
 export type BoardRoute = 'unknown' | 'codex_native' | 'ashlr_layer'
@@ -227,13 +350,13 @@ export const hardware = {
   planarJoysticks: 1,
   bindableSignals: 20,
   firmwareControls: [
-    { id: 'touchProfile', label: 'Bluetooth host profile', row: 4, column: 1, bindable: false, leds: 3 },
+    { id: 'touchProfile', label: 'Layer and connection selector', row: 4, column: 1, bindable: false, leds: 3 },
   ],
   controls: [
-    { id: 'dialPress', hardwareId: 'ENC_CLK', kind: 'dial', row: 1, column: 1 },
+    { id: 'joyUp', hardwareId: 'JOY_UP', kind: 'joystick', row: 1, column: 1 },
     { id: 'agent1', hardwareId: 'AG00', kind: 'agent', row: 1, column: 2 },
     { id: 'agent2', hardwareId: 'AG01', kind: 'agent', row: 1, column: 3 },
-    { id: 'joyUp', hardwareId: 'JOY_UP', kind: 'joystick', row: 1, column: 4 },
+    { id: 'dialPress', hardwareId: 'ENC_CLK', kind: 'dial', row: 1, column: 4 },
     { id: 'agent3', hardwareId: 'AG02', kind: 'agent', row: 2, column: 1 },
     { id: 'agent4', hardwareId: 'AG03', kind: 'agent', row: 2, column: 2 },
     { id: 'agent5', hardwareId: 'AG04', kind: 'agent', row: 2, column: 3 },

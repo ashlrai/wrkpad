@@ -23,6 +23,22 @@ test('black-opaque layout defaults every visible switch away from frosted caps',
   assert.deepEqual(layout.appearance.optional_cap_variants, ['frosted_hero'])
 })
 
+test('layout uses the exact native private keycode families for agent and action switches', () => {
+  const layout = JSON.parse(readFileSync(layoutPath, 'utf8'))
+  const switches = layout.controls.filter((item) => item.kind === 'switch')
+  assert.equal(switches.length, 13)
+  assert.deepEqual(
+    switches.map((control) => control.id),
+    ['AG00', 'AG01', 'AG02', 'AG03', 'AG04', 'AG05', 'ACT06', 'ACT07', 'ACT08', 'ACT09', 'ACT10', 'ACT11', 'ACT12'],
+  )
+  for (const control of layout.controls.filter((item) => /^AG0[0-5]$/.test(item.id))) {
+    assert.equal(control.private_keycode, `KV_OAI_${control.id}`)
+  }
+  for (const control of layout.controls.filter((item) => /^ACT(?:0[6-9]|1[0-2])$/.test(item.id))) {
+    assert.equal(control.private_keycode, `KV_OAI_${control.id}`)
+  }
+})
+
 test('layout, renderer, and Rust use one black-opaque semantic palette', () => {
   const layout = JSON.parse(readFileSync(layoutPath, 'utf8'))
   const rust = readFileSync(rustPath, 'utf8')

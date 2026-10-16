@@ -1,6 +1,8 @@
 /target/
+/node_modules/
 /.wrkpad/
 *.log
 *.tmp
 .DS_Store
-
+CLAUDE.local.md
+/.claude/settings.local.json
