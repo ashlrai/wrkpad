@@ -60,7 +60,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.4",
     "concurrently": "^10.0.5",
-    "electron": "^43.4.1",
+    "electron": "^43.8.1",
     "electron-builder": "^26.15.3",
     "jsdom": "^30.0.1",
     "oxlint": "^1.75.0",
