@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+env:
+  # Cold CI builds never reuse incremental state; this makes builds faster and caches smaller.
+  CARGO_INCREMENTAL: 0
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -32,7 +36,9 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --all-targets --all-features -- -D warnings
       - run: cargo test --all-targets
-      - run: cargo build --release
+      # Release build runs on main pushes only; PR gates still run fmt, clippy and tests.
+      - if: github.event_name == 'push'
+        run: cargo build --release
 
   msrv:
     name: MSRV (Rust 1.88)
